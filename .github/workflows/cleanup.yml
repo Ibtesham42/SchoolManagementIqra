@@ -1,0 +1,30 @@
+# Free scheduled housekeeping (GitHub Actions minutes are free for public repos and
+# included for private repos on the free plan). Calls the app's cleanup endpoint.
+# Setup (repository Settings → Secrets and variables → Actions):
+#   APP_URL      e.g. https://school.example.org   (the deployed app)
+#   CRON_SECRET  same value as the app's CRON_SECRET (32+ random characters)
+# Disabled until both secrets exist.
+name: Scheduled cleanup
+
+on:
+  schedule:
+    - cron: "17 21 * * *" # daily 21:17 UTC (02:47 IST), off the hour to avoid queue spikes
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call cleanup endpoint
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL / CRON_SECRET not configured — skipping."; exit 0
+          fi
+          curl --fail-with-body --silent --show-error --max-time 60 \
+            -X POST -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/cleanup"
