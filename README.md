@@ -39,3 +39,23 @@ Requirements: Node.js 26 LTS and a free [Neon](https://neon.com) account (no loc
 7. `npm run dev` → http://localhost:3000/login
 
 Quality gate: `npm run lint && npm run typecheck && npm test`.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main`, every pull request into `main`, and on demand. On Ubuntu with Node 26 it runs, in order and stopping at the first failure:
+
+| Step | Command |
+|---|---|
+| Install (from `package-lock.json`) | `npm ci` |
+| TypeScript | `npm run typecheck` |
+| ESLint (incl. layer rules, unsafe-SQL ban) | `npm run lint` |
+| Architecture (circular imports, layer boundaries) | `npm run check:deps` |
+| Unit tests | `npm run test:unit` |
+| Production dependency audit | `npm audit --omit=dev --audit-level=low` |
+| Production build | `npm run build` |
+
+It needs **no secrets, no `.env` and no database**: it never connects to Neon, runs no migrations or seeds, skips the database-dependent integration/e2e suites, and never deploys. Permissions are read-only (`contents: read`); a newer push to the same branch or pull request cancels the older run.
+
+**Enable it:** push the repository to GitHub → **Settings → Actions → General** → *Actions permissions*: "Allow all actions and reusable workflows" (or allow `actions/checkout` and `actions/setup-node`) → Save. Leave *Workflow permissions* at "Read repository contents". The first push to `main` (or the **Actions → CI → Run workflow** button) starts a run.
+
+**Inspect a failure:** **Actions** tab → **CI** → the failed run → job *Typecheck, lint, architecture, unit tests, audit, build* → expand the red step; the log shows the failing file/test. Reproduce locally with the same command from the table (e.g. `npm run test:unit`). To block merging on failures, add a branch protection rule for `main` requiring the "CI" check.

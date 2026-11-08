@@ -46,6 +46,14 @@ Mocks are allowed only for external providers (payment gateway, LLM, email). **N
 
 Skipped tests are reported as skipped, never as passed. A run against a local PostgreSQL is useful for development but does not replace the Neon run.
 
+## CI (GitHub Actions)
+
+`.github/workflows/ci.yml` is the **offline** gate: `npm ci` → `typecheck` → `lint` → `check:deps` → `test:unit` → `npm audit --omit=dev --audit-level=low` → `build`, on Ubuntu, Node 26, 20-minute timeout, read-only token, actions pinned to commit SHAs, outdated runs cancelled. See README → "Continuous integration".
+
+Not in CI (need a database or a running server): `test:integration`, `test:e2e`, `db:*`, `env:check`. They run locally/against Neon branches until a disposable CI database is introduced (ROADMAP).
+
+CI sets one non-secret placeholder, `DIRECT_URL=postgresql://ci:ci@127.0.0.1:5432/ci_placeholder_not_used`, because `npm ci` → `postinstall` → `prisma generate` loads `prisma.config.ts`, which requires the variable to be defined. Nothing connects to it.
+
 ## Gates
 
 `npm run lint && npm run typecheck && npm test` must pass before any commit claiming a feature; `npm run test:e2e` before closing a phase. Coverage target: ≥ 90% lines on `src/modules/**/**.service.ts` and pure calc libs.

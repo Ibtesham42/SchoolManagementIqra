@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added (CI)
+- GitHub Actions CI (`.github/workflows/ci.yml`): typecheck, lint, architecture check, unit tests, production dependency audit and production build on Node 26 / Ubuntu, read-only, no secrets or database.
+
 ### Security (offline audit, 2026-11-08 — see SECURITY.md A1–A20)
 - Delegated admins can no longer modify (reset, deactivate, edit, sign out) users more privileged than themselves.
 - Super Admin membership changes serialized with a transaction-scoped advisory lock (fixes a race that could leave zero Super Admins).

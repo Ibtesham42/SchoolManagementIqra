@@ -1,0 +1,75 @@
+# Continuous integration — offline quality gate (docs/TESTING_STRATEGY.md → "CI").
+#
+# Runs on every push to main, every pull request into main, and on demand.
+# No secrets, no .env file, no database: it never connects to Neon, never runs
+# migrations or seeds, never runs the DB-dependent integration/e2e suites, never deploys.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Least privilege: the job only needs to read the repository.
+permissions:
+  contents: read
+
+# One run per branch / pull request: a newer push cancels the outdated run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    name: Typecheck, lint, architecture, unit tests, audit, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+      # NOT a secret and never connected to. Prisma 7 loads prisma.config.ts during
+      # `npm ci` → postinstall → `prisma generate`, and that config requires DIRECT_URL
+      # to be defined. Generating the client does not open a connection.
+      DIRECT_URL: "postgresql://ci:ci@127.0.0.1:5432/ci_placeholder_not_used"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 26 with npm cache
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Show tool versions
+        run: |
+          node --version
+          npm --version
+
+      - name: Install dependencies (reproducible, from package-lock.json)
+        run: npm ci
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Architecture check (circular imports and layer boundaries)
+        run: npm run check:deps
+
+      - name: Unit tests (no database)
+        run: npm run test:unit
+
+      - name: Production dependency security audit
+        run: npm audit --omit=dev --audit-level=low
+
+      - name: Production build
+        run: npm run build

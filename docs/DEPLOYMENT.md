@@ -34,7 +34,7 @@ Branch rules: never run `migrate dev`/`reset` against `production`; production o
 
 ## Release procedure
 
-1. CI: install → lint → typecheck → unit/integration tests (ephemeral Postgres) → build → e2e (Playwright) on preview.
+1. CI (`.github/workflows/ci.yml`, must be green): `npm ci` → typecheck → lint → check:deps → unit tests → production audit → build. Integration and e2e run separately against the Neon `test` branch until a disposable CI database exists (KNOWN_ISSUES KI-030).
 2. `prisma migrate deploy` against `DIRECT_URL` **before** promoting the new build. Migrations must be backward compatible with the previous release (expand → migrate → contract).
 3. Promote. Smoke test: login, public homepage, one read per module.
 4. Rollback: re-promote previous build; migrations are forward-only (write a fix-forward migration).

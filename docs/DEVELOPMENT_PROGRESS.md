@@ -8,6 +8,12 @@
 
 ## Log
 
+### 2026-11-08 — CI workflow
+- Added `.github/workflows/ci.yml` (offline gate; no secrets/DB/deploy). Actions pinned: `actions/checkout` v7.0.1 (`3d3c42e5…`), `actions/setup-node` v7.1.0 (`949feb24…`).
+- Validation: YAML parsed (ci.yml + cleanup.yml); 12 structural requirement checks passed (triggers, permissions, concurrency, runner/timeout, Node 26 + cache, SHA pinning, step order, no secrets, no DB/deploy steps, no continue-on-error, no persisted credentials, scripts exist).
+- Clean-checkout simulation (182 tracked-to-be files, no `.env`/`node_modules`/build output, CI env vars, Node 26.13.0 / npm 11.20.0, **Windows**): `npm ci` ✓ · typecheck ✓ · lint ✓ · check:deps ✓ · test:unit ✓ (1,263 passed, 9 files, no integration) · audit 0 vulnerabilities ✓ · build ✓.
+- Committed on top of GitHub's initial commit `eb0fb1d` (no force push): project import, then this CI commit. The first GitHub Actions run is triggered by that push; its result is recorded separately once observed.
+
 ### 2026-11-08 — Offline security & architecture audit
 No database contact, no migrations/seeds, no secret env files, nothing committed/deployed. Full findings table: docs/SECURITY.md → "Offline security & architecture audit".
 

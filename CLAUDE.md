@@ -94,7 +94,7 @@ docs/                   all project documentation
 3. Schema change → edit `prisma/schema.prisma` → `npx prisma migrate dev --name <change>` → update `docs/DATABASE_SCHEMA.md`.
 4. Implement service + schemas + policy → route/action → UI.
 5. Tests: unit for pure logic, integration for services (real DB), e2e for critical flows.
-6. Run `npm run lint && npm run typecheck && npm test` before claiming completion.
+6. Run `npm run lint && npm run typecheck && npm run check:deps && npm test` before claiming completion. CI (`.github/workflows/ci.yml`) runs the offline subset on every push/PR to `main`.
 7. Update `docs/DEVELOPMENT_PROGRESS.md`, `docs/CHANGELOG.md`, and any doc whose content changed.
 
 ## Commands (available after Phase 1 setup)
@@ -103,7 +103,9 @@ docs/                   all project documentation
 npm run dev          # start dev server
 npm run lint         # eslint
 npm run typecheck    # tsc --noEmit
-npm test             # vitest (unit + integration)
+npm test             # vitest (unit + integration; integration skips without TEST_DATABASE_URL)
+npm run test:unit    # unit tests only (what CI runs)
+npm run check:deps   # circular imports + layer boundaries
 npm run test:e2e     # playwright
 npm run db:migrate   # prisma migrate dev (development branch only)
 npm run db:deploy    # prisma migrate deploy (production branch)
