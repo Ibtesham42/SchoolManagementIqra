@@ -9,7 +9,7 @@ PostgreSQL 16+ (Neon Free), Prisma 7, extension `vector` (pgvector). `prisma/sch
 Phase 1 deviations from the original plan (to avoid raw-SQL partial indexes that Prisma's diffing would try to drop):
 - `User.email` is stored lowercased with a plain unique constraint (NULLs allowed) instead of a `lower(email)` partial index.
 - `AcademicSession.isCurrent` was replaced by `SchoolSetting.currentAcademicSessionId` (unique FK) — guarantees at most one current session.
-- **S-15 (migration `20261118000100_stored_file_purged_at`, created for review 2026-11-18 — NOT applied):** `StoredFile.purgedAt?` (timestamptz) set by the purge job after deleting a retired file's blob (30-day grace); CHECK `purged_at IS NULL OR (deleted_at IS NOT NULL AND purged_at >= deleted_at)`. **S-07 (migration `20261118000000_audit_log_append_only`, created for review — NOT applied):** triggers refuse UPDATE/DELETE/TRUNCATE on `audit_log`.
+- **S-15 (migration `20261118000100_stored_file_purged_at`, applied to development and Test 2026-11-18):** `StoredFile.purgedAt?` (timestamptz) set by the purge job after deleting a retired file's blob (30-day grace); CHECK `purged_at IS NULL OR (deleted_at IS NOT NULL AND purged_at >= deleted_at)`. **S-07 (migration `20261118000000_audit_log_append_only`, applied to development and Test 2026-11-18):** triggers refuse UPDATE/DELETE/TRUNCATE on `audit_log`.
 - New: `StoredFile.provider`, `encrypted`, `keyVersion` (ADR-018); `RateLimitBucket` and `UsageCounter` (ADR-019); `AuditLog.id` is a BigInt identity.
 
 ## Conventions

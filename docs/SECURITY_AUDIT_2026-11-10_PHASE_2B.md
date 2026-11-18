@@ -7,7 +7,7 @@
 
 ## 0. Fix status (2026-11-10; owner decisions on S-07, S-15, S-20 recorded 2026-11-18)
 
-**2026-11-18 owner decisions:** **S-07** — migration `20261118000000_audit_log_append_only` created for review (Appendix B, one transaction + lock timeout; `db:check` verifies the triggers once applied) — **not applied**. **S-15** — approved: 30-day grace period, `stored_file.purged_at` (migration `20261118000100_stored_file_purged_at`, created for review — **not applied**), purge job `src/modules/files/files-purge.ts` + guarded runner `npm run files:purge` (dry run by default; first run as a dry run); orphan-blob reconciliation pending (KI-067); live-document retention period still to be decided with the school (KI-004). **S-20** — Appendix C diff applied to `.claude/settings.json`.
+**2026-11-18 owner decisions:** **S-07** — migration `20261118000000_audit_log_append_only` **applied to development (13:26Z) and Test (13:28Z)** after owner review; `db:check` verifies the triggers; an UPDATE inside a rolled-back transaction on development was refused (42501 "audit_log is append-only"). Full protection still needs KI-024's least-privilege role. **S-15** — approved: 30-day grace period, `stored_file.purged_at` (migration `20261118000100_stored_file_purged_at`, **applied to development and Test** 2026-11-18; first purge run on development = dry run: 0 eligible), purge job `src/modules/files/files-purge.ts` + guarded runner `npm run files:purge` (dry run by default; first run as a dry run); orphan-blob reconciliation pending (KI-067); live-document retention period still to be decided with the school (KI-004). **S-20** — Appendix C diff applied to `.claude/settings.json`.
 
 
 | ID | Decision | Implemented | Verification |
