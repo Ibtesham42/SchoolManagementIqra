@@ -62,11 +62,11 @@ describe("B5 — ERP navigation before and after the forced password change", ()
   });
 
   it("Teacher after the change: Classes (own sections), no Users, Roles or Settings (G7 J14 expectation + Classes)", () => {
-    expect(menu(ctxFor("TEACHER", false))).toEqual(["Dashboard", "Students", "Classes", "My account"]);
+    expect(menu(ctxFor("TEACHER", false))).toEqual(["Dashboard", "Students", "Leave", "Classes", "My account"]);
   });
 
   it("Super Admin sees every item", () => {
-    expect(menu({ ...ctxFor("SCHOOL_ADMIN", false), isSuperAdmin: true })).toEqual(["Dashboard", "Admissions", "Students", "Roll numbers", "Staff", "Classes", "Users", "Roles", "Settings", "My account"]);
+    expect(menu({ ...ctxFor("SCHOOL_ADMIN", false), isSuperAdmin: true })).toEqual(["Dashboard", "Admissions", "Students", "Roll numbers", "Staff", "Leave", "Classes", "Users", "Roles", "Settings", "My account"]);
   });
 });
 

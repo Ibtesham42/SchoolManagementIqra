@@ -4,6 +4,7 @@ import {
   weeklyOffSchema,
   type WeeklyOff,
 } from "@/modules/hr/leave.rules";
+import { lockLeaveCalendar } from "@/modules/hr/leave.tx";
 import { audit } from "@/lib/audit";
 import { isUniqueViolation } from "@/lib/db-errors";
 import { ConflictError, NotFoundError } from "@/lib/errors";
@@ -299,6 +300,8 @@ export async function updateStaffWeeklyOff(ctx: AuthContext, value: WeeklyOff) {
   };
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT set_config('lock_timeout', '5s', true) AS lock_timeout`;
+    // KI-071 / audit M3-M1: the weekly off decides working days — serialized with leave apply/approve/cancel.
+    await lockLeaveCalendar(tx);
     // Row lock: two admins saving at once are serialized, so the audit "before" is never stale.
     const locked = await tx.$queryRaw<
       { id: string }[]
@@ -356,6 +359,21 @@ export async function readLeaveCalendarTx(tx: Tx, academicSessionId: string) {
     weeklyOff: readWeeklyOff(setting?.weeklyOff ?? null),
     timezone: setting?.timezone ?? null,
   };
+}
+
+/** The academic session whose dates contain `iso` (sessions never overlap — session guard), or null. */
+export async function findSessionForDateTx(tx: Tx, iso: string) {
+  const d = new Date(`${iso}T00:00:00.000Z`);
+  return tx.academicSession.findFirst({
+    where: { startDate: { lte: d }, endDate: { gte: d } },
+    select: {
+      id: true,
+      name: true,
+      startDate: true,
+      endDate: true,
+      status: true,
+    },
+  });
 }
 
 /** Academic sessions (id, name, dates, status) for HR pickers — `employee.read` callers; no other school data. */
