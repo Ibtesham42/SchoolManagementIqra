@@ -10,6 +10,12 @@
 
 ## Log
 
+### 2026-11-18 — S-15 orphan-blob reconciliation (KI-067; within the approved S-15 lifecycle)
+- `StorageDriver.listPrivate(limit)` (local driver: `private/YYYY/MM/<key>` matching the strict key pattern only; temp files and anything else ignored; memory driver for tests) and `reconcileOrphans` (pure `planOrphans`: unreferenced blobs older than 24 h; dry run by default; strict-key deletes; failures by error name; rows whose blob is missing are counted, never auto-fixed; `file.reconcile` audit with counts). `npm run files:purge` runs purge + reconciliation.
+- Bug found by the new unit test and fixed: `listPrivate(0)` returned one entry.
+- Development dry run (reads only): purge 0 eligible; reconciliation listed 0, orphans 0, missing blobs 0.
+- Tests: unit +2 (planning, real temp-folder listing); integration `files-purge.test.ts` +1 (written; runs once KI-059 is done — Test now has the S-15 migration).
+
 ### 2026-11-18 — Phase 3A M6 (part 1, offline): final security review + closure report draft; integration run still blocked (KI-059)
 - **Integration run attempted:** `npm run test:integration -- tests/integration/hr-core.test.ts --no-file-parallelism` → guard refused before connecting ("TEST_TARGET_BRANCH_ID is not set; TEST_TARGET_ENDPOINT_ID is not set. Nothing was written.").
 - **Final cross-cutting security review (security-auditor):** no Critical/High. Fixed: self-unlink refused for non–Super Admins (M1 part), personal/contact edits require the directory (L1), no self-verification of documents (L2), lock-order comment and API doc corrected; CHANGELOG wording corrected. Owner decision: KI-069 (unlinked administrators and approver ≠ subject). Logged: KI-070 (phone search in URL).

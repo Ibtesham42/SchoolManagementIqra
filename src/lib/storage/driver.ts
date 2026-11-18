@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, stat, writeFile, rename } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile, rename } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { randomToken } from "@/lib/crypto";
 
@@ -13,7 +13,16 @@ export interface StorageDriver {
   get(key: string): Promise<Buffer>;
   delete(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
+  /**
+   * S-15 orphan reconciliation (KI-067): every PRIVATE key with its last-modified time, at most `limit` entries
+   * (oldest folders first). Only names matching the strict key pattern are returned — temp files and anything
+   * else in the folder are ignored, never reported as keys.
+   */
+  listPrivate(limit: number): Promise<{ key: string; modifiedAt: Date }[]>;
 }
+
+/** Upper bound for one reconciliation listing (a school's private files fit comfortably). */
+export const LIST_PRIVATE_MAX = 100_000;
 
 const KEY_PATTERN = /^(public|private)\/\d{4}\/\d{2}\/[A-Za-z0-9_-]{16,64}$/;
 
@@ -85,16 +94,39 @@ export class LocalDriver implements StorageDriver {
       () => false,
     );
   }
+
+  async listPrivate(limit: number): Promise<{ key: string; modifiedAt: Date }[]> {
+    if (limit <= 0) return [];
+    const out: { key: string; modifiedAt: Date }[] = [];
+    const base = join(this.root, "private");
+    const names = async (dir: string) => (await readdir(dir, { withFileTypes: true }).catch(() => [])).sort((a, b) => a.name.localeCompare(b.name));
+    for (const y of await names(base)) {
+      if (!y.isDirectory() || !/^\d{4}$/.test(y.name)) continue;
+      for (const m of await names(join(base, y.name))) {
+        if (!m.isDirectory() || !/^\d{2}$/.test(m.name)) continue;
+        for (const f of await names(join(base, y.name, m.name))) {
+          if (out.length >= limit) return out;
+          const key = `private/${y.name}/${m.name}/${f.name}`;
+          if (!f.isFile() || !KEY_PATTERN.test(key)) continue;
+          out.push({ key, modifiedAt: (await stat(this.pathFor(key))).mtime });
+        }
+      }
+    }
+    return out;
+  }
 }
 
 /** In-memory driver for tests. */
 export class MemoryDriver implements StorageDriver {
   readonly name = "memory" as const;
   readonly blobs = new Map<string, Buffer>();
+  /** Last-modified times (tests may backdate an entry to simulate an old blob). */
+  readonly modified = new Map<string, Date>();
   async put(key: string, bytes: Uint8Array) {
     assertValidKey(key);
     if (this.blobs.has(key)) throw new Error("Storage key already exists");
     this.blobs.set(key, Buffer.from(bytes));
+    this.modified.set(key, new Date());
   }
   async get(key: string) {
     const b = this.blobs.get(key);
@@ -103,9 +135,17 @@ export class MemoryDriver implements StorageDriver {
   }
   async delete(key: string) {
     this.blobs.delete(key);
+    this.modified.delete(key);
   }
   async exists(key: string) {
     return this.blobs.has(key);
+  }
+  async listPrivate(limit: number) {
+    return [...this.blobs.keys()]
+      .filter((k) => k.startsWith("private/"))
+      .sort()
+      .slice(0, limit)
+      .map((key) => ({ key, modifiedAt: this.modified.get(key) ?? new Date() }));
   }
 }
 
