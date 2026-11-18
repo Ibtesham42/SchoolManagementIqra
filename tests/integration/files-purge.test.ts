@@ -122,5 +122,25 @@ describe.skipIf(!enabled)("S-15 purge job (integration)", () => {
         }),
       ).rejects.toThrow();
     });
+
+    it("reconciliation (KI-067): an old unreferenced blob is deleted (dry run first); young and referenced blobs stay; missing blobs are reported", async () => {
+      const driver = new m.MemoryDriver();
+      const referenced = await file(null, driver);
+      const orphan = m.newStorageKey("PRIVATE", now);
+      const young = m.newStorageKey("PRIVATE", now);
+      await driver.put(orphan, new Uint8Array([9]));
+      await driver.put(young, new Uint8Array([9]));
+      driver.modified.set(orphan, daysAgo(2));
+      driver.modified.set(referenced.storageKey, daysAgo(2));
+      const missing = await file(null, new m.MemoryDriver()); // row whose blob is not in `driver`
+      const dry = await m.reconcileOrphans({ db: m.prisma, driver, actor, now, dryRun: true });
+      expect(dry).toMatchObject({ orphans: 1, deleted: 0 });
+      expect(dry.missingBlobs).toBeGreaterThanOrEqual(1);
+      expect(await driver.exists(orphan)).toBe(true);
+      const applied = await m.reconcileOrphans({ db: m.prisma, driver, actor, now, dryRun: false });
+      expect(applied).toMatchObject({ orphans: 1, deleted: 1, failed: 0 });
+      expect([await driver.exists(orphan), await driver.exists(young), await driver.exists(referenced.storageKey)]).toEqual([false, true, true]);
+      expect(await m.prisma.storedFile.count({ where: { id: missing.id } })).toBe(1); // reported, never auto-fixed
+    });
   });
 });

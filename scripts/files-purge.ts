@@ -28,11 +28,15 @@ async function main() {
   console.log(`✓ target: the allow-listed branch (read-only identity check); mode = ${apply ? "APPLY" : "dry run (reads only)"}`);
   const { prisma } = await import("../src/lib/db");
   const { getStorageDriver } = await import("../src/lib/storage/driver");
-  const { purgeRetiredFiles, PURGE_GRACE_DAYS } = await import("../src/modules/files/files-purge");
+  const { purgeRetiredFiles, reconcileOrphans, PURGE_GRACE_DAYS, ORPHAN_MIN_AGE_HOURS } = await import("../src/modules/files/files-purge");
   try {
     const r = await purgeRetiredFiles({ db: prisma, driver: getStorageDriver(), actor: { userId: null, label: "system:files-purge" }, dryRun: !apply });
     console.log(`grace ${PURGE_GRACE_DAYS} days · eligible ${r.eligible} · purged ${r.purged} · invalid keys skipped ${r.invalidKey} · failed ${r.failed}${r.failed ? ` (${JSON.stringify(r.failures)})` : ""}`);
-    if (r.failed) process.exitCode = 1;
+    // Orphans (blobs with no stored_file row, older than 24 h). The storage root and the database come from the same
+    // .env — a storage root must never be shared between databases.
+    const o = await reconcileOrphans({ db: prisma, driver: getStorageDriver(), actor: { userId: null, label: "system:files-purge" }, dryRun: !apply });
+    console.log(`orphans (older than ${ORPHAN_MIN_AGE_HOURS} h): listed ${o.listed} · orphans ${o.orphans} · deleted ${o.deleted} · failed ${o.failed} · rows with a missing blob (report only) ${o.missingBlobs}`);
+    if (r.failed || o.failed) process.exitCode = 1;
   } finally {
     await prisma.$disconnect();
   }
