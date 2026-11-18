@@ -67,12 +67,16 @@ describe.skipIf(!enabled)("classes and sections (integration)", () => {
     [admin, schoolAdmin, teacher, accountant, parent] = await Promise.all([ctxFor(root.id), ctxFor(sa.id), ctxFor(t.id), ctxFor(acc.id), ctxFor(par.id)]);
     teacherId = t.id;
     teacher2Id = t2.id;
+    // H4 (Phase 3A M3b): class teachers need a linked ACTIVE, TEACHING employee.
+    const { linkTeachingEmployee } = await import("./staff-fixture");
+    for (const id of [t.id, t2.id]) await linkTeachingEmployee(m.prisma, tag, id);
     inactiveTeacherId = tOff.id;
     accountantId = acc.id;
   });
 
   afterAll(async () => {
     const { prisma } = m;
+    await (await import("./staff-fixture")).removeStaffFixtures(prisma, tag);
     await prisma.section.deleteMany({ where: { OR: [{ academicSessionId: { in: sessionIds } }, { classId: { in: classIds } }] } });
     await prisma.schoolClass.deleteMany({ where: { id: { in: classIds } } });
     await prisma.academicSession.deleteMany({ where: { id: { in: sessionIds } } });
@@ -151,6 +155,23 @@ describe.skipIf(!enabled)("classes and sections (integration)", () => {
     expect((await sectionOf(a.id)).classTeacherId).toBeNull();
     const actions = (await m.prisma.auditLog.findMany({ where: { entityId: a.id }, select: { action: true } })).map((r) => r.action);
     expect(actions).toEqual(expect.arrayContaining(["section.create", "section.class_teacher_assign", "section.class_teacher_unassign"]));
+  });
+
+  it("H4: a class teacher's account must be linked to an ACTIVE, TEACHING employee (picker and assignment)", async () => {
+    const { linkTeachingEmployee } = await import("./staff-fixture");
+    const s = await newSession(16);
+    const c = await newClass(7);
+    const [a] = await m.createSectionsBulk(admin, { academicSessionId: s, classId: c.id, names: ["A"], capacity: null });
+    const [unlinked, clerk, leaver] = await Promise.all([user("h4u", "TEACHER"), user("h4c", "TEACHER"), user("h4l", "TEACHER")]);
+    await linkTeachingEmployee(m.prisma, tag, clerk.id, { staffType: "NON_TEACHING" });
+    await linkTeachingEmployee(m.prisma, tag, leaver.id, { status: "RESIGNED" });
+    for (const u of [unlinked, clerk, leaver]) {
+      await expect(m.assignClassTeacher(admin, { id: a.id, version: 1, userId: u.id })).rejects.toBeInstanceOf(m.ValidationError);
+    }
+    const picker = (await m.listEligibleClassTeachers(admin)).map((x) => x.id);
+    expect(picker).toEqual(expect.arrayContaining([teacherId, teacher2Id]));
+    for (const u of [unlinked, clerk, leaver]) expect(picker).not.toContain(u.id);
+    expect((await sectionOf(a.id)).classTeacherId).toBeNull();
   });
 
   it("copy from session: active sections only, no class teachers, idempotent", async () => {

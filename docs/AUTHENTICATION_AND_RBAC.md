@@ -57,7 +57,7 @@ The UI disables options the policy would reject (same functions), but the server
 | Students | `student.read` `student.create` `student.update` `student.delete` `student.sensitive.read` (Aadhaar, medical) `student.document.read` `student.document.manage` (upload/replace/verify/remove student & admission documents — Phase 2B) `student.promote` `student.transfer` `discipline.manage` |
 | Roll numbers | `rollnumber.generate` `rollnumber.finalize` `rollnumber.correct` |
 | ID cards/Docs | `idcard.generate` `document.generate` `certificate.issue` |
-| HR | `employee.read` (directory) `employee.personal.read` (personal details & documents — Phase 3A, H6) `employee.manage` `employee.document.manage` (Phase 3A, H8) `employee.sensitive.read` (PAN/bank — reserved for payroll 3C) `leave.request` `leave.approve` |
+| HR | `employee.read` (directory; **SELF** = own linked record, Phase 3A M3b) `employee.personal.read` (personal details & documents — Phase 3A, H6) `employee.manage` `employee.document.manage` (Phase 3A, H8) `employee.sensitive.read` (PAN/bank — reserved for payroll 3C) `leave.request` `leave.approve` |
 | Attendance | `attendance.student.mark` `attendance.student.read` `attendance.employee.mark` `attendance.employee.read` |
 | Payroll | `payroll.read` `payroll.prepare` `payroll.approve` `payroll.pay` `salary.structure.manage` `salary.self.read` |
 | Fees | `fee.structure.manage` `fee.read` `fee.collect` `fee.concession.manage` `fee.refund` `fee.report` |
@@ -85,7 +85,7 @@ Scope shown in brackets; no bracket = ALL.
 | Teacher | student.read [ASSIGNED], attendance.student.mark [ASSIGNED], marks.enter [ASSIGNED], timetable read, leave.request, salary.self.read [SELF], library.read, academic.read [ASSIGNED] |
 | Class Teacher | Teacher + attendance.student.mark/read for own section, discipline.manage [ASSIGNED], student.update (contact fields) [ASSIGNED] |
 | Transport Manager | transport.*, student.read (name/class/stop only) [ASSIGNED via route] |
-| Librarian | library.*, student.read (basic), employee.read (directory fields only — Q3; no personal tier) |
+| Librarian | library.*, student.read (basic), employee.read (directory fields only — Q3), employee.personal.read **SELF** (own record — H7) |
 | Parent | student.read [CHILDREN], attendance.student.read [CHILDREN], fee.read [CHILDREN], results [CHILDREN], online fee payment [CHILDREN], notices |
 | Student | own profile/attendance/results/timetable/library history [SELF] |
 
@@ -111,3 +111,12 @@ Note: a user may hold several roles (e.g. Teacher + Class Teacher); grants union
 
 `ALLOWED_SCOPES` in `src/lib/rbac/catalog.ts`: every permission can be granted for **all records**; a narrower scope only where the catalog's default roles use it (the owning module implements it or, for portal scopes not built yet, refuses it) — today `student.read`, `student.update`, `academic.read`, `discipline.manage`, `attendance.student.*`, `marks.enter`, `result.read`, `fee.read`, `fee.pay.online`, `timetable.read`, `library.read`; `salary.self.read` is **SELF only**. The editor shows only these; `setRolePermissions` refuses a new or changed grant outside them (an unchanged older grant is left alone). A module that starts honouring a new scope must be added there with its policy and tests. Class-teacher (ASSIGNED) access ends when the section's session is CLOSED (S-02) and when the user loses the TEACHER / CLASS_TEACHER role (S-09).
 
+
+
+### Staff self-access ("My profile", Phase 3A M3b — owner decision H7, 2026-11-18)
+- `AuthContext.employeeId` = `User.employeeId` (loaded with every request); SELF on `employee.read` / `employee.personal.read` means exactly that record. No link → no SELF access (fail closed).
+- Grants: Accountant, Admission Officer, Teacher, Class Teacher, Transport Manager hold both at SELF; Vice Principal and Librarian keep `employee.read` ALL and hold `employee.personal.read` SELF. Parent and Student hold no staff permission. Lists and searches always need ALL.
+- Linking an account (H2) therefore carries access: only holders of `employee.manage` + `user.manage` + `employee.read`/`employee.personal.read` at ALL may link, and non–Super Admins can't link their own account (KI-065).
+- Class teachers (H4): new assignments need the user's account linked to an ACTIVE, TEACHING employee; existing assignments are unaffected.
+- Delegated administration with the SELF grants (review M3b, Info): `assertCanModifyUser` requires the actor to cover every permission of the target. A custom role with `user.manage` but without `employee.read` / `employee.personal.read` therefore can no longer modify or assign Teacher, Class Teacher, Accountant, Admission Officer, Transport Manager, Vice Principal or Librarian accounts (they now hold those permissions at SELF). Correct anti-escalation; no default role is affected (only Super Admin holds `user.manage`).
+- Re-saving an existing class-teacher assignment whose teacher no longer meets H4 now returns a validation message instead of doing nothing (the H4 check runs first, under the employee lock).

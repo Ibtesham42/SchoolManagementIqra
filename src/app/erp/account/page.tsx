@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth/context";
 import { ROLES } from "@/lib/rbac/catalog";
+import { canViewOwnProfile } from "@/modules/hr/hr.policy";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/erp/page-header";
@@ -20,6 +21,19 @@ export default async function AccountPage() {
           <CardDescription>{roles.join(", ") || "No role assigned — contact your administrator."}</CardDescription>
         </CardHeader>
       </Card>
+      {canViewOwnProfile(ctx) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>My profile</CardTitle>
+            <CardDescription>Your staff record: employment, contact details and qualifications (read only).</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline">
+              <Link href={`/erp/hr/employees/${ctx.employeeId}`}>View my profile</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Password</CardTitle>

@@ -4,7 +4,7 @@ import { Pencil } from "lucide-react";
 import { requireAuth } from "@/lib/auth/context";
 import { NotFoundError } from "@/lib/errors";
 import { formatDateOnly } from "@/lib/format";
-import { canBrowseEmployees, canManageEmployees } from "@/modules/hr/hr.policy";
+import { canBrowseEmployees, canManageEmployees, canViewOwnProfile, isOwnRecord } from "@/modules/hr/hr.policy";
 import { APPOINTMENT_TYPE_LABEL, STAFF_TYPE_LABEL } from "@/modules/hr/hr.rules";
 import { getEmployee } from "@/modules/hr/employees.service";
 import { staffAccountPanel } from "@/modules/hr/staff-accounts.service";
@@ -54,8 +54,10 @@ function Rows({ rows }: { rows: [string, React.ReactNode][] }) {
 
 export default async function EmployeePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Search> }) {
   const ctx = await requireAuth();
-  if (!canBrowseEmployees(ctx)) return <NotPermitted />;
   const { id } = await params;
+  // Directory readers see any record; everyone else only their own linked record ("My profile", H7).
+  const browse = canBrowseEmployees(ctx);
+  if (!browse && !(canViewOwnProfile(ctx) && isOwnRecord(ctx, id))) return <NotPermitted />;
   const sp = await searchParams;
   const e = await getEmployee(ctx, id).catch((err) => {
     if (err instanceof NotFoundError) notFound();
@@ -63,7 +65,7 @@ export default async function EmployeePage({ params, searchParams }: { params: P
   });
   const canEdit = canManageEmployees(ctx) && e.tier === "personal";
   const isTeaching = e.staffType === "TEACHING";
-  const [teacher, account] = await Promise.all([isTeaching ? getTeacherProfile(ctx, e.id) : Promise.resolve(null), staffAccountPanel(ctx, e.id)]);
+  const [teacher, account] = await Promise.all([isTeaching ? getTeacherProfile(ctx, e.id) : Promise.resolve(null), browse ? staffAccountPanel(ctx, e.id) : Promise.resolve(null)]);
   const qualifications = (Array.isArray(teacher?.qualifications) ? teacher.qualifications : []) as unknown as Qualification[];
   const professional = (Array.isArray(teacher?.professionalQualifications) ? teacher.professionalQualifications : []) as unknown as ProfessionalQualification[];
 
@@ -93,10 +95,11 @@ export default async function EmployeePage({ params, searchParams }: { params: P
         </Alert>
       )}
       <p>
-        <Link href="/erp/hr/employees" className="text-sm underline-offset-4 hover:underline">
-          ← All staff
+        <Link href={browse ? "/erp/hr/employees" : "/erp/account"} className="text-sm underline-offset-4 hover:underline">
+          {browse ? "← All staff" : "← My account"}
         </Link>
       </p>
+      {isOwnRecord(ctx, e.id) && !canManageEmployees(ctx) && <p className="text-sm text-muted-foreground">This is your staff record. Ask the HR office to correct anything that is wrong.</p>}
 
       <Card>
         <CardHeader>

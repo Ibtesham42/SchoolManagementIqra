@@ -13,6 +13,11 @@ export interface AuthContext {
   /** permission key → every scope granted to the user for it (union across roles) */
   permissions: Map<PermissionKey, Set<Scope>>;
   sessionId: string;
+  /**
+   * Phase 3A M3b (ADR-036, H7): the staff record linked to this account (User.employeeId), or null/absent.
+   * SELF scope on staff permissions means exactly this record; absent = no SELF access (fail closed).
+   */
+  employeeId?: string | null;
   mustChangePassword?: boolean;
   ipHash?: string;
   requestId?: string;

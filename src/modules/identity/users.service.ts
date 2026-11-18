@@ -4,7 +4,7 @@ import { audit } from "@/lib/audit";
 import { hashPassword } from "@/lib/auth/password";
 import { generateTemporaryPassword } from "@/lib/auth/temp-password";
 import { isUniqueViolation } from "@/lib/db-errors";
-import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { authorize, type AuthContext } from "@/lib/rbac/authorize";
 import { clearLoginLimits } from "./auth.service";
 import { CLASS_TEACHER_ROLE_KEYS } from "@/modules/academic/academic.policy";
@@ -307,13 +307,13 @@ async function lockAccount(tx: Tx, userId: string) {
 /**
  * Links `userId` to `employeeId` (the caller has locked the employee row and checked it has no account).
  *
- * SECURITY (review 2026-11-18, M3a L1): today the link grants nothing. When M3b gives it meaning (SELF
- * "My profile", later payroll SELF), a linker could link their OWN account — self-modification is exempt in
- * assertCanModifyUser — or a low-privilege account to someone else's employee record and read that person's
- * data through SELF. M3b must decide (owner approval) to forbid self-links for non–Super Admins, require the
- * linker to hold what SELF exposes, and re-audit links made before it ships.
+ * SECURITY (KI-065; M3b, owner-approved 2026-11-18): the link gives the account SELF access to that employee's
+ * record ("My profile", later payroll SELF). So (1) only a Super Admin may link their OWN account — anyone else
+ * could otherwise attach themselves to a colleague's record (self-modification is exempt in assertCanModifyUser);
+ * (2) the HR caller requires the linker to hold what SELF exposes (employee.read + employee.personal.read at ALL).
  */
 export async function linkEmployeeAccountTx(tx: Tx, ctx: AuthContext, userId: string, employeeId: string): Promise<{ username: string }> {
+  if (userId === ctx.userId && !ctx.isSuperAdmin) throw new ForbiddenError("You can't link your own account. Ask another administrator.");
   const target = await lockAccount(tx, userId);
   assertCanModifyUser(ctx, target);
   if (!target.isActive) throw new ValidationError("Choose an active account.", [{ path: "userId", message: "This account is deactivated." }]);

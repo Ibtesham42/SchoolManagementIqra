@@ -12,7 +12,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - Employee profile with an overview for everyone who may see the directory; date of birth, personal contact details, home address, emergency contact and employment dates only for School Admin, Principal, HR Manager and Super Admin (the Librarian and Vice Principal see the directory only). Personal and contact details can be edited.
 - Departments and designations (names in any language, e.g. Hindi or Khasi): add, edit, deactivate — never deleted.
 - Teacher profile on a teaching employee's page: academic and professional qualifications (up to 10 each), subjects taught (up to 10, any language), experience before joining and registration number.
-- Login account panel on the employee page: shows the linked account; a Super Admin can link an existing active account to the employee or unlink it (one account per employee, recorded in the audit log). Linking doesn't change what the account can do yet.
+- Login account panel on the employee page: shows the linked account; a Super Admin can link an existing active account to the employee or unlink it (one account per employee, recorded in the audit log). Linking lets that person see their own staff record (below).
+- "My profile" on My account: staff whose login is linked to their staff record can view it read-only — employment, contact details and qualifications. Parents and students have no access to staff records.
+- Class teachers: a teacher can be made class teacher only when their login is linked to an active teaching staff record; the teacher list on the Sections page shows only those teachers. Existing class-teacher assignments are not changed.
+- Account linking: only an administrator who can see staff personal details may link accounts, and nobody except a Super Admin can link their own account.
+- Permissions: staff roles can now read their own staff record. Catalog: 84 permissions, 291 default grants.
 - Permissions: new "View employee personal details and documents" and "Upload, verify and remove employee documents and photos"; School Admin can now manage staff records. Catalog: 84 permissions, 279 default grants.
 
 ### Fixed (CI)

@@ -1,9 +1,9 @@
 import { prisma, type Tx } from "@/lib/db";
 import { isTransactionBusy } from "@/lib/db-errors";
-import { ConflictError, NotFoundError, ServiceBusyError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ServiceBusyError } from "@/lib/errors";
 import { authorize, hasPermission, type AuthContext } from "@/lib/rbac/authorize";
 import { employeeHasAccountTx, getLinkedAccount, linkEmployeeAccountTx, listLinkableAccounts, unlinkEmployeeAccountTx } from "@/modules/identity/users.service";
-import { employeeReadAccess } from "./hr.policy";
+import { canBrowseEmployees, canReadPersonal, employeeReadAccess } from "./hr.policy";
 import type { LinkAccountInput } from "./hr.schemas";
 
 /**
@@ -11,17 +11,19 @@ import type { LinkAccountInput } from "./hr.schemas";
  * employee, needs `employee.manage` AND `user.manage` (Q2: HR Manager alone can't), audited by the identity
  * service, never automatic. Lock order: employee FOR UPDATE (here) → user FOR UPDATE (identity helper).
  *
- * Linking gives the account nothing by itself in M3a: "My profile" (SELF scope) and the class-teacher rule
- * (H4) use the link only after their separate owner approval.
+ * Since M3b the link carries access: the account reads that employee's record at SELF ("My profile") and the
+ * class-teacher rule (H4) follows it. So linking requires the linker to hold what SELF exposes (directory and
+ * personal tier at ALL), and non–Super Admins can't link their own account (identity helper) — KI-065.
  */
 export function canLinkAccounts(ctx: AuthContext): boolean {
-  return hasPermission(ctx, "employee.manage") && hasPermission(ctx, "user.manage");
+  return hasPermission(ctx, "employee.manage") && hasPermission(ctx, "user.manage") && canBrowseEmployees(ctx) && canReadPersonal(ctx);
 }
 
 function authorizeLink(ctx: AuthContext) {
   authorize(ctx, "employee.manage");
   authorize(ctx, "user.manage");
   employeeReadAccess(ctx);
+  if (!canReadPersonal(ctx)) throw new ForbiddenError("Linking an account gives it access to the employee's personal details, which you can't view.");
 }
 
 async function lockEmployee(tx: Tx, employeeId: string) {

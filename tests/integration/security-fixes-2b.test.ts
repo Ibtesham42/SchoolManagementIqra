@@ -74,6 +74,9 @@ describe.skipIf(!enabled)("Phase 2B security fixes (integration)", () => {
       ct2: await user("ct2", "CLASS_TEACHER"),
     };
     [ctId, ct2Id] = [u.ct.id, u.ct2.id];
+    // H4 (Phase 3A M3b): class teachers need a linked ACTIVE, TEACHING employee.
+    const { linkTeachingEmployee } = await import("./staff-fixture");
+    for (const id of [ctId, ct2Id]) await linkTeachingEmployee(m.prisma, tag, id);
     [root, admin, admin2, principal, officer, ct, ct2] = await Promise.all([u.root, u.admin, u.admin2, u.principal, u.officer, u.ct, u.ct2].map((x) => ctxFor(x.id)));
     sessionId = (await m.createAcademicSession(root, { name: sessionName, startDate: `${year}-04-01`, endDate: `${year + 1}-03-31` })).id;
     await m.changeAcademicSessionStatus(root, sessionId, "ACTIVE");
@@ -97,6 +100,7 @@ describe.skipIf(!enabled)("Phase 2B security fixes (integration)", () => {
 
   afterAll(async () => {
     const { prisma } = m;
+    await (await import("./staff-fixture")).removeStaffFixtures(prisma, tag);
     if (!sessionId) return void (await prisma.user.deleteMany({ where: { username: { startsWith: run } } }), await prisma.$disconnect());
     const studentIds = (await prisma.student.findMany({ where: { admittedSessionId: sessionId }, select: { id: true } })).map((s) => s.id);
     const guardianIds = [...new Set((await prisma.studentGuardian.findMany({ where: { studentId: { in: studentIds } }, select: { guardianId: true } })).map((g) => g.guardianId))];
