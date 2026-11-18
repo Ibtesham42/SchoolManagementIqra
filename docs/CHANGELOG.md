@@ -11,6 +11,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - Register employee (School Admin, HR Manager): four steps — personal, contact, employment, review. The permanent employee ID (`EMP-2026-0001`, joining year) is assigned on registration and never changes; teaching or non-teaching comes from the designation.
 - Employee profile with an overview for everyone who may see the directory; date of birth, personal contact details, home address, emergency contact and employment dates only for School Admin, Principal, HR Manager and Super Admin (the Librarian and Vice Principal see the directory only). Personal and contact details can be edited.
 - Departments and designations (names in any language, e.g. Hindi or Khasi): add, edit, deactivate — never deleted.
+- Teacher profile on a teaching employee's page: academic and professional qualifications (up to 10 each), subjects taught (up to 10, any language), experience before joining and registration number.
+- Login account panel on the employee page: shows the linked account; a Super Admin can link an existing active account to the employee or unlink it (one account per employee, recorded in the audit log). Linking doesn't change what the account can do yet.
 - Permissions: new "View employee personal details and documents" and "Upload, verify and remove employee documents and photos"; School Admin can now manage staff records. Catalog: 84 permissions, 279 default grants.
 
 ### Fixed (CI)

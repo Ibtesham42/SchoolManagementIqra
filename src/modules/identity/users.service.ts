@@ -4,7 +4,7 @@ import { audit } from "@/lib/audit";
 import { hashPassword } from "@/lib/auth/password";
 import { generateTemporaryPassword } from "@/lib/auth/temp-password";
 import { isUniqueViolation } from "@/lib/db-errors";
-import { ConflictError, NotFoundError } from "@/lib/errors";
+import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { authorize, type AuthContext } from "@/lib/rbac/authorize";
 import { clearLoginLimits } from "./auth.service";
 import { CLASS_TEACHER_ROLE_KEYS } from "@/modules/academic/academic.policy";
@@ -285,4 +285,84 @@ export async function listAssignableRoles(ctx: AuthContext) {
       ctx.isSuperAdmin ||
       (r.key !== SUPER_ADMIN && permissions.every((p) => actorCovers(ctx, p.permission.key as PermissionKey, p.scope as Scope))),
   }));
+}
+
+// ───────────────────────────── Employee account link (Phase 3A M3, H2) ─────────────────────────────
+//
+// User.employeeId is the optional one-to-one link from a login account to a staff record (ADR-036). Only
+// these functions write it. The HR service calls the *Tx helpers inside its own transaction after locking
+// the employee row (lock order: employee FOR UPDATE → user FOR UPDATE). Linking needs `user.manage` here
+// (assertCanModifyUser: no linking accounts more privileged than the actor; only Super Admin touches a
+// Super Admin) — the HR caller additionally authorizes `employee.manage`. No auto-linking by email (R2).
+
+/** Locks the account row and returns it with its permissions (for the delegation check). */
+async function lockAccount(tx: Tx, userId: string) {
+  const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "user" WHERE id = ${userId} AND deleted_at IS NULL FOR UPDATE`;
+  if (rows.length === 0) throw new NotFoundError("User not found.");
+  const target = await loadTarget(tx, userId);
+  const { employeeId } = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { employeeId: true } });
+  return { ...target, employeeId };
+}
+
+/**
+ * Links `userId` to `employeeId` (the caller has locked the employee row and checked it has no account).
+ *
+ * SECURITY (review 2026-11-18, M3a L1): today the link grants nothing. When M3b gives it meaning (SELF
+ * "My profile", later payroll SELF), a linker could link their OWN account — self-modification is exempt in
+ * assertCanModifyUser — or a low-privilege account to someone else's employee record and read that person's
+ * data through SELF. M3b must decide (owner approval) to forbid self-links for non–Super Admins, require the
+ * linker to hold what SELF exposes, and re-audit links made before it ships.
+ */
+export async function linkEmployeeAccountTx(tx: Tx, ctx: AuthContext, userId: string, employeeId: string): Promise<{ username: string }> {
+  const target = await lockAccount(tx, userId);
+  assertCanModifyUser(ctx, target);
+  if (!target.isActive) throw new ValidationError("Choose an active account.", [{ path: "userId", message: "This account is deactivated." }]);
+  if (target.employeeId === employeeId) return { username: target.username };
+  if (target.employeeId) throw new ConflictError("This account is already linked to another employee. Unlink it there first.");
+  try {
+    await tx.user.update({ where: { id: userId }, data: { employeeId } });
+  } catch (e) {
+    if (isUniqueViolation(e, "employeeId")) throw new ConflictError("This employee already has a login account.");
+    throw e;
+  }
+  await audit(tx, actorOf(ctx), { action: "user.employee_link", entityType: "User", entityId: userId, before: { employeeId: null }, after: { employeeId } });
+  return { username: target.username };
+}
+
+/** Removes the link from the account linked to `employeeId`, if any (caller holds the employee row lock). */
+export async function unlinkEmployeeAccountTx(tx: Tx, ctx: AuthContext, employeeId: string): Promise<{ userId: string } | null> {
+  const linked = await tx.user.findFirst({ where: { employeeId }, select: { id: true, deletedAt: true } });
+  if (!linked) return null;
+  if (linked.deletedAt) {
+    // A soft-deleted account must not keep the employee from being relinked (review M3a L2). Removing a link
+    // from an account nobody can use grants nothing, so the delegation check is not needed; still audited.
+    await tx.$queryRaw`SELECT id FROM "user" WHERE id = ${linked.id} FOR UPDATE`;
+  } else {
+    assertCanModifyUser(ctx, await lockAccount(tx, linked.id));
+  }
+  await tx.user.update({ where: { id: linked.id }, data: { employeeId: null } });
+  await audit(tx, actorOf(ctx), { action: "user.employee_unlink", entityType: "User", entityId: linked.id, before: { employeeId }, after: { employeeId: null } });
+  return { userId: linked.id };
+}
+
+/** Whether an account is already linked to this employee (inside the caller's transaction; no data returned). */
+export async function employeeHasAccountTx(tx: Tx, employeeId: string): Promise<boolean> {
+  return (await tx.user.count({ where: { employeeId } })) > 0;
+}
+
+/** The account linked to an employee, for the profile's "Login account" panel (`user.read`). */
+export async function getLinkedAccount(ctx: AuthContext, employeeId: string) {
+  authorize(ctx, "user.read");
+  return prisma.user.findFirst({ where: { employeeId, deletedAt: null }, select: { id: true, username: true, displayName: true, isActive: true } });
+}
+
+/** Active accounts without an employee link, for the link picker (`user.manage`). Bounded — a school has few accounts. */
+export async function listLinkableAccounts(ctx: AuthContext) {
+  authorize(ctx, "user.manage");
+  return prisma.user.findMany({
+    where: { employeeId: null, isActive: true, deletedAt: null },
+    orderBy: { username: "asc" },
+    take: 500,
+    select: { id: true, username: true, displayName: true },
+  });
 }

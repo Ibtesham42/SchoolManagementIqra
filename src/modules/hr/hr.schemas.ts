@@ -141,3 +141,55 @@ export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
 export type UpdateEmployeePersonalInput = z.infer<typeof updateEmployeePersonalSchema>;
 export type UpdateEmployeeContactInput = z.infer<typeof updateEmployeeContactSchema>;
 export type ListEmployeesInput = z.infer<typeof listEmployeesSchema>;
+
+// ───────────────────────────── Teacher profile (M3, H14) ─────────────────────────────
+
+const YEAR_NOW = new Date().getUTCFullYear();
+const optionalYear = z.preprocess(
+  (v) => (typeof v === "string" ? (v.trim() === "" ? null : /^\d{4}$/.test(v.trim()) ? Number(v.trim()) : Number.NaN) : v),
+  z.number("Use a 4-digit year.").int("Use a 4-digit year.").min(1950, "Use a year from 1950.").max(YEAR_NOW + 1, "Check the year.").nullable(),
+);
+const shortText = (label: string, max: number) =>
+  z
+    .string()
+    .transform((v) => v.normalize("NFC").trim().replace(/\s+/g, " "))
+    .pipe(z.string().min(1, `Enter the ${label}.`).max(max, `Use at most ${max} characters.`))
+    .refine((v) => !/[\p{Cc}​﻿]/u.test(v), "Remove control characters.");
+const optionalShortText = (max: number) =>
+  z
+    .string()
+    .transform((v) => v.normalize("NFC").trim().replace(/\s+/g, " "))
+    .pipe(z.string().max(max, `Use at most ${max} characters.`))
+    .refine((v) => !/[\p{Cc}​﻿]/u.test(v), "Remove control characters.")
+    .transform((v) => (v === "" ? null : v));
+
+export const qualificationSchema = z.object({ degree: shortText("degree", 80), subject: optionalShortText(80), institution: optionalShortText(120), year: optionalYear }).strict();
+export const professionalQualificationSchema = z.object({ name: shortText("qualification", 80), year: optionalYear }).strict();
+
+export const MAX_TEACHER_ENTRIES = 10;
+export const teacherProfileSchema = z
+  .object({
+    employeeId: idField,
+    /** null = the profile doesn't exist yet (create); otherwise the optimistic version. */
+    version: versionField.nullable(),
+    qualifications: z.array(qualificationSchema).max(MAX_TEACHER_ENTRIES, `At most ${MAX_TEACHER_ENTRIES} qualifications.`),
+    professionalQualifications: z.array(professionalQualificationSchema).max(MAX_TEACHER_ENTRIES, `At most ${MAX_TEACHER_ENTRIES} professional qualifications.`),
+    /** H14: free text until Phase 4 subjects; at most 10 × 60 characters, case-insensitively distinct. */
+    specializations: z
+      .array(shortText("subject", 60))
+      .max(MAX_TEACHER_ENTRIES, `At most ${MAX_TEACHER_ENTRIES} subjects.`)
+      .refine((a) => new Set(a.map((s) => s.toLowerCase())).size === a.length, "Each subject may appear only once."),
+    experienceYearsBefore: z.preprocess(
+      (v) => (typeof v === "string" ? (v.trim() === "" ? 0 : /^\d+$/.test(v.trim()) ? Number(v.trim()) : Number.NaN) : v),
+      z.number("Enter whole years from 0 to 60.").int("Enter whole years from 0 to 60.").min(0, "Enter whole years from 0 to 60.").max(60, "Enter whole years from 0 to 60."),
+    ),
+    teacherRegistrationNo: optionalShortText(40),
+  })
+  .strict();
+export type TeacherProfileInput = z.infer<typeof teacherProfileSchema>;
+
+// ───────────────────────────── Login account link (M3, H2) ─────────────────────────────
+
+export const linkAccountSchema = z.object({ employeeId: idField, userId: idField }).strict();
+export const unlinkAccountSchema = z.object({ employeeId: idField }).strict();
+export type LinkAccountInput = z.infer<typeof linkAccountSchema>;
