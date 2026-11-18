@@ -244,3 +244,36 @@ export type ChangeStatusInput = z.infer<typeof changeStatusSchema>;
 /** Directory export (M5) uses the directory filters, no paging; the service refuses more than the row limit. */
 export const exportEmployeesSchema = listEmployeesSchema.omit({ page: true, pageSize: true });
 export type ExportEmployeesInput = z.infer<typeof exportEmployeesSchema>;
+
+// ───────────────────────────── Documents & photo (M4b — H8) ─────────────────────────────
+
+/** H5/H8: no identity-document types (no Aadhaar or PAN copies) — same list as the EmployeeDocumentType enum. */
+export const EMPLOYEE_DOCUMENT_TYPES = ["PHOTO", "RESUME", "QUALIFICATION_CERTIFICATE", "EXPERIENCE_LETTER", "APPOINTMENT_LETTER", "RELIEVING_LETTER", "OTHER"] as const;
+export type EmployeeDocumentType = (typeof EMPLOYEE_DOCUMENT_TYPES)[number];
+export const EMPLOYEE_DOCUMENT_LABEL: Record<EmployeeDocumentType, string> = {
+  PHOTO: "Photo",
+  RESUME: "Résumé / CV",
+  QUALIFICATION_CERTIFICATE: "Qualification certificate",
+  EXPERIENCE_LETTER: "Experience letter",
+  APPOINTMENT_LETTER: "Appointment letter",
+  RELIEVING_LETTER: "Relieving letter",
+  OTHER: "Other document",
+};
+
+export const employeeDocumentFieldsSchema = z
+  .object({
+    type: z.enum(EMPLOYEE_DOCUMENT_TYPES, "Choose the document type."),
+    label: z
+      .string()
+      .transform((v) => v.normalize("NFC").trim().replace(/\s+/g, " "))
+      .pipe(z.string().max(80, "Use at most 80 characters."))
+      .refine((v) => !/[\p{Cc}​﻿]/u.test(v), "Remove control characters.")
+      .transform((v) => (v === "" ? null : v)),
+  })
+  .strict()
+  .refine((v) => v.type !== "OTHER" || v.label !== null, { message: "Describe the document (e.g. Training certificate).", path: ["label"] });
+export type EmployeeDocumentFields = z.infer<typeof employeeDocumentFieldsSchema>;
+
+export const employeeDocumentRefSchema = z.object({ employeeId: idField, documentId: idField }).strict();
+/** Ids in route paths: cuid2 (employees) and 32-hex (documents). */
+export const PATH_ID = /^[A-Za-z0-9]{10,64}$/;

@@ -73,6 +73,28 @@ export const UPLOAD_RULES = {
     ownerType: "StudentDocument",
     description: "Student photo (re-encoded JPEG)",
   },
+  // Staff documents (Phase 3A M4b, H8): owner = the EmployeeDocument row. Reading needs the personal tier
+  // (H6) — the HR service has already checked the record (ALL, or SELF on the own record). No identity-document
+  // types exist (no Aadhaar/PAN copies, H5). Uploaded only through the dedicated route.
+  "employee.document": {
+    allowed: ["application/pdf", "image/jpeg", "image/png"],
+    maxBytes: DOCUMENT_MAX_BYTES,
+    visibility: "PRIVATE",
+    uploadPermission: "employee.document.manage",
+    readPermission: "employee.personal.read",
+    ownerType: "EmployeeDocument",
+    description: "Staff document (PDF, JPEG or PNG, up to 10 MB)",
+  },
+  // Staff photo AFTER server-side re-encoding (600×600 JPEG, no metadata). Directory data (H6): employee.read.
+  "employee.photo": {
+    allowed: ["image/jpeg"],
+    maxBytes: PHOTO_STORED_MAX_BYTES,
+    visibility: "PRIVATE",
+    uploadPermission: "employee.document.manage",
+    readPermission: "employee.read",
+    ownerType: "EmployeeDocument",
+    description: "Staff photo (re-encoded JPEG)",
+  },
 } as const satisfies Record<string, UploadRule>;
 
 /** Purposes recorded for files that predate purposes (migration 20261109000000): Super Admin only. */
