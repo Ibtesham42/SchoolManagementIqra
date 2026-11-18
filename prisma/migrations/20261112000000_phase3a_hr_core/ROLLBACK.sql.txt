@@ -1,0 +1,32 @@
+-- Phase 3A (20261112000000_phase3a_hr_core) - GUARDED ROLLBACK. Manual, owner-approved use only; never run
+-- by a deploy (Prisma has no down migrations). Development/Test only, never production.
+-- Refuses (and changes nothing) unless every HR table is empty and no account is linked to an employee.
+-- No CASCADE: a DROP fails rather than reaching anything outside the six HR tables. stored_file rows and the
+-- encrypted files they describe are NOT touched. Once real HR data exists, restore the branch from the Neon
+-- restore point taken before applying instead (a separate, approved operation).
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+
+DO $$
+DECLARE n bigint;
+BEGIN
+  SELECT (SELECT count(*) FROM "employee") + (SELECT count(*) FROM "department") + (SELECT count(*) FROM "designation")
+       + (SELECT count(*) FROM "teacher_profile") + (SELECT count(*) FROM "employee_document")
+       + (SELECT count(*) FROM "employee_service_event") + (SELECT count(*) FROM "user" WHERE "employee_id" IS NOT NULL)
+    INTO n;
+  IF n > 0 THEN
+    RAISE EXCEPTION 'Phase 3A rollback refused: % HR row(s) or linked account(s) exist. Restore from the Neon restore point instead. Nothing was changed.', n;
+  END IF;
+END $$;
+
+ALTER TABLE "user" DROP CONSTRAINT "user_employee_id_fkey";
+DROP TABLE "employee_service_event";
+DROP TABLE "employee_document";
+DROP TABLE "teacher_profile";
+DROP TABLE "employee";
+DROP TABLE "designation";
+DROP TABLE "department";
+DROP TYPE "ServiceEventType", "EmployeeDocumentType", "EmploymentStatus", "AppointmentType", "StaffType";
+DELETE FROM "_prisma_migrations" WHERE "migration_name" = '20261112000000_phase3a_hr_core';
+COMMIT;
+-- Afterwards: revert prisma/schema.prisma and remove the migration folder in the same change.

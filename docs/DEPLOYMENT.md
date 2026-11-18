@@ -1,21 +1,18 @@
 # Deployment
 
-Status: development environment defined (Phase 1). Production steps will be verified and recorded in Phase 15.
+Status (2026-11-08): **not deployed anywhere.** CI (offline gate) is green on GitHub. Neon is not yet configured; the production host is not chosen (FREE_TIER.md). Production steps will be verified in Roadmap Phase 10 (DEVELOPMENT_ROADMAP.md); every deployment needs explicit owner approval.
 Free-tier limits and hosting terms: **docs/FREE_TIER.md** (read it before choosing a host).
 
 ## Neon setup (one-time, done by the project owner)
 
-1. Sign up at https://neon.com with **no payment method**. Create a project (Postgres 17, region nearest the school, e.g. AWS ap-south-1 Mumbai if offered).
-2. The project's default branch is renamed or used as **`production`**. Create two child branches from it (Branches → New branch), both while production is still empty so no real data is ever copied:
-   - **`development`** — local development; `prisma migrate dev` and the seed only ever target this branch.
-   - **`test`** — integration tests only (`TEST_DATABASE_URL`); tests create and delete their own rows.
-3. For each branch, open **Connect**, and copy two strings for role/database:
-   - **Pooled** (host contains `-pooler`) → `DATABASE_URL`
-   - **Direct** (toggle "Connection pooling" off) → `DIRECT_URL`
-   Both should end with `?sslmode=require` (add `&channel_binding=require` if Neon shows it).
-4. Put the **development** strings (and the **test** branch pooled string as `TEST_DATABASE_URL`) in your local `.env` only. Production strings go only into the production host's secret settings — never into the local `.env`. Production is never seeded with development sample data; it receives only migrations and, at go-live, the first Super Admin.
-5. pgvector is enabled by the first migration (`CREATE EXTENSION IF NOT EXISTS vector`) — no console action needed.
-6. Verify: `npm run db:deploy && npm run db:check`.
+**Follow [NEON_SETUP_GUIDE.md](NEON_SETUP_GUIDE.md)** — the verified, step-by-step procedure (approved 2026-11-08). Summary:
+
+1. Free project, **no payment method**. Default branch = **`production`** (stays empty until go-live). Reset the exposed `neondb_owner` password on every branch that predates the reset.
+2. Child branches **`development`** (local work, migrations reviewed first, seed) and **`test`** (integration tests only).
+3. Connection strings from **Connect** (Branch / Database `neondb` / Role / pooling toggle): pooled (`-pooler`) → `DATABASE_URL`, direct → `DIRECT_URL`; use `sslmode=verify-full`. Neon currently runs PostgreSQL 18.
+4. Local files: `.env` (development pooled + direct, test pooled as `TEST_DATABASE_URL`, three keys, seed credentials) and `.env.test` (test pooled + direct) — both git-ignored, edited only by the owner. Production strings never go in local files.
+5. `npm run env:check` with `FORBIDDEN_BRANCH_IDS=<production branch id>` must pass before anything else.
+6. Migrations: review checklist → owner approval → `development` → `test` (via `DOTENV_PATH=.env.test` inside `try/finally`) → `db:check`; seed development only. pgvector is enabled by the first migration.
 
 Branch rules: never run `migrate dev`/`reset` against `production`; production only receives `prisma migrate deploy` of committed migrations. Neon Free allows 10 branches — delete short-lived preview branches after use.
 
@@ -46,3 +43,5 @@ Branch rules: never run `migrate dev`/`reset` against `production`; production o
 | local | Neon `development` branch | synthetic seed |
 | preview (optional) | short-lived Neon branch from `development` | synthetic seed |
 | production | Neon `production` branch | real — never copied to lower environments without anonymisation |
+
+> **`sharp` in the standalone output (KI-056):** `next.config.ts` traces `node_modules/@img/**` for `/api/v1/**` because Next.js doesn't copy the libvips shared libraries `sharp` loads. Build on the **same OS/architecture** as the host (npm installs only that platform's `@img/*` packages) and check after every build: `node -e "require('sharp')"` run with the working directory `.next/standalone` must succeed.

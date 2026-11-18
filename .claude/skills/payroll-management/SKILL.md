@@ -5,6 +5,8 @@ description: Use when working on salary components, salary structures, employee 
 
 # Payroll management
 
+> Roadmap Phase 3 (with teacher-hr-management).
+
 ## Responsibilities
 Accurate monthly salaries with maker-checker approval, strict confidentiality and immutable history.
 

@@ -5,6 +5,8 @@ description: Use when implementing or changing roll number generation, preview, 
 
 # Roll-number generation
 
+> Roadmap Phase 2 — roll numbers are generated at the admission-finalization stage, per session and section.
+
 ## Responsibilities
 Assign roll numbers per (academic session, section) in ascending alphabetical order of full name, with preview → finalize → controlled correction.
 

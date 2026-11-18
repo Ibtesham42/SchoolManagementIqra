@@ -24,7 +24,7 @@ export async function changeOwnPassword(ctx: AuthContext, input: z.infer<typeof 
   const problem = passwordProblem(input.newPassword, ctx.username);
   if (problem) throw new ValidationError(problem, [{ path: "newPassword", message: problem }]);
 
-  await enforce(RULES.loginPerUser, ctx.username);
+  await enforce(RULES.passwordChange, ctx.userId); // S-03: own bucket — login attempts by others can't block it
   const user = await prisma.user.findUniqueOrThrow({ where: { id: ctx.userId } });
   if (!(await verifyPassword(user.passwordHash, input.currentPassword))) {
     throw new ValidationError("Current password is incorrect.", [{ path: "currentPassword", message: "Incorrect password." }]);

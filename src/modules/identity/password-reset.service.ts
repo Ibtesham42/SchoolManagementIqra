@@ -7,6 +7,7 @@ import { maskEmail, sendEmail } from "@/lib/email";
 import { ValidationError } from "@/lib/errors";
 import { RULES, enforce } from "@/lib/rate-limit";
 import type { passwordResetCompleteSchema, passwordResetRequestSchema } from "./identity.schemas";
+import { clearLoginLimits } from "./auth.service";
 
 export const RESET_TOKEN_TTL_MINUTES = 30;
 
@@ -129,4 +130,5 @@ export async function completePasswordReset(input: z.infer<typeof passwordResetC
     await tx.session.deleteMany({ where: { userId: user.id } });
     await audit(tx, { userId: user.id, ipHash: meta.ipHash }, { action: "auth.password_reset_completed", entityType: "User", entityId: user.id });
   });
+  await clearLoginLimits(pre.user.username); // S-03: after commit
 }

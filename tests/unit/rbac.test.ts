@@ -62,7 +62,30 @@ describe("authorize", () => {
     ["chatbot.manage", ["SUPER_ADMIN"]],
     ["rollnumber.finalize", ["SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL"]],
     ["fee.refund", ["SUPER_ADMIN", "ACCOUNTANT"]],
+    ["settings.manage", ["SUPER_ADMIN", "SCHOOL_ADMIN"]],
+    ["session.manage", ["SUPER_ADMIN", "SCHOOL_ADMIN"]],
+    ["template.manage", ["SUPER_ADMIN"]],
+    // Revoking is not implied by generating: only these roles may invalidate issued documents.
+    ["document.revoke", ["SUPER_ADMIN", "PRINCIPAL"]],
+    ["document.generate", ["SUPER_ADMIN", "SCHOOL_ADMIN", "ADMISSION_OFFICER"]],
   ];
+
+  it("no role gets document.revoke merely by holding document.generate", () => {
+    for (const r of ROLES) {
+      const ctx = ctxFor([r.key]);
+      if (r.key === "SUPER_ADMIN" || r.key === "PRINCIPAL") continue;
+      if (hasPermission(ctx, "document.generate")) expect(hasPermission(ctx, "document.revoke")).toBe(false);
+    }
+  });
+
+  it("School Admin manages school settings and sessions but holds no system-level authority", () => {
+    const ctx = ctxFor(["SCHOOL_ADMIN"]);
+    for (const p of ["settings.read", "settings.manage", "session.manage"] as const) expect(hasPermission(ctx, p)).toBe(true);
+    for (const p of ["user.manage", "role.manage", "backup.manage", "chatbot.manage", "audit.read", "student.sensitive.read", "employee.sensitive.read", "payroll.read", "document.revoke", "template.manage"] as const) {
+      expect(hasPermission(ctx, p)).toBe(false);
+    }
+    expect(ctx.isSuperAdmin).toBe(false);
+  });
   describe.each(MATRIX)("%s", (permission, allowed) => {
     it.each(ROLES.map((r) => r.key))("%s", (role) => {
       const ctx = ctxFor([role]);

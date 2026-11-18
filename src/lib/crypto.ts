@@ -6,7 +6,8 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, 
  * Format: v<version>.<iv b64url>.<tag b64url>.<ciphertext b64url>
  */
 
-function keyFromEnv(name: string): Buffer {
+/** A 32-byte key from a base64 environment variable (name only in errors, never the value). */
+export function keyFromEnv(name: string): Buffer {
   const raw = process.env[name];
   if (!raw) throw new Error(`${name} is not set`);
   const key = Buffer.from(raw, "base64");

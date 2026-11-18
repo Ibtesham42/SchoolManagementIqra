@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { LogOut } from "lucide-react";
 import { requireAuth } from "@/lib/auth/context";
-import { hasPermission } from "@/lib/rbac/authorize";
+import { hasPermission, scopeFor } from "@/lib/rbac/authorize";
 import { logoutAction } from "@/app/(auth)/login/actions";
 import { BottomNav, SidebarNav } from "@/components/erp/erp-nav";
 import { Button } from "@/components/ui/button";
-import { NAV_ITEMS } from "@/components/erp/nav-items";
+import { visibleNavItems } from "@/components/erp/nav-items";
 
 export const metadata = { robots: { index: false } };
 
@@ -13,7 +13,8 @@ export default async function ErpLayout({ children }: { children: ReactNode }) {
   // Pages enforce the forced password change themselves (requireAuth); the layout only needs a session.
   const ctx = await requireAuth({ allowPendingPasswordChange: true });
   // While a password change is pending, hasPermission() is false, so only always-visible items show.
-  const items = NAV_ITEMS.filter((i) => i.anyOf.length === 0 || i.anyOf.some((p) => hasPermission(ctx, p)));
+  // After the change, changePasswordAction re-renders this layout (B5, KI-052).
+  const items = visibleNavItems((p) => hasPermission(ctx, p), (p) => scopeFor(ctx, p));
 
   return (
     <div className="min-h-dvh bg-muted/40 lg:grid lg:grid-cols-[16rem_1fr]">

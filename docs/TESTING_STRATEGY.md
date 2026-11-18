@@ -34,8 +34,8 @@ Mocks are allowed only for external providers (payment gateway, LLM, email). **N
 
 | Suite | Command | Needs |
 |---|---|---|
-| Unit | `npm test` (integration auto-skips without a test DB) | nothing |
-| Integration | `npm test` with `TEST_DATABASE_URL` set (Neon `test` branch, migrated with `DIRECT_URL=<test direct> npm run db:deploy`) | test DB |
+| Unit | `npm test` or `npm run test:unit` — **always offline** (KI-043): only `tests/unit`, `.env` is never loaded (`envDir: false`, no dotenv), every database URL is removed from the test process | nothing |
+| Integration | **only** `npm run test:integration` — the explicit opt-in (`npm_lifecycle_event`) collects `tests/integration`, sets `SCHOOL_ERP_INTEGRATION_TESTS=1` and loads `.env`; each file also requires `TEST_DATABASE_URL` (Neon `test` branch, migrated via `.env.test` + `DOTENV_PATH` inside `try/finally` — NEON_SETUP_GUIDE §7.2). A configured `.env` alone never starts them | test DB, owner approval (G5) |
 | E2E | `npm run build`, copy `.next/static` into `.next/standalone/.next/`, start `node .next/standalone/server.js`, then `E2E_BASE_URL=… E2E_DATABASE_URL=<dev DB> npm run test:e2e` | dev DB seeded |
 | E2E degraded | also start a second instance with an unreachable `DATABASE_URL` and set `E2E_DEGRADED_BASE_URL` | — |
 | Architecture | `npm run check:deps` (cycles + layer boundaries) and `npm run lint` (layer rules, unsafe-SQL ban) | — |
@@ -45,6 +45,10 @@ Mocks are allowed only for external providers (payment gateway, LLM, email). **N
 | E2E offline (no DB) | start the server with an unreachable `DATABASE_URL`; set `E2E_BASE_URL` and `E2E_DEGRADED_BASE_URL` to it and leave `E2E_DATABASE_URL` unset → auth-pages + degraded specs run, DB specs skip as **pending** | — |
 
 Skipped tests are reported as skipped, never as passed. A run against a local PostgreSQL is useful for development but does not replace the Neon run.
+
+## Local UI audit
+
+`docs/LOCAL_UI_AUDIT.md` records a browser audit (Playwright + axe) at desktop, tablet (iPad) and phone (Pixel 7): every reachable page, interaction checks, and evidence categories — visually verified, functionally verified, database-dependent (not verified), not implemented. Repeat it for every ERP screen once a database is available (the ui-accessibility skill has the checklist). Recommendation: add an iPad project to `playwright.config.ts`.
 
 ## CI (GitHub Actions)
 

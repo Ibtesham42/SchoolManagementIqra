@@ -1,5 +1,7 @@
 # Project Plan
 
+> **2026-11-08:** the phase structure below is **superseded by docs/DEVELOPMENT_ROADMAP.md** (phases 0–10, owner-approved). This table is kept as a historical record; the roadmap's §13 maps old phases to new ones. The open-questions table below remains current.
+
 ## Phases and exit criteria
 
 Each phase ends with: tests green · lint/typecheck clean · docs updated · DEVELOPMENT_PROGRESS.md entry · demo of every feature end-to-end (UI → API → DB).

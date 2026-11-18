@@ -5,6 +5,8 @@ description: Use when working on fee structures, concessions, scholarships, late
 
 # Fee management
 
+> Roadmap Phase 5 (Fee and Finance Management). Online payments stay optional (`PAYMENT_GATEWAY=none` by default).
+
 ## Responsibilities
 Correct amounts, no duplicate payments, verifiable online payments, immutable receipts.
 

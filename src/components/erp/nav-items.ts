@@ -1,6 +1,6 @@
-import type { PermissionKey } from "@/lib/rbac/catalog";
+import type { PermissionKey, Scope } from "@/lib/rbac/catalog";
 
-export type NavIcon = "dashboard" | "users" | "roles" | "account";
+export type NavIcon = "dashboard" | "admissions" | "students" | "rollNumbers" | "academic" | "users" | "roles" | "settings" | "account";
 
 export interface NavItem {
   href: string;
@@ -8,12 +8,51 @@ export interface NavItem {
   icon: NavIcon;
   /** Shown when the user holds ANY of these permissions. Empty = every signed-in user. */
   anyOf: PermissionKey[];
+  /**
+   * Optional: shown only when the user's WIDEST scope for `key` is one of `scopes`. Used where a page can
+   * serve only some scopes (e.g. the student directory: ALL / ASSIGNED; Parent and Student roles hold
+   * student.read at CHILDREN / SELF for the future portal, which has no screen yet — no dead menu links).
+   */
+  scope?: { key: PermissionKey; scopes: Scope[] };
 }
 
 /** Modules appear here only once they are implemented (no placeholder links). */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/erp", label: "Dashboard", icon: "dashboard", anyOf: [] },
+  { href: "/erp/admissions", label: "Admissions", icon: "admissions", anyOf: ["admission.read"] },
+  { href: "/erp/students", label: "Students", icon: "students", anyOf: ["student.read"], scope: { key: "student.read", scopes: ["ALL", "ASSIGNED"] } },
+  { href: "/erp/students/registration", label: "Roll numbers", icon: "rollNumbers", anyOf: ["rollnumber.generate", "rollnumber.finalize", "rollnumber.correct"] },
+  { href: "/erp/academic", label: "Classes", icon: "academic", anyOf: ["academic.read"] }, // every academic screen reads first; manage alone shows nothing
   { href: "/erp/users", label: "Users", icon: "users", anyOf: ["user.read"] },
   { href: "/erp/roles", label: "Roles", icon: "roles", anyOf: ["role.manage"] },
+  { href: "/erp/settings", label: "Settings", icon: "settings", anyOf: ["settings.read"] },
   { href: "/erp/account", label: "My account", icon: "account", anyOf: [] },
 ];
+
+/**
+ * Items visible to a user, given a permission check and the user's widest scope per permission (the layout
+ * passes `hasPermission(ctx, …)` and `scopeFor(ctx, …)`). Cosmetic only — every page and service authorizes.
+ */
+export function visibleNavItems(can: (key: PermissionKey) => boolean, scopeOf: (key: PermissionKey) => Scope | null, items: NavItem[] = NAV_ITEMS): NavItem[] {
+  return items.filter((i) => {
+    if (i.anyOf.length > 0 && !i.anyOf.some(can)) return false;
+    if (i.scope) {
+      const scope = can(i.scope.key) ? scopeOf(i.scope.key) : null;
+      if (!scope || !i.scope.scopes.includes(scope)) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * The one item to highlight for a path: the LONGEST href that equals the path or is a parent segment of it
+ * ("/erp/students/registration/x" → "Roll numbers", not also "Students"). "/erp" only matches itself.
+ */
+export function activeNavHref(pathname: string, items: NavItem[]): string | null {
+  let best: string | null = null;
+  for (const { href } of items) {
+    const match = href === "/erp" ? pathname === "/erp" : pathname === href || pathname.startsWith(`${href}/`);
+    if (match && (best === null || href.length > best.length)) best = href;
+  }
+  return best;
+}

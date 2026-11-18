@@ -34,6 +34,13 @@ Status: **conventions only** (Phase 0). Each phase adds its endpoints below; not
 |---|---|---|---|
 | `GET /api/health` | public | **Liveness only** — never touches the DB (so monitors don't keep Neon awake) | `200 {"status":"ok"}` |
 | `GET /api/health?deep=1` | `Authorization: Bearer $CRON_SECRET` | Liveness + DB reachability | `200 {"status":"ok","database":"ok"}` · `401` · `503 {"status":"degraded","database":"unreachable"}` |
+| `GET /api/v1/files/:id` | PUBLIC files: anyone. PRIVATE files: Super Admin only on this generic route. Everyone else reads PRIVATE files through the owning module's route, which applies its record-scope policy and passes the owner to `readStoredFile` (purpose + owner must match). Uploading grants no read right. | Streams a stored file. Missing **and** forbidden both return `404` (no existence oracle). `nosniff`; `Content-Disposition` inline for images/PDF, attachment otherwise; PUBLIC → `Cache-Control: public, max-age=86400, immutable` + ETag (sha256), served from a bounded 10-minute in-process cache so anonymous requests don't hit the database; PRIVATE → `private, no-store`, decrypted server-side, audited `file.download` | `200` · `404` · `503` · **S-04/S-10 (2026-11-10):** in-process per-IP limit 120/min before any lookup → `429` (`Retry-After: 60`); anonymous not-found answers cached 5 min (no database per probe; never affects signed-in users); non-public files served via `privateFileResponse` (PDF: sandboxed attachment, `no-store`) |
+| `GET /api/v1/documents/preview` | session + `settings.read` | Letterhead preview PDF (school branding only, **no personal data**) | `200 application/pdf` · `401` · `403` · `503` |
+| `POST /api/v1/admissions/:id/documents` | session + `student.document.manage` + `admission.read` (ALL); **same-origin** (`Origin` = Host or `APP_URL`; `Sec-Fetch-Site` same-origin); rate limit 30 / 10 min per user; ≤ 2 concurrent per instance | Upload one admission document or the photo (KI-048 route — 10 MB; never a server action). `multipart/form-data`: `type` (PHOTO, BIRTH_CERTIFICATE, TRANSFER_CERTIFICATE, PREVIOUS_MARKSHEET, OTHER), `label` (required for OTHER), `file`, optional `from` (`edit`/`detail`). `Content-Length` required and checked **before** the body is read; body read with a hard cap. Content detected from bytes (PDF/JPEG/PNG; photo JPEG/PNG → re-encoded 600×600 JPEG without metadata by `sharp`). Stored PRIVATE + encrypted, owned by the `StudentDocument` row; audited (`document.upload` / `document.replace`, `file.upload`). Only while the application is undecided | `201 {"document":{id,type}}` · `401` · `403` (CSRF/RBAC) · `404` · `409` (decided) · `413` · `415` · `422` · `429` · `503` (busy). With `Accept: text/html`: `303` to edit step 5 or the application page with `?upload=<fixed code>` (or `/login`) · **S-01 (2026-11-10):** users without `student.document.manage` + ALL-scope `admission.read` (or with a pending password change) get `403` before an upload slot is taken or the body is read; the body must arrive within 120 s → else `408` (`too_slow`) |
+| `GET /api/v1/admissions/:id/documents/:docId` | session + `admission.read` (ALL) + the purpose's read permission (`student.document.read`; photo: `student.read`); owner-bound | Download one document of that application (audited `file.download`). PDFs `attachment` + `Content-Security-Policy: sandbox`; images inline; always `private, no-store`, `nosniff` | `200` · `401` · `404` (missing, other application or forbidden) · `503` |
+| `GET /api/v1/students/:id/photo` | session + `student.read` (ALL, or ASSIGNED = class teacher of the student's section) + record scope; file layer owner-bound to the photo's StudentDocument; read audited (`file.download`) | The student's current photo (inline, `private, no-store`, `nosniff`) | `200 image/jpeg` · `401` · `404` (missing **and** forbidden — no existence oracle) · `503` |
+| `GET /api/v1/students/:id/documents/:docId` | session + `student.read` scope + `student.document.read`; owner-bound; audited | Download one of the student's documents (PDF: attachment + `CSP: sandbox`; images inline) | `200` · `401` · `404` (missing, other student's, forbidden) · `503` |
+| `POST /api/v1/students/export` | session + `export.run` + `student.read` (scope applied) + `admission.read` at ALL (so the Accountant can't export student data, D8); **same-origin** (POST so the Origin check applies — design §2.1 said GET); rate limit 10 / 10 min per user; `application/x-www-form-urlencoded` ≤ 4 KB with the directory filters `session`, `class`, `section`, `status`, `q` | CSV of the filtered directory (UTF-8 BOM, CRLF, formula-injection guard), ≤ 5,000 rows — refused above, never truncated. Audited `student.export` (filters + row count, never data) | `200 text/csv` attachment · `401` · `403` · `409` (too many rows) · `422` · `429` · `503`; failed browser form posts → `303 /erp/students?export=<fixed code>` (or `/login`) · body read through the capped reader (10 s); the audit records filters without the search text; one query refuses above 5,000 rows (export hardening, 2026-11-10) |
 | `POST /api/cron/cleanup` | `Authorization: Bearer $CRON_SECRET` (≥ 32 chars; endpoint disabled if unset) | Deletes expired sessions, expired rate-limit buckets, reset tokens > 7 days old, usage counters > 400 days | `200 {"status":"ok","deleted":{sessions,rateLimitBuckets,resetTokens,usageCounters}}` · `401` · `503` |
 
 ERP screens use **server actions** (not REST) that call the same services:
@@ -43,28 +50,35 @@ ERP screens use **server actions** (not REST) that call the same services:
 | `/login`, `/forgot-password`, `/reset-password` | `login`, `requestPasswordReset`, `completePasswordReset` (public, rate limited) |
 | `/erp/change-password`, `/erp/account` | `changeOwnPassword` (self), `revokeUserSessions(self, keepCurrent)` |
 | `/erp/users`, `/erp/users/new`, `/erp/users/[id]` | `listUsers`/`getUser` → `user.read`; `createUser`, `updateUser`, `setUserActive`, `adminResetPassword`, `unlockUser`, `revokeUserSessions` → `user.manage` + policy |
+| `/erp/settings` | `getSchoolSettings` → `settings.read`; `updateSchoolProfile`, `setSchoolLogo`, `removeSchoolLogo` → `settings.manage` (all audited) |
+| `/erp/settings/sessions` | `listAcademicSessions` → `settings.read`; `createAcademicSession`, `updateAcademicSession` (PLANNED only), `changeAcademicSessionStatus`, `setCurrentAcademicSession` → `session.manage` (advisory-locked, audited) |
 | `/erp/roles`, `/erp/roles/new`, `/erp/roles/[id]` | `listRoles`, `getRole`, `createRole`, `updateRole`, `setRolePermissions`, `deleteRole` → `role.manage` + policy |
+| `/erp/admissions`, `/erp/admissions/new`, `/erp/admissions/[id]`, `/erp/admissions/[id]/edit?step=1–6` | `listApplications`, `countApplicationsByStatus`, `getApplication`, `applicationFilterOptions` → `admission.read`; `createDraft`, `updateStudentStep`, `updateGuardiansStep`, `updateContactStep`, `updatePreviousSchoolStep`, `deleteDraft`, `submitApplication`, `admissionFormOptions` → `admission.create`; `startReview`, `setSection`, `returnToDraft`, `rejectApplication`, `sectionChoices`, `guardianMatches`, **`approveApplication`** (= registration: student, permanent IDs, guardians, enrollment — one transaction, lock_timeout 5 s) → `admission.approve`; `removeApplicationDocument`, `verifyApplicationDocument` → `student.document.manage`; `listApplicationDocuments` → `student.document.read` (all audited; application row locked + versioned) |
+| `/erp/students`, `/erp/students/[id]`, `/erp/students/[id]/edit`, `/erp/students/[id]/status` | `listStudents`, `countStudentsByStatus`, `studentFilterOptions`, `getStudent` → `student.read` (ALL; ASSIGNED = ACTIVE enrollment in a section where the user is class teacher; SELF/CHILDREN refused until the portal) — documents only with `student.document.read`, application link only with `admission.read` ALL; `updateStudent` → `student.update` (ALL: names, DOB, gender, contact, address; ASSIGNED: phone, email, address only; student ID / admission no. never — not in the schema); `updateGuardian` → `student.update` (ASSIGNED: phone / alt phone / email only; shared by siblings); `changeStudentStatus` → `student.transfer` (ACTIVE → TRANSFERRED/WITHDRAWN/GRADUATED; ACTIVE enrollments in non-closed sessions → LEFT; roll number kept; append-only StudentStatusChange). Lock order student → session → section; lock_timeout 5 s; optimistic `version`; audited (`student.update` with changed fields before/after, `guardian.update`, `student.status_change` without the reason text) |
+| `/erp/students/registration`, `/erp/students/registration/[sectionId]` | `listSectionsForRollNumbers`, `getRollNumberSheet` (preview, no writes) → any of `rollnumber.generate` / `rollnumber.finalize` / `rollnumber.correct`; `generateRollNumbers` (DRAFT) → `rollnumber.generate`; `finalizeRollNumbers` (type the section code; draft must still match) → `rollnumber.finalize`; `correctRollNumber` (free number + reason) → `rollnumber.correct`. `appendRollNumberOnEnrollment` runs inside `approveApplication` for FINALIZED sections (max + 1, never reused). Lock order session → section → batch; lock_timeout 5 s; audited (`rollnumber.generate` / `.finalize` / `.append` / `.correct`) |
 
 ## Planned endpoint groups
 
-| Group | Base | Phase |
+Phase numbers follow docs/DEVELOPMENT_ROADMAP.md. Phase 1 auth/users/roles shipped as **server actions** (see above), not REST; REST versions will be added only if a client needs them.
+
+| Group | Base | Roadmap phase |
 |---|---|---|
-| Auth | `/api/v1/auth/{login,logout,password-reset}` | 1 |
-| Users & roles | `/api/v1/users`, `/api/v1/roles` | 1 |
-| Files | `/api/v1/files/:id` (authorized download) | 1 |
-| CMS public | `/api/v1/public/*` **public** | 2 |
-| Enquiries | `POST /api/v1/public/enquiries` **public**, rate-limited | 2 |
-| Students & admissions | `/api/v1/students`, `/api/v1/admissions` | 3 |
-| Roll numbers | `/api/v1/sections/:id/roll-numbers/{preview,generate,finalize,correct}` | 4 |
-| Documents | `/api/v1/documents/{id-cards,certificates}`, `GET /verify/:code` **public** | 5 |
-| HR | `/api/v1/employees`, `/api/v1/leave-requests` | 6–7 |
-| Attendance | `/api/v1/attendance/{students,employees}` | 7 |
-| Payroll | `/api/v1/payroll-runs`, `/api/v1/payroll-runs/:id/{prepare,approve,pay}` | 7 |
-| Fees | `/api/v1/fee-structures`, `/api/v1/invoices`, `/api/v1/payments`, `/api/v1/payments/online/order` | 8 |
-| Webhooks | `POST /api/webhooks/payments/razorpay` (signature-verified) | 8 |
-| Transport | `/api/v1/transport/{vehicles,routes,assignments}` | 9 |
-| Exams | `/api/v1/exams`, `/api/v1/exams/:id/marks`, `/api/v1/report-cards` | 10 |
-| Library/Inventory | `/api/v1/library/*`, `/api/v1/inventory/*` | 11 |
-| Import/Export | `/api/v1/imports`, `/api/v1/exports/:report` | 12 |
-| Chatbot | `POST /api/v1/chat` **public**, `/api/v1/chatbot/knowledge` | 13 |
-| Notifications | `/api/v1/notifications` | 14 |
+| Auth (REST, optional) | `/api/v1/auth/{login,logout,password-reset}` | 1 — done as server actions |
+| Users & roles (REST, optional) | `/api/v1/users`, `/api/v1/roles` | 1 — done as server actions |
+| Files | `/api/v1/files/:id` (authorized download) | 2 |
+| CMS public | `/api/v1/public/*` **public** | 8 |
+| Enquiries | `POST /api/v1/public/enquiries` **public**, rate-limited | 8 |
+| Students & admissions | `/api/v1/students`, `/api/v1/admissions` | 2 |
+| Roll numbers | `/api/v1/sections/:id/roll-numbers/{preview,generate,finalize,correct}` | 2 |
+| Documents | `/api/v1/documents/{id-cards,certificates}`, `GET /verify/:code` **public** | 2 (ID cards) · 7 (certificates) |
+| HR | `/api/v1/employees`, `/api/v1/leave-requests` | 3 |
+| Attendance | `/api/v1/attendance/{students,employees}` | 3 (staff) · 4 (students) |
+| Payroll | `/api/v1/payroll-runs`, `/api/v1/payroll-runs/:id/{prepare,approve,pay}` | 3 |
+| Fees | `/api/v1/fee-structures`, `/api/v1/invoices`, `/api/v1/payments`, `/api/v1/payments/online/order` | 5 |
+| Webhooks | `POST /api/webhooks/payments/razorpay` (signature-verified) | 5 |
+| Transport | `/api/v1/transport/{vehicles,routes,assignments}` | 7 |
+| Exams | `/api/v1/exams`, `/api/v1/exams/:id/marks`, `/api/v1/report-cards` | 4 |
+| Library/Inventory | `/api/v1/library/*`, `/api/v1/inventory/*` | 7 |
+| Import/Export | `/api/v1/imports`, `/api/v1/exports/:report` | 2–7 (incremental) |
+| Chatbot | `POST /api/v1/chat` **public**, `/api/v1/chatbot/knowledge` | 9 |
+| Notifications | `/api/v1/notifications` | 6 (portal) · 10 (complete) |

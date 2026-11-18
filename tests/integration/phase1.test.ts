@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { integrationEnabled } from "../test-scope";
 
 /**
  * Phase 1 integration tests against a real Postgres (Neon "test" branch).
@@ -6,7 +7,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  *   DIRECT_URL=<test branch direct URL> npx prisma migrate deploy
  * Skipped (reported as skipped, not passed) when TEST_DATABASE_URL is absent.
  */
-const enabled = !!process.env.TEST_DATABASE_URL;
+// KI-043: runs only via `npm run test:integration` (explicit opt-in) AND with TEST_DATABASE_URL.
+const enabled = integrationEnabled();
 
 // Modules that open a DB connection are only loaded when a test database is configured.
 const load = async () => ({
@@ -60,7 +62,9 @@ describe.skipIf(!enabled)("Phase 1 — database integration", () => {
   it("50 concurrent sequence calls yield 50 unique consecutive numbers", async () => {
     const key = `test:${run}`;
     const values = await Promise.all(
-      Array.from({ length: 50 }, () => prisma.$transaction((tx) => nextSequence(tx, key))),
+      // KI-044: explicit limits — 50 transactions share a pool of 5 over a remote link; Prisma's 2 s default
+      // maxWait is too short. Uniqueness assertions below are unchanged.
+      Array.from({ length: 50 }, () => prisma.$transaction((tx) => nextSequence(tx, key), { maxWait: 60_000, timeout: 60_000 })),
     );
     expect(new Set(values).size).toBe(50);
     expect([...values].sort((a, b) => a - b)).toEqual(Array.from({ length: 50 }, (_, i) => i + 1));
@@ -102,11 +106,10 @@ describe.skipIf(!enabled)("Phase 1 — database integration", () => {
   });
 
   it("all 13 roles: permissions loaded from the DB through a real session match the catalog exactly", async () => {
-    const { ROLES, ALL_PERMISSION_KEYS, normalizeGrant } = await import("@/lib/rbac/catalog");
+    const { ROLES, normalizeGrant } = await import("@/lib/rbac/catalog");
     const { createSession } = await import("@/lib/auth/session");
-    for (const key of ALL_PERMISSION_KEYS) {
-      await prisma.permission.upsert({ where: { key }, create: { key, module: key.split(".")[0], description: key }, update: {} });
-    }
+    // KI-044: full catalog (82 / 13 / 271) in one batched transaction, verified exactly — no user, no Super Admin.
+    await (await import("./catalog-setup")).ensureCatalog();
     const permIds = new Map((await prisma.permission.findMany()).map((p) => [p.key, p.id]));
     for (const def of ROLES) {
       const roleKey = `${def.key}_${run}`;
@@ -161,7 +164,8 @@ describe.skipIf(!enabled)("Phase 1 — database integration", () => {
     const key = `test:raw:${run}`;
     const clients = await Promise.all(
       Array.from({ length: 50 }, async () => {
-        const c = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL });
+        // KI-044: explicit limits for 50 simultaneous remote connections (assertions unchanged).
+        const c = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL, connectionTimeoutMillis: 60_000, statement_timeout: 60_000, query_timeout: 60_000 });
         await c.connect();
         return c;
       }),

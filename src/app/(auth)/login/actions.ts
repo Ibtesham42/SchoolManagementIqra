@@ -1,6 +1,7 @@
 "use server";
 
 import { cookies, headers } from "next/headers";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { loginSchema, login } from "@/modules/identity/auth.service";
 import { changeOwnPassword, changePasswordSchema } from "@/modules/identity/password.service";
@@ -43,6 +44,10 @@ export async function changePasswordAction(_prev: ActionState, formData: FormDat
   } catch (e) {
     return fromError(e);
   }
+  // B5 (KI-052): the ERP layout was rendered while the change was pending (permission-based navigation
+  // hidden). A redirect alone keeps that layout, so the user saw only Dashboard / My account until a
+  // full reload. Re-render the ERP layout so the menu reflects the user's real permissions.
+  revalidatePath("/erp", "layout");
   redirect("/erp");
 }
 

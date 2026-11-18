@@ -1,11 +1,18 @@
 // Phase 1 schema: identity, RBAC, settings, sessions, sequences, files, audit,
 // notifications, rate limiting and free-tier usage tracking.
+// Phase 2a: file ownership/purpose, regional settings, logo FK, generated-document registry.
+// Phase 2: classes (master data) and session-scoped sections (migration 20261110000000).
+// Phase 3A: HR core — departments, designations, employees, teacher profiles, employee documents, service
+// history; User.employeeId becomes an FK (migration 20261112000000, ADR-036).
 // Domain models (students, fees, …) are added in later phases — see docs/DATABASE_SCHEMA.md.
 // Connection URLs live in prisma.config.ts (Prisma 7), never here.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  // partialIndexes: lets the schema express Section's partial unique index (one class-teacher section
+  // per teacher per session) so `migrate diff` / drift checks see it instead of dropping raw SQL (ADR-034).
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -33,7 +40,8 @@ model User {
   lockedUntil        DateTime? @map("locked_until") @db.Timestamptz(3)
   lastLoginAt        DateTime? @map("last_login_at") @db.Timestamptz(3)
   passwordChangedAt  DateTime? @map("password_changed_at") @db.Timestamptz(3)
-  // Optional links to person records (added as FKs when those models land in Phases 3 & 6).
+  // Optional links to person records. employeeId → Employee (FK since Phase 3A, ADR-036: one account per
+  // employee, optional, linking audited); studentId / guardianId become FKs in Phase 6.
   employeeId         String?   @unique @map("employee_id")
   studentId          String?   @unique @map("student_id")
   guardianId         String?   @unique @map("guardian_id")
@@ -41,11 +49,29 @@ model User {
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  roles         UserRole[]
-  sessions      Session[]
-  resetTokens   PasswordResetToken[]
-  notifications Notification[]
-  uploadedFiles StoredFile[]
+  roles                UserRole[]
+  sessions             Session[]
+  resetTokens          PasswordResetToken[]
+  notifications        Notification[]
+  uploadedFiles        StoredFile[]
+  generatedDocuments   GeneratedDocument[]    @relation("DocumentGeneratedBy")
+  revokedDocuments     GeneratedDocument[]    @relation("DocumentRevokedBy")
+  /// Sections this user is class teacher of (interim User reference until Phase 3 Employee — ADR-034).
+  classTeacherOf       Section[]              @relation("SectionClassTeacher")
+  // Phase 2b admissions & students (actor references; SET NULL on the child side).
+  applicationsCreated  AdmissionApplication[] @relation("ApplicationCreatedBy")
+  applicationsDecided  AdmissionApplication[] @relation("ApplicationDecidedBy")
+  documentsUploaded    StudentDocument[]      @relation("StudentDocumentUploadedBy")
+  documentsVerified    StudentDocument[]      @relation("StudentDocumentVerifiedBy")
+  rollBatchesGenerated RollNumberBatch[]      @relation("RollBatchGeneratedBy")
+  rollBatchesFinalized RollNumberBatch[]      @relation("RollBatchFinalizedBy")
+  studentStatusChanges StudentStatusChange[]  @relation("StudentStatusChangedBy")
+  // Phase 3A HR (ADR-036). The FK for the optional employee link lives on this side (user.employee_id).
+  employee             Employee?              @relation("UserEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+  employeesCreated     Employee[]             @relation("EmployeeCreatedBy")
+  employeeDocsUploaded EmployeeDocument[]     @relation("EmployeeDocumentUploadedBy")
+  employeeDocsVerified EmployeeDocument[]     @relation("EmployeeDocumentVerifiedBy")
+  serviceEventsActed   EmployeeServiceEvent[] @relation("EmployeeServiceEventActedBy")
 
   @@index([isActive])
   @@map("user")
@@ -140,27 +166,41 @@ model UserRole {
 /// Singleton row (id = "default"). School-specific facts live here, never in code.
 /// No secrets: API keys and passwords are environment variables only.
 model SchoolSetting {
-  id                       String   @id @default("default")
-  name                     String
-  shortCode                String   @map("short_code") @db.VarChar(10)
-  affiliationNo            String?  @map("affiliation_no")
-  board                    String?
-  address                  Json?
-  phones                   String[]
-  email                    String?
-  website                  String?
-  logoFileId               String?  @map("logo_file_id")
-  timezone                 String   @default("Asia/Kolkata")
-  timings                  Json?
-  branding                 Json?
-  idFormats                Json?    @map("id_formats")
-  rollNumberRules          Json?    @map("roll_number_rules")
-  features                 Json? // toggles for optional external services (email, AI, payments)
+  id                         String                @id @default("default")
+  name                       String
+  shortCode                  String                @map("short_code") @db.VarChar(10)
+  affiliationNo              String?               @map("affiliation_no")
+  board                      String?
+  address                    Json?
+  phones                     String[]
+  email                      String?
+  website                    String?
+  logoFileId                 String?               @map("logo_file_id")
+  timezone                   String                @default("Asia/Kolkata")
+  /// BCP 47 locale for number/date formatting.
+  locale                     String                @default("en-IN") @db.VarChar(16)
+  /// ISO 4217 code. Display only — money is always Decimal(12,2) in this currency.
+  currency                   String                @default("INR") @db.VarChar(3)
+  /// One of the formats allowed by settings.schemas (DATE_FORMATS).
+  dateFormat                 String                @default("DD/MM/YYYY") @map("date_format") @db.VarChar(16)
+  timings                    Json?
+  branding                   Json?
+  idFormats                  Json?                 @map("id_formats")
+  rollNumberRules            Json?                 @map("roll_number_rules")
+  features                   Json? // toggles for optional external services (email, AI, payments)
+  /// Capacity offered for a new section when neither the form nor its class gives one. A default,
+  /// not a limit: every section stores its own capacity. CHECK 1–200 (migration 20261110000000).
+  defaultSectionCapacity     Int                   @default(40) @map("default_section_capacity") @db.SmallInt
+  /// Documents an admission should have (D10): missing ones show a warning, never block approval.
+  /// Configurable in Settings; default photo + birth certificate (migration 20261111000000).
+  requiredAdmissionDocuments StudentDocumentType[] @default([PHOTO, BIRTH_CERTIFICATE]) @map("required_admission_documents")
   /// The single current academic session (a reference here guarantees there is at most one).
-  currentAcademicSessionId String?  @unique @map("current_academic_session_id")
-  updatedAt                DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  currentAcademicSessionId   String?               @unique @map("current_academic_session_id")
+  createdAt                  DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   currentAcademicSession AcademicSession? @relation(fields: [currentAcademicSessionId], references: [id], onDelete: Restrict)
+  logoFile               StoredFile?      @relation("SchoolLogo", fields: [logoFileId], references: [id], onDelete: SetNull)
 
   @@map("school_setting")
 }
@@ -180,9 +220,87 @@ model AcademicSession {
   createdAt DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  currentFor SchoolSetting?
+  currentFor       SchoolSetting?
+  sections         Section[]
+  applications     AdmissionApplication[]
+  enrollments      StudentEnrollment[]
+  admittedStudents Student[]              @relation("StudentAdmittedSession")
 
   @@map("academic_session")
+}
+
+// ───────────────────────────── Academic structure (Phase 2) ─────────────────────────────
+
+/// Master list of classes (grades), independent of academic sessions. Never deleted — deactivate.
+/// Streams are separate classes ("Class 11 Science", "Class 11 Commerce"). CHECKs in migration
+/// 20261110000000: code format, name_key derived from name, level range, capacity range, version ≥ 1.
+model SchoolClass {
+  id                     String   @id @default(cuid(2))
+  /// Stable code used by imports and reports, e.g. "C06", "C11-SCI": uppercase A–Z, 0–9 and inner
+  /// hyphens. Immutable once any section uses the class (enforced by academic service).
+  code                   String   @unique @db.VarChar(10)
+  name                   String   @db.VarChar(60)
+  /// lower(name) with surrounding spaces trimmed and inner runs collapsed — case-insensitive
+  /// uniqueness without an expression index (CHECK ties it to name).
+  nameKey                String   @unique @map("name_key") @db.VarChar(60)
+  /// Ordering / promotion level: -3 … 0 for pre-primary (Pre-nursery … UKG), 1–12. Not unique:
+  /// stream classes share a level.
+  numericLevel           Int      @map("numeric_level") @db.SmallInt
+  displayOrder           Int      @default(0) @map("display_order")
+  /// Optional per-class default for new sections; null → SchoolSetting.defaultSectionCapacity.
+  defaultSectionCapacity Int?     @map("default_section_capacity") @db.SmallInt
+  isActive               Boolean  @default(true) @map("is_active")
+  /// Optimistic-concurrency token: every update must match and increment it.
+  version                Int      @default(1)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sections     Section[]
+  applications AdmissionApplication[]
+
+  @@index([isActive, displayOrder])
+  @@map("school_class")
+}
+
+/// A section of a class in one academic session (e.g. 2026-27 · Class 6 · A). Editable only while the
+/// session is PLANNED or ACTIVE (academic service). Hard delete only while nothing references it;
+/// future StudentEnrollment / RollNumberBatch rows reference it with ON DELETE RESTRICT.
+model Section {
+  id                String   @id @default(cuid(2))
+  academicSessionId String   @map("academic_session_id")
+  classId           String   @map("class_id")
+  /// Display name, e.g. "A", "Rose": letters, digits and single inner spaces.
+  name              String   @db.VarChar(20)
+  /// lower(name), trimmed/collapsed (CHECK) — unique per session and class.
+  nameKey           String   @map("name_key") @db.VarChar(20)
+  /// "<class code>-<NAME without spaces>", e.g. "C06-A"; derived by the service, unique per session.
+  code              String   @db.VarChar(32)
+  /// Maximum active enrollments (CHECK 1–200). Checked under a row lock when enrolling (Phase 2).
+  capacity          Int      @db.SmallInt
+  /// Interim class-teacher reference (ADR-034): an active user holding the TEACHER or CLASS_TEACHER
+  /// role (academic service). Phase 3 reaches the Employee through User.employeeId.
+  classTeacherId    String?  @map("class_teacher_id")
+  isActive          Boolean  @default(true) @map("is_active")
+  /// Optimistic-concurrency token: every update must match and increment it.
+  version           Int      @default(1)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession        @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  class           SchoolClass            @relation(fields: [classId], references: [id], onDelete: Restrict)
+  classTeacher    User?                  @relation("SectionClassTeacher", fields: [classTeacherId], references: [id], onDelete: Restrict)
+  applications    AdmissionApplication[]
+  enrollments     StudentEnrollment[]
+  rollNumberBatch RollNumberBatch?
+
+  @@unique([academicSessionId, classId, nameKey])
+  @@unique([academicSessionId, code])
+  /// Target of StudentEnrollment's composite FK (section belongs to the enrollment's session).
+  @@unique([id, academicSessionId], map: "section_id_academic_session_id_key")
+  /// One section per class teacher per session (partial: rows without a class teacher are ignored).
+  @@unique([academicSessionId, classTeacherId], map: "section_session_class_teacher_key", where: raw("class_teacher_id IS NOT NULL"))
+  @@index([classId])
+  @@map("section")
 }
 
 /// Row-locked counters for human-facing serial numbers (see student-id-generation skill).
@@ -211,14 +329,71 @@ model StoredFile {
   encrypted    Boolean        @default(false)
   keyVersion   Int?           @map("key_version")
   uploadedById String?        @map("uploaded_by_id")
+  /// Upload purpose (lib/storage/upload-rules UPLOAD_RULES key) — decides who may read the file.
+  /// "unclassified" only for rows that existed before purposes: owner ("LegacyFile", <own id>),
+  /// readable by Super Admin only, whatever their visibility.
+  purpose      String         @db.VarChar(40)
+  /// Owning record (polymorphic, no FK), e.g. ("SchoolSetting","default"), ("GeneratedDocument", id).
+  /// CHECKs in migration 20261109000000: PRIVATE ⇒ owner set and encrypted with a key version;
+  /// owner columns set together.
+  ownerType    String?        @map("owner_type") @db.VarChar(40)
+  ownerId      String?        @map("owner_id") @db.VarChar(64)
   createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   deletedAt    DateTime?      @map("deleted_at") @db.Timestamptz(3)
 
-  uploadedBy User? @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedBy        User?              @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  logoFor           SchoolSetting[]    @relation("SchoolLogo")
+  generatedDocument GeneratedDocument? @relation("GeneratedDocumentFile")
+  studentDocument   StudentDocument?   @relation("StudentDocumentFile")
+  employeeDocument  EmployeeDocument?  @relation("EmployeeDocumentFile")
 
   @@index([sha256])
   @@index([visibility])
+  @@index([ownerType, ownerId])
   @@map("stored_file")
+}
+
+enum GeneratedDocumentType {
+  ID_CARD
+  CERTIFICATE
+  RECEIPT
+  REPORT_CARD
+  SALARY_SLIP
+  OTHER
+}
+
+/// Registry of issued PDFs (ID cards, certificates, receipts…) for public verification.
+/// The verification code is shown on the document only; the database keeps an HMAC of it.
+model GeneratedDocument {
+  id                     String                @id @default(cuid(2))
+  type                   GeneratedDocumentType
+  /// HMAC-SHA256 of the normalized code with DOCUMENT_VERIFICATION_KEY (version below), hex.
+  /// The raw code is never stored.
+  verificationCodeHash   String                @unique @map("verification_code_hash") @db.Char(64)
+  /// Which DOCUMENT_VERIFICATION_KEY produced the hash; older keys stay configured as
+  /// DOCUMENT_VERIFICATION_KEY_V<n> so documents issued before a rotation still verify.
+  verificationKeyVersion Int                   @map("verification_key_version") @db.SmallInt
+  /// The record the document is about (polymorphic, no FK), e.g. ("Student", id). Never shown publicly.
+  subjectType            String                @map("subject_type") @db.VarChar(40)
+  subjectId              String                @map("subject_id") @db.VarChar(64)
+  /// The PDF (always a PRIVATE StoredFile; enforced by documents.service).
+  fileId                 String?               @unique @map("file_id")
+  generatedById          String?               @map("generated_by_id")
+  generatedAt            DateTime              @default(now()) @map("generated_at") @db.Timestamptz(3)
+  /// Revocation: non-null = revoked; revoked documents fail verification.
+  revokedAt              DateTime?             @map("revoked_at") @db.Timestamptz(3)
+  revokedById            String?               @map("revoked_by_id")
+  revocationReason       String?               @map("revocation_reason") @db.VarChar(500)
+  createdAt              DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  file        StoredFile? @relation("GeneratedDocumentFile", fields: [fileId], references: [id], onDelete: Restrict)
+  generatedBy User?       @relation("DocumentGeneratedBy", fields: [generatedById], references: [id], onDelete: SetNull)
+  revokedBy   User?       @relation("DocumentRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([subjectType, subjectId])
+  @@index([type, generatedAt])
+  @@map("generated_document")
 }
 
 // ───────────────────────────── Audit & notifications ─────────────────────────────
@@ -287,4 +462,553 @@ model UsageCounter {
 
   @@id([metric, day])
   @@map("usage_counter")
+}
+
+// ───────────────────────────── Admissions & students (Phase 2b — DRAFT, migration 20261111000000) ─────────────────────────────
+// Design: docs/PHASE_2B_STUDENTS_DESIGN.md (ADR-035). An application holds applicant data until it is
+// APPROVED; approval creates the permanent Student, Guardians, the session Enrollment and both IDs in
+// one transaction. Nothing here is applied until the owner approves the migration.
+
+enum AdmissionStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum GuardianRelation {
+  FATHER
+  MOTHER
+  GUARDIAN
+  OTHER
+}
+
+enum StudentStatus {
+  ACTIVE
+  TRANSFERRED
+  GRADUATED
+  WITHDRAWN
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  PROMOTED
+  DETAINED
+  LEFT
+}
+
+enum StudentDocumentType {
+  BIRTH_CERTIFICATE
+  TRANSFER_CERTIFICATE
+  PREVIOUS_MARKSHEET
+  PHOTO
+  OTHER
+}
+
+enum RollNumberBatchStatus {
+  DRAFT
+  FINALIZED
+}
+
+enum RollNumberSource {
+  GENERATED
+  APPENDED
+  CORRECTED
+}
+
+/// An admission application (one child, one academic session). Hard-deleted only while DRAFT.
+/// CHECKs (migration): non-DRAFT ⇒ applicationNo; APPROVED ⇒ studentId + sectionId + decidedAt +
+/// admissionDate; REJECTED ⇒ rejectionReason + decidedAt; dob ≥ 1990-01-01; version ≥ 1.
+model AdmissionApplication {
+  id                 String          @id @default(cuid(2))
+  /// "APP-2026-27-0001" — assigned on first SUBMIT (lib/sequence), so abandoned drafts leave no gaps.
+  applicationNo      String?         @unique @map("application_no") @db.VarChar(32)
+  academicSessionId  String          @map("academic_session_id")
+  /// Class applied for. The section is chosen by the reviewer (required before approval).
+  classId            String          @map("class_id")
+  sectionId          String?         @map("section_id")
+  status             AdmissionStatus @default(DRAFT)
+  firstName          String          @map("first_name") @db.VarChar(60)
+  middleName         String?         @map("middle_name") @db.VarChar(60)
+  lastName           String?         @map("last_name") @db.VarChar(60)
+  /// Display name as entered ("Ananya Das").
+  fullName           String          @map("full_name") @db.VarChar(185)
+  /// NFC, trimmed, single spaces, lower case — duplicate detection and roll-number ordering.
+  fullNameNormalized String          @map("full_name_normalized") @db.VarChar(185)
+  dob                DateTime        @db.Date
+  gender             Gender
+  phone              String?         @db.VarChar(10)
+  email              String?         @db.VarChar(254)
+  /// { line1, line2?, city, district?, state, pinCode, country } (same shape as the school address).
+  address            Json?
+  /// { name, board?, lastClass?, yearLeft?, tcNumber? }
+  previousSchool     Json?           @map("previous_school")
+  /// Date of admission recorded on approval (school-local date; defaults to "today" in the school zone).
+  admissionDate      DateTime?       @map("admission_date") @db.Date
+  /// Possible duplicates found at submit/approval: [{ kind: "student"|"application", id }] (ids only).
+  duplicateMatches   Json?           @map("duplicate_matches")
+  /// Mandatory when approving despite duplicate matches (admission.approve).
+  duplicateOverride  String?         @map("duplicate_override") @db.VarChar(500)
+  rejectionReason    String?         @map("rejection_reason") @db.VarChar(500)
+  createdById        String?         @map("created_by_id")
+  submittedAt        DateTime?       @map("submitted_at") @db.Timestamptz(3)
+  reviewStartedAt    DateTime?       @map("review_started_at") @db.Timestamptz(3)
+  decidedAt          DateTime?       @map("decided_at") @db.Timestamptz(3)
+  decidedById        String?         @map("decided_by_id")
+  /// Set by approval; unique, so one application can never register two students.
+  studentId          String?         @unique @map("student_id")
+  version            Int             @default(1)
+  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession     @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  class           SchoolClass         @relation(fields: [classId], references: [id], onDelete: Restrict)
+  section         Section?            @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  student         Student?            @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  createdBy       User?               @relation("ApplicationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  decidedBy       User?               @relation("ApplicationDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  guardians       AdmissionGuardian[]
+  documents       StudentDocument[]
+
+  @@index([academicSessionId, status])
+  @@index([fullNameNormalized, dob])
+  @@index([status, updatedAt])
+  @@map("admission_application")
+}
+
+/// Parent/guardian as entered on an application. Copied into Guardian/StudentGuardian on approval,
+/// or linked to an existing Guardian the reviewer explicitly picked (siblings) — never auto-matched.
+model AdmissionGuardian {
+  id                 String           @id @default(cuid(2))
+  applicationId      String           @map("application_id")
+  relation           GuardianRelation
+  name               String           @db.VarChar(120)
+  /// 10 digits (the schema strips +91 / 0 / spaces / hyphens).
+  phone              String           @db.VarChar(10)
+  altPhone           String?          @map("alt_phone") @db.VarChar(10)
+  email              String?          @db.VarChar(254)
+  occupation         String?          @db.VarChar(80)
+  isPrimary          Boolean          @default(false) @map("is_primary")
+  isEmergencyContact Boolean          @default(false) @map("is_emergency_contact")
+  /// Existing Guardian chosen by the reviewer (same phone = possible sibling); null → create new.
+  linkGuardianId     String?          @map("link_guardian_id")
+  sortOrder          Int              @default(0) @map("sort_order") @db.SmallInt
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  application  AdmissionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  linkGuardian Guardian?            @relation(fields: [linkGuardianId], references: [id], onDelete: Restrict)
+
+  /// One father and one mother per application (GUARDIAN/OTHER may repeat). The predicate is written in
+  /// PostgreSQL's canonical form (what pg_indexes stores for the migration's `relation IN ('FATHER', 'MOTHER')`)
+  /// because Prisma compares predicate text in drift checks (KI-055).
+  @@unique([applicationId, relation], map: "admission_guardian_application_parent_key", where: raw("relation = ANY (ARRAY['FATHER'::\"GuardianRelation\", 'MOTHER'::\"GuardianRelation\"])"))
+  /// At most one primary contact per application.
+  @@unique([applicationId], map: "admission_guardian_application_primary_key", where: raw("is_primary"))
+  @@index([phone])
+  @@map("admission_guardian")
+}
+
+/// Permanent student record (session-independent). studentCode and admissionNo never change.
+/// Soft-deleted only (deletedAt). Aadhaar and medical data are deliberately NOT collected in this
+/// phase (data minimisation — design D6).
+model Student {
+  id                 String        @id @default(cuid(2))
+  /// Permanent student ID, e.g. "DEMO-2026-0001" (SchoolSetting.idFormats.studentId).
+  studentCode        String        @unique @map("student_code") @db.VarChar(32)
+  /// Admission register number, e.g. "ADM-2026-0001" (SchoolSetting.idFormats.admissionNo).
+  admissionNo        String        @unique @map("admission_no") @db.VarChar(32)
+  firstName          String        @map("first_name") @db.VarChar(60)
+  middleName         String?       @map("middle_name") @db.VarChar(60)
+  lastName           String?       @map("last_name") @db.VarChar(60)
+  fullName           String        @map("full_name") @db.VarChar(185)
+  fullNameNormalized String        @map("full_name_normalized") @db.VarChar(185)
+  dob                DateTime      @db.Date
+  gender             Gender
+  phone              String?       @db.VarChar(10)
+  email              String?       @db.VarChar(254)
+  address            Json?
+  previousSchool     Json?         @map("previous_school")
+  status             StudentStatus @default(ACTIVE)
+  admissionDate      DateTime      @map("admission_date") @db.Date
+  /// Session of first admission (history; the current class comes from that session's enrollment).
+  admittedSessionId  String        @map("admitted_session_id")
+  version            Int           @default(1)
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt          DateTime?     @map("deleted_at") @db.Timestamptz(3)
+
+  admittedSession AcademicSession       @relation("StudentAdmittedSession", fields: [admittedSessionId], references: [id], onDelete: Restrict)
+  application     AdmissionApplication?
+  guardians       StudentGuardian[]
+  enrollments     StudentEnrollment[]
+  documents       StudentDocument[]
+  statusChanges   StudentStatusChange[]
+
+  @@index([fullNameNormalized, dob])
+  @@index([status])
+  @@map("student")
+}
+
+/// A parent/guardian person, shared between siblings through StudentGuardian. Soft delete only.
+model Guardian {
+  id         String    @id @default(cuid(2))
+  name       String    @db.VarChar(120)
+  phone      String    @db.VarChar(10)
+  altPhone   String?   @map("alt_phone") @db.VarChar(10)
+  email      String?   @db.VarChar(254)
+  occupation String?   @db.VarChar(80)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  students       StudentGuardian[]
+  applicantLinks AdmissionGuardian[]
+
+  @@index([phone])
+  @@map("guardian")
+}
+
+model StudentGuardian {
+  studentId          String           @map("student_id")
+  guardianId         String           @map("guardian_id")
+  relation           GuardianRelation
+  isPrimary          Boolean          @default(false) @map("is_primary")
+  isEmergencyContact Boolean          @default(false) @map("is_emergency_contact")
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  guardian Guardian @relation(fields: [guardianId], references: [id], onDelete: Restrict)
+
+  @@id([studentId, guardianId])
+  /// At most one primary guardian per student.
+  @@unique([studentId], map: "student_guardian_student_primary_key", where: raw("is_primary"))
+  @@index([guardianId])
+  @@map("student_guardian")
+}
+
+/// A document of an application and, after approval, of the student (same row; approval sets
+/// studentId). Its StoredFile (PRIVATE, encrypted) is owned by this row — StoredFile.ownerType =
+/// "StudentDocument", ownerId = id — so file ownership never moves. CHECK: applicationId or studentId.
+model StudentDocument {
+  id            String              @id @default(cuid(2))
+  applicationId String?             @map("application_id")
+  studentId     String?             @map("student_id")
+  type          StudentDocumentType
+  fileId        String              @unique @map("file_id")
+  /// Optional free text, required for OTHER (e.g. "Caste certificate").
+  label         String?             @db.VarChar(80)
+  uploadedById  String?             @map("uploaded_by_id")
+  verifiedById  String?             @map("verified_by_id")
+  verifiedAt    DateTime?           @map("verified_at") @db.Timestamptz(3)
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Replaced or removed (its StoredFile is retired in the same transaction).
+  deletedAt     DateTime?           @map("deleted_at") @db.Timestamptz(3)
+
+  application AdmissionApplication? @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  student     Student?              @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  file        StoredFile            @relation("StudentDocumentFile", fields: [fileId], references: [id], onDelete: Restrict)
+  uploadedBy  User?                 @relation("StudentDocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  verifiedBy  User?                 @relation("StudentDocumentVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  /// One current photo per application and per student.
+  @@unique([applicationId], map: "student_document_application_photo_key", where: raw("type = 'PHOTO' AND deleted_at IS NULL AND application_id IS NOT NULL"))
+  @@unique([studentId], map: "student_document_student_photo_key", where: raw("type = 'PHOTO' AND deleted_at IS NULL AND student_id IS NOT NULL"))
+  @@index([applicationId])
+  @@index([studentId])
+  @@map("student_document")
+}
+
+/// One per student per academic session (history is never overwritten: promotion = new row).
+/// The class is the section's class. Capacity is checked under the section's row lock.
+model StudentEnrollment {
+  id                String           @id @default(cuid(2))
+  studentId         String           @map("student_id")
+  academicSessionId String           @map("academic_session_id")
+  sectionId         String           @map("section_id")
+  status            EnrollmentStatus @default(ACTIVE)
+  enrolledOn        DateTime         @map("enrolled_on") @db.Date
+  leftOn            DateTime?        @map("left_on") @db.Date
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  student         Student            @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  academicSession AcademicSession    @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  /// Composite FK: the section must belong to the enrollment's own session (DB-enforced).
+  section         Section            @relation(fields: [sectionId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  rollNumber      StudentRollNumber?
+
+  @@unique([studentId, academicSessionId])
+  @@index([sectionId, status])
+  @@index([academicSessionId, status])
+  @@map("student_enrollment")
+}
+
+/// Roll numbers of one section (a section belongs to one session). DRAFT → FINALIZED; a finalized
+/// batch is never re-sorted automatically: later admissions are APPENDED (max + 1).
+model RollNumberBatch {
+  id            String                @id @default(cuid(2))
+  sectionId     String                @unique @map("section_id")
+  status        RollNumberBatchStatus @default(DRAFT)
+  version       Int                   @default(1)
+  generatedById String?               @map("generated_by_id")
+  generatedAt   DateTime              @default(now()) @map("generated_at") @db.Timestamptz(3)
+  finalizedById String?               @map("finalized_by_id")
+  finalizedAt   DateTime?             @map("finalized_at") @db.Timestamptz(3)
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  section     Section             @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  generatedBy User?               @relation("RollBatchGeneratedBy", fields: [generatedById], references: [id], onDelete: SetNull)
+  finalizedBy User?               @relation("RollBatchFinalizedBy", fields: [finalizedById], references: [id], onDelete: SetNull)
+  numbers     StudentRollNumber[]
+
+  @@map("roll_number_batch")
+}
+
+model StudentRollNumber {
+  id           String           @id @default(cuid(2))
+  batchId      String           @map("batch_id")
+  enrollmentId String           @unique @map("enrollment_id")
+  rollNumber   Int              @map("roll_number") @db.SmallInt
+  source       RollNumberSource @default(GENERATED)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  batch      RollNumberBatch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  enrollment StudentEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+
+  @@unique([batchId, rollNumber])
+  @@map("student_roll_number")
+}
+
+/// ACTIVE → TRANSFERRED / GRADUATED / WITHDRAWN (and re-admission back to ACTIVE). Append-only.
+model StudentStatusChange {
+  id            String        @id @default(cuid(2))
+  studentId     String        @map("student_id")
+  fromStatus    StudentStatus @map("from_status")
+  toStatus      StudentStatus @map("to_status")
+  reason        String        @db.VarChar(500)
+  effectiveDate DateTime      @map("effective_date") @db.Date
+  actedById     String?       @map("acted_by_id")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  actedBy User?   @relation("StudentStatusChangedBy", fields: [actedById], references: [id], onDelete: SetNull)
+
+  @@index([studentId, createdAt])
+  @@map("student_status_change")
+}
+
+// ───────────────────────────── Phase 3A — HR core (ADR-036; PHASE_3_PLAN.md §3a) ─────────────────────────────
+// One school per installation (ADR-030): no school_id. People and history are never hard-deleted: every FK
+// RESTRICT except actor references (SET NULL). CHECK constraints are hand-written in the migration.
+
+enum StaffType {
+  TEACHING
+  NON_TEACHING
+}
+
+enum AppointmentType {
+  PERMANENT
+  PROBATION
+  CONTRACT
+  PART_TIME
+  GUEST
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  ON_LEAVE
+  RESIGNED
+  TERMINATED
+  RETIRED
+}
+
+enum EmployeeDocumentType {
+  PHOTO
+  RESUME
+  QUALIFICATION_CERTIFICATE
+  EXPERIENCE_LETTER
+  APPOINTMENT_LETTER
+  RELIEVING_LETTER
+  OTHER
+}
+
+enum ServiceEventType {
+  JOINED
+  CONFIRMED
+  DEPARTMENT_CHANGED
+  DESIGNATION_CHANGED
+  APPOINTMENT_TYPE_CHANGED
+  REPORTING_CHANGED
+  TRANSFERRED
+  STATUS_CHANGED
+  RESIGNED
+  TERMINATED
+  RETIRED
+  REJOINED
+}
+
+/// Master data (H9): deactivated, never deleted once used. Case-insensitive unique name via nameKey.
+model Department {
+  id        String   @id @default(cuid(2))
+  code      String   @unique @db.VarChar(20)
+  name      String   @db.VarChar(80)
+  nameKey   String   @unique @map("name_key") @db.VarChar(80)
+  isActive  Boolean  @default(true) @map("is_active")
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  employees Employee[]
+
+  @@map("department")
+}
+
+/// Master data (H9). An employee's staffType must equal the designation's (service rule).
+model Designation {
+  id        String    @id @default(cuid(2))
+  code      String    @unique @db.VarChar(20)
+  name      String    @db.VarChar(80)
+  nameKey   String    @unique @map("name_key") @db.VarChar(80)
+  staffType StaffType @map("staff_type")
+  isActive  Boolean   @default(true) @map("is_active")
+  version   Int       @default(1)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  employees Employee[]
+
+  @@map("designation")
+}
+
+/// One record per staff member (teaching and non-teaching), separate from login credentials (H2).
+/// employeeCode is permanent (H3). No Aadhaar/PAN/bank/medical data in Phase 3A (H5). Soft delete only.
+model Employee {
+  id                 String           @id @default(cuid(2))
+  /// Permanent employee ID, e.g. "EMP-2026-0001" (SchoolSetting.idFormats.employeeCode; {YYYY} = joining year).
+  employeeCode       String           @unique @map("employee_code") @db.VarChar(32)
+  staffType          StaffType        @map("staff_type")
+  appointmentType    AppointmentType  @map("appointment_type")
+  employmentStatus   EmploymentStatus @default(ACTIVE) @map("employment_status")
+  firstName          String           @map("first_name") @db.VarChar(60)
+  middleName         String?          @map("middle_name") @db.VarChar(60)
+  lastName           String?          @map("last_name") @db.VarChar(60)
+  fullName           String           @map("full_name") @db.VarChar(185)
+  fullNameNormalized String           @map("full_name_normalized") @db.VarChar(185)
+  dob                DateTime         @db.Date
+  gender             Gender
+  workPhone          String?          @map("work_phone") @db.VarChar(10)
+  personalPhone      String           @map("personal_phone") @db.VarChar(10)
+  workEmail          String?          @map("work_email") @db.VarChar(254)
+  personalEmail      String?          @map("personal_email") @db.VarChar(254)
+  /// { line1, line2?, city, district?, state, pinCode, country } — personal tier (H6).
+  address            Json?
+  /// { name, relation, phone } — personal tier (H6).
+  emergencyContact   Json?            @map("emergency_contact")
+  departmentId       String           @map("department_id")
+  designationId      String           @map("designation_id")
+  reportsToId        String?          @map("reports_to_id")
+  joiningDate        DateTime         @map("joining_date") @db.Date
+  confirmationDate   DateTime?        @map("confirmation_date") @db.Date
+  leavingDate        DateTime?        @map("leaving_date") @db.Date
+  leavingReason      String?          @map("leaving_reason") @db.VarChar(500)
+  version            Int              @default(1)
+  createdById        String?          @map("created_by_id")
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt          DateTime?        @map("deleted_at") @db.Timestamptz(3)
+
+  department     Department             @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  designation    Designation            @relation(fields: [designationId], references: [id], onDelete: Restrict)
+  /// Reporting line (H10): self-reference; no self-reporting (CHECK) and no cycles (service, under locks).
+  reportsTo      Employee?              @relation("EmployeeReportsTo", fields: [reportsToId], references: [id], onDelete: Restrict)
+  directReports  Employee[]             @relation("EmployeeReportsTo")
+  createdBy      User?                  @relation("EmployeeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  /// Optional login account (H2): the FK lives on User.employeeId.
+  user           User?                  @relation("UserEmployee")
+  teacherProfile TeacherProfile?
+  documents      EmployeeDocument[]
+  serviceEvents  EmployeeServiceEvent[]
+
+  @@index([fullNameNormalized])
+  @@index([staffType, employmentStatus])
+  @@index([departmentId])
+  @@index([designationId])
+  @@index([reportsToId])
+  @@map("employee")
+}
+
+/// 1:1 with a TEACHING employee (service rule). Specialisations are free text until Phase 4 subjects (H14).
+model TeacherProfile {
+  employeeId                 String   @id @map("employee_id")
+  /// [{ degree, subject?, institution?, year? }] — at most 10 (schema + CHECK).
+  qualifications             Json     @default("[]")
+  /// [{ name (e.g. B.Ed, CTET), year? }] — at most 10.
+  professionalQualifications Json     @default("[]") @map("professional_qualifications")
+  specializations            String[] @default([]) @db.VarChar(60)
+  experienceYearsBefore      Int      @default(0) @map("experience_years_before") @db.SmallInt
+  teacherRegistrationNo      String?  @map("teacher_registration_no") @db.VarChar(40)
+  version                    Int      @default(1)
+  createdAt                  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@map("teacher_profile")
+}
+
+/// A staff document; its StoredFile (PRIVATE, encrypted) is owned by this row (ownerType "EmployeeDocument").
+model EmployeeDocument {
+  id           String               @id @default(cuid(2))
+  employeeId   String               @map("employee_id")
+  type         EmployeeDocumentType
+  fileId       String               @unique @map("file_id")
+  /// Optional free text, required for OTHER.
+  label        String?              @db.VarChar(80)
+  uploadedById String?              @map("uploaded_by_id")
+  verifiedById String?              @map("verified_by_id")
+  verifiedAt   DateTime?            @map("verified_at") @db.Timestamptz(3)
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Replaced or removed (its StoredFile is retired in the same transaction).
+  deletedAt    DateTime?            @map("deleted_at") @db.Timestamptz(3)
+
+  employee   Employee   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  file       StoredFile @relation("EmployeeDocumentFile", fields: [fileId], references: [id], onDelete: Restrict)
+  uploadedBy User?      @relation("EmployeeDocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  verifiedBy User?      @relation("EmployeeDocumentVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  /// One current photo per employee.
+  @@unique([employeeId], map: "employee_document_employee_photo_key", where: raw("type = 'PHOTO' AND deleted_at IS NULL"))
+  @@index([employeeId])
+  @@map("employee_document")
+}
+
+/// Append-only career history (H12): written by the service in the same transaction as the change;
+/// no update/delete path. (A DB trigger is a separate S-07 decision.)
+model EmployeeServiceEvent {
+  id            String           @id @default(cuid(2))
+  employeeId    String           @map("employee_id")
+  eventType     ServiceEventType @map("event_type")
+  effectiveDate DateTime         @map("effective_date") @db.Date
+  /// Changed fields only (ids / codes / enum values — never personal-tier values).
+  before        Json?
+  after         Json?
+  remarks       String?          @db.VarChar(500)
+  actedById     String?          @map("acted_by_id")
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  actedBy  User?    @relation("EmployeeServiceEventActedBy", fields: [actedById], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, effectiveDate])
+  @@map("employee_service_event")
 }

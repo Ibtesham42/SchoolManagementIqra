@@ -43,6 +43,34 @@ test("Super Admin creates a user; the user must change the temporary password", 
   await other.close();
 });
 
+test("B5: after the forced password change the full permitted menu appears without a reload", async ({ page, browser }, info) => {
+  const c = creds(info.project.name);
+  await login(page, c.readyAdmin, c.password);
+  await page.goto("/erp/users/new");
+  const username = `e2e-b5-${info.project.name}-${Date.now().toString(36)}`;
+  await page.getByLabel("Full name").fill("E2E B5 School Admin");
+  await page.getByLabel("Username").fill(username);
+  await page.getByRole("checkbox", { name: /^School Admin/ }).check();
+  await page.getByRole("button", { name: "Create user" }).click();
+  const secret = (await page.getByTestId("one-time-secret").innerText()).trim();
+
+  const other = await browser.newPage();
+  await login(other, username, secret);
+  await expect(other).toHaveURL(/\/erp\/change-password$/);
+  await other.getByLabel("Current password").fill(secret);
+  await other.getByLabel("New password", { exact: true }).fill(c.newPassword);
+  await other.getByLabel("Confirm new password").fill(c.newPassword);
+  await other.getByRole("button", { name: "Update password" }).click();
+  await expect(other).toHaveURL(/\/erp$/);
+  // No reload: the layout must reflect the School Admin's permissions immediately. getByRole skips the
+  // hidden nav (sidebar on phones, bottom bar on desktop); 4 items = no "More" sheet on phones.
+  const nav = other.getByRole("navigation", { name: "Main" });
+  await expect(nav.getByRole("link", { name: "Settings" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Users" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Roles" })).toHaveCount(0);
+  await other.close();
+});
+
 test("teacher sees no admin navigation and is refused on admin pages", async ({ page }, info) => {
   const c = creds(info.project.name);
   await login(page, c.teacher, c.password);

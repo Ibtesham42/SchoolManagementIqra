@@ -22,7 +22,7 @@ Limits below were checked on 2026-11-08 from the providers' own pages where poss
 | **Private storage** | Student/staff documents, ID proofs | Development: local disk (`PRIVATE_STORAGE_DRIVER=local`), **encrypted with AES-256-GCM before writing** | n/a | Production options (S3-compatible, app-side encrypted so the provider never sees plaintext): self-hosted disk/MinIO on school server; Backblaze B2 (10 GB free — confirm card requirement at signup); Supabase Storage free (~1 GB, project pauses after 7 days idle). **Never Cloudinary.** |
 | **Resend (Free)** | Transactional email (password reset, notifications) | 3,000/month, **100/day**, custom domains limited | Sends rejected | `EMAIL_PROVIDER=log` writes emails to the server log / dev mailbox page; in-app notifications always work. App cap: 90/day. |
 | **AI chatbot LLM** | Optional natural-language answers | See "AI provider findings" | n/a | **Default `AI_PROVIDER=none`**: FAQ match + Postgres full-text search over published knowledge, returning the matching passage. Fully functional, no external calls. |
-| **Embeddings** | Optional semantic search (pgvector) | Local model via `@huggingface/transformers` (runs in Node, no API, no cost) — Phase 13 | n/a | FTS-only retrieval. |
+| **Embeddings** | Optional semantic search (pgvector) | Local model via `@huggingface/transformers` (runs in Node, no API, no cost) — Roadmap Phase 9 | n/a | FTS-only retrieval. |
 | **Hosting** | Running the app | See "Hosting findings" | | Portable `next build` standalone server — runs on any Node host. |
 
 ## AI provider findings (2026-11-08)
@@ -43,6 +43,10 @@ Limits below were checked on 2026-11-08 from the providers' own pages where poss
 | **Oracle Cloud Always Free VM** | Free | Possibly; requires card for identity verification (no charge unless upgraded) | Conflicts with the "no card" rule — owner decision. |
 
 **Recommendation:** develop and preview on free tiers; before go-live the school decides between a school-operated server (zero recurring cost) or a small paid plan. Nothing in the code depends on a specific host.
+
+## Local development without any service
+
+The app can be previewed with no database and no external service (README → "Offline preview"): no account, no cost. Only the public/sign-in screens work in that mode.
 
 ## Neon compute budget (100 CU-hours/month)
 

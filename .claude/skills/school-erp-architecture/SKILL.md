@@ -14,10 +14,11 @@ Keep every feature consistent with the modular-monolith design in docs/SYSTEM_AR
 3. `src/modules/<m>/<m>.schemas.ts` — Zod input schemas (`.strict()`), exported types.
 4. `src/modules/<m>/<m>.policy.ts` — scope checks for record access.
 5. `src/modules/<m>/<m>.service.ts` — `authorize` → policy → transaction → `audit`.
-6. Entry point: server action (`src/app/erp/.../actions.ts`) for forms, and/or route handler in `src/app/api/v1/...` via `withRoute()`.
+6. Entry point: server action (`src/app/erp/.../actions.ts`, returning `ActionState`) for forms, and/or a route handler in `src/app/api/...` that maps `AppError`s explicitly.
 7. UI in `src/app/erp/...` using shared components; mobile layout first.
 8. Tests: unit (pure logic), integration (service + RBAC), e2e if it is a primary journey.
-9. Update API_DOCUMENTATION.md, DEVELOPMENT_PROGRESS.md, CHANGELOG.md.
+9. Run `npm run check:deps` (cycles + layer boundaries) and the quality gate.
+10. Update API_DOCUMENTATION.md, DEVELOPMENT_PROGRESS.md, CHANGELOG.md. Check the phase scope in DEVELOPMENT_ROADMAP.md before starting.
 
 ## Rules
 - Services are the only mutation path. No Prisma in pages/components/handlers.

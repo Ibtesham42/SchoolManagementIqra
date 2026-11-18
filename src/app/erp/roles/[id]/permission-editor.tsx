@@ -11,6 +11,8 @@ export interface PermissionRow {
   module: string;
   description: string;
   scope: Scope | "";
+  /** S-08: scopes this permission can be granted with (the module honours them). */
+  allowedScopes: Scope[];
   locked: boolean;
 }
 
@@ -106,9 +108,9 @@ export function PermissionEditor({ roleId, rows, readOnly }: { roleId: string; r
                       id={id}
                       name={`perm.${r.key}`}
                       defaultValue={r.scope}
-                      className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm sm:h-9 sm:w-48"
+                      className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm sm:w-48 sm:pointer-fine:h-9"
                     >
-                      {(Object.keys(SCOPE_LABEL) as (Scope | "")[]).map((s) => (
+                      {(["", ...r.allowedScopes] as (Scope | "")[]).map((s) => (
                         <option key={s || "none"} value={s}>
                           {SCOPE_LABEL[s]}
                         </option>
