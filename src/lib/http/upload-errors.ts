@@ -34,6 +34,14 @@ export const UPLOAD_MESSAGES = {
 } as const;
 export type UploadCode = keyof typeof UPLOAD_MESSAGES;
 
+/** Same fixed codes for staff documents (Phase 3A M4b) — staff wording, never text from the URL. */
+export const STAFF_UPLOAD_MESSAGES: Record<UploadCode, string> = {
+  ...UPLOAD_MESSAGES,
+  forbidden: "You don't have permission to upload staff documents, or the request didn't come from this site.",
+  not_found: "That staff record wasn't found.",
+  closed: "Documents can't be changed for this staff record.",
+};
+
 export function isUploadCode(v: unknown): v is UploadCode {
   return typeof v === "string" && Object.hasOwn(UPLOAD_MESSAGES, v);
 }

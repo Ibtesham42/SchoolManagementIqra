@@ -9,6 +9,8 @@ import { APPOINTMENT_TYPE_LABEL, EMPLOYMENT_STATUS_LABEL, SERVICE_EVENT_LABEL, S
 import { getEmployee } from "@/modules/hr/employees.service";
 import { staffAccountPanel } from "@/modules/hr/staff-accounts.service";
 import { listServiceHistory } from "@/modules/hr/employee-lifecycle.service";
+import { hasEmployeePhoto, listEmployeeDocuments } from "@/modules/hr/employee-documents.service";
+import { hasPermission } from "@/lib/rbac/authorize";
 import { getTeacherProfile } from "@/modules/hr/teacher-profiles.service";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -16,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { StatusBadge } from "../parts";
+import { DocumentsCard } from "./documents-card";
 import { LinkAccountForm, UnlinkAccount } from "./account-panel";
 import { TeacherProfileForm, type ProfessionalQualification, type Qualification } from "./teacher-profile-form";
 
@@ -66,11 +69,14 @@ export default async function EmployeePage({ params, searchParams }: { params: P
   });
   const canEdit = canManageEmployees(ctx) && e.tier === "personal";
   const isTeaching = e.staffType === "TEACHING";
-  const [teacher, account, history] = await Promise.all([
+  const [teacher, account, history, docs, hasPhoto] = await Promise.all([
     isTeaching ? getTeacherProfile(ctx, e.id) : Promise.resolve(null),
     browse ? staffAccountPanel(ctx, e.id) : Promise.resolve(null),
     listServiceHistory(ctx, e.id),
+    listEmployeeDocuments(ctx, e.id),
+    hasEmployeePhoto(ctx, e.id),
   ]);
+  const canManageDocs = browse && hasPermission(ctx, "employee.document.manage") && e.tier === "personal";
   const qualifications = (Array.isArray(teacher?.qualifications) ? teacher.qualifications : []) as unknown as Qualification[];
   const professional = (Array.isArray(teacher?.professionalQualifications) ? teacher.professionalQualifications : []) as unknown as ProfessionalQualification[];
 
@@ -119,7 +125,15 @@ export default async function EmployeePage({ params, searchParams }: { params: P
             <h2>Overview</h2>
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="grid gap-4 sm:grid-cols-[auto_1fr]">
+          <div className="flex size-32 items-center justify-center overflow-hidden rounded-lg border bg-muted text-xs text-muted-foreground">
+            {hasPhoto ? (
+              // eslint-disable-next-line @next/next/no-img-element -- private, authorized route; not optimisable by next/image
+              <img src={`/api/v1/employees/${e.id}/photo`} alt={`Photo of ${e.fullName}`} className="size-full object-cover" />
+            ) : (
+              "No photo"
+            )}
+          </div>
           <Rows
             rows={[
               ["Employee ID", <span key="c" className="font-mono">{e.employeeCode}</span>],
@@ -229,6 +243,8 @@ export default async function EmployeePage({ params, searchParams }: { params: P
           </CardContent>
         </Card>
       )}
+
+      {docs && <DocumentsCard employeeId={e.id} docs={docs} canManage={canManageDocs} uploadCode={typeof sp.upload === "string" ? sp.upload : undefined} />}
 
       <Card>
         <CardHeader>

@@ -13,6 +13,7 @@ import {
   createDepartmentSchema,
   createDesignationSchema,
   createEmployeeSchema,
+  employeeDocumentRefSchema,
   linkAccountSchema,
   setMasterActiveSchema,
   teacherProfileSchema,
@@ -25,6 +26,7 @@ import {
 import { createDepartment, createDesignation, setDepartmentActive, setDesignationActive, updateDepartment, updateDesignation } from "@/modules/hr/master-data.service";
 import { registerEmployee, updateEmployeeContact, updateEmployeePersonal } from "@/modules/hr/employees.service";
 import { changeEmployment, changeReporting, changeStatus } from "@/modules/hr/employee-lifecycle.service";
+import { removeEmployeeDocument, verifyEmployeeDocument } from "@/modules/hr/employee-documents.service";
 import { linkStaffAccount, unlinkStaffAccount } from "@/modules/hr/staff-accounts.service";
 import { saveTeacherProfile } from "@/modules/hr/teacher-profiles.service";
 
@@ -194,4 +196,15 @@ export async function changeStatusAction(_prev: ActionState, fd: FormData): Prom
     if (r.accountStillActive) parts.push("The linked login account is still active: an administrator who manages users must deactivate it.");
     return parts.join(" ");
   });
+}
+
+// ───────────────────────────── Documents (M4b) ─────────────────────────────
+
+const docRef = (fd: FormData) => ({ employeeId: formString(fd, "employeeId"), documentId: formString(fd, "documentId") });
+
+export async function removeEmployeeDocumentAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(employeeDocumentRefSchema, docRef(fd), async (ctx, d) => (await removeEmployeeDocument(ctx, d.employeeId, d.documentId), "Document removed."));
+}
+export async function verifyEmployeeDocumentAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(employeeDocumentRefSchema, docRef(fd), async (ctx, d) => (await verifyEmployeeDocument(ctx, d.employeeId, d.documentId), "Document marked as verified."));
 }
