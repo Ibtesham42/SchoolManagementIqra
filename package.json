@@ -32,6 +32,7 @@
     "rbac:matrix": "tsx scripts/rbac-matrix.ts",
     "check:deps": "tsx scripts/check-deps.ts",
     "cleanup": "tsx scripts/cleanup.ts",
+    "files:purge": "tsx scripts/files-purge.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

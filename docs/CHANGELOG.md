@@ -23,6 +23,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - Leaving releases the person's class-teacher sections and offers to deactivate their login (an administrator who manages users can do it in the same step; otherwise the screen says it still has to be done). Rejoining keeps the same employee ID. Nobody can change their own employment record.
 - Permissions: new "View employee personal details and documents" and "Upload, verify and remove employee documents and photos"; School Admin can now manage staff records. Catalog: 84 permissions, 279 default grants.
 
+### Security (owner decisions 2026-11-18)
+- Claude Code may no longer display the secret environment files with shell commands (deny list extended).
+- Prepared, not yet applied: the audit log becomes append-only in the database; deleted private files are purged 30 days after removal (metadata kept), with a dry-run-first maintenance job.
+
 ### Fixed (CI)
 - Five storage modules were missing from the repository because an ignore rule for local file storage also matched the source folder; CI now builds from a clean checkout again.
 

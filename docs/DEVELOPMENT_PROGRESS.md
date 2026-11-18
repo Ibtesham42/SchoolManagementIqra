@@ -10,6 +10,15 @@
 
 ## Log
 
+### 2026-11-18 — Owner approvals: KI-062 (Test done, development refused), S-07 / S-15 migrations created, S-15 job, S-20 applied
+- **Approvals (owner, 2026-11-18):** KI-062 grants on Test and on development (+ development seed sync), S-07 trigger migration (create for review), S-20 deny-list, S-15 option "30-day grace + purged_at, first run as a dry run".
+- **KI-062 Test — APPLIED 13:10:27–13:10:43Z:** scratchpad script `grant-sync.mts` (shell clean; `.env.test`/`.env` loaded into private objects; URL hosts = Test endpoint, not development, not forbidden; read-only live identity `br-purple-credit-aooeex9m` / `ep-quiet-brook-aoktw1hh`), dry run first (rolled back), then one transaction: seed core (`lockSuperAdminGuard` first, identity re-check) +2 permissions, +12 new-permission default grants, seed audit; the six approved grants (School Admin `employee.manage`; `employee.read` SELF for Accountant, Admission Officer, Teacher, Class Teacher, Transport Manager) + `role.grants_add` audit; **every catalog role verified exactly** → 82/13/271 → **84/13/291**.
+- **KI-062 development — dry run REFUSED (rolled back, nothing written):** development is 80/13/260 (Phase 2B sync never ran); strict verification: Principal `admission.approve` (D2) missing — not named in this approval → asked the owner.
+- **S-20:** `.claude/settings.json` deny list + `.env.staging/.preview/.e2e` Read/Edit and shell readers (`cat`, `type`, `more`, `head`, `tail`, `Get-Content`) of `.env` / `.env.test` / `.env.local` / `.env.restore.local` (Appendix C exactly).
+- **S-07:** migration `20261118000000_audit_log_append_only` (function + 2 triggers, one transaction, lock timeout; `audit_log` has no FKs, no code path updates/deletes it) — **not applied**.
+- **S-15:** migration `20261118000100_stored_file_purged_at` (nullable `purged_at` + CHECK; offline diff = 1 statement) — **not applied**; `files-purge.ts` (dry run default, strict key pattern, delete-then-mark, per-batch audit with ids/counts) + `npm run files:purge` (seed-style target guard). Integration suite `files-purge.test.ts` skips until the migration is applied. Tests that wrote/read `stored_file` without a `select` now select explicitly (would otherwise fail — or pass for the wrong reason — on databases without the column). `db:check` verifies both migrations once applied.
+- **Not done:** applying S-07/S-15 anywhere (separate approval after SQL review); development catalog (owner question); KI-059 (`.env` lines — owner).
+
 ### 2026-11-18 — Known-issue fixes KI-061 and KI-066 (code + unit tests; no database access)
 - **KI-066:** `identity.updateUser` locks the account row FOR UPDATE after `lockSuperAdminGuard`, closing the role-change vs class-teacher-assignment race (pre-existing S-09 path, found by the M3b review).
 - **KI-061:** the slow backup-encryption unit test has an explicit 30 s timeout.

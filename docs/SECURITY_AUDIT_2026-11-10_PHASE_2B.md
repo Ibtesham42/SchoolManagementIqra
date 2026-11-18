@@ -5,7 +5,10 @@
 
 **Severity:** Critical (exploitable now, major impact) · High · Medium · Low · Info. **Status:** CONFIRMED = a concrete path exists in the code; THEORETICAL = needs a misconfiguration, a custom role, or access the app doesn't give. **Origin:** whether Phase 2B introduced it or it predates Phase 2B.
 
-## 0. Fix status (2026-11-10)
+## 0. Fix status (2026-11-10; owner decisions on S-07, S-15, S-20 recorded 2026-11-18)
+
+**2026-11-18 owner decisions:** **S-07** — migration `20261118000000_audit_log_append_only` created for review (Appendix B, one transaction + lock timeout; `db:check` verifies the triggers once applied) — **not applied**. **S-15** — approved: 30-day grace period, `stored_file.purged_at` (migration `20261118000100_stored_file_purged_at`, created for review — **not applied**), purge job `src/modules/files/files-purge.ts` + guarded runner `npm run files:purge` (dry run by default; first run as a dry run); orphan-blob reconciliation pending (KI-067); live-document retention period still to be decided with the school (KI-004). **S-20** — Appendix C diff applied to `.claude/settings.json`.
+
 
 | ID | Decision | Implemented | Verification |
 |---|---|---|---|
