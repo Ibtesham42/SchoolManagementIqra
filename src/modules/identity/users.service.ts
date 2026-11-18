@@ -163,6 +163,10 @@ export async function updateUser(ctx: AuthContext, input: z.infer<typeof updateU
   try {
     return await prisma.$transaction(async (tx) => {
       await lockSuperAdminGuard(tx);
+      // KI-066: lock the account row before replacing its roles, so a concurrent class-teacher assignment (which
+      // holds the row FOR SHARE while it checks the teacher role) either finishes first — and is then released
+      // below — or waits and sees the new roles. Lock order guard → user → sections, as elsewhere.
+      await tx.$queryRaw`SELECT id FROM "user" WHERE id = ${input.id} AND deleted_at IS NULL FOR UPDATE`;
       const target = await loadTarget(tx, input.id);
       assertCanModifyUser(ctx, target);
       assertCanAssignRoles(ctx, target, input.roleKeys, await loadRoles(tx));
