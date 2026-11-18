@@ -55,9 +55,10 @@ describe("B5 — ERP navigation before and after the forced password change", ()
     expect(menu(ctxFor("SCHOOL_ADMIN", true))).toEqual(["Dashboard", "My account"]);
   });
 
-  // Phase 2 (ADR-034) added "Classes" (academic.read), Phase 2B "Admissions" (admission.read) and S7 "Students" (student.read) to the G7 J13/J14 menus.
+  // Phase 2 (ADR-034) added "Classes" (academic.read), Phase 2B "Admissions" (admission.read) and S7 "Students" (student.read) to the G7 J13/J14 menus;
+  // Phase 3A M2 "Staff" (employee.read at ALL).
   it("School Admin after the change: Classes, Users and Settings, no Roles (G7 J13 expectation + Classes)", () => {
-    expect(menu(ctxFor("SCHOOL_ADMIN", false))).toEqual(["Dashboard", "Admissions", "Students", "Roll numbers", "Classes", "Users", "Settings", "My account"]);
+    expect(menu(ctxFor("SCHOOL_ADMIN", false))).toEqual(["Dashboard", "Admissions", "Students", "Roll numbers", "Staff", "Classes", "Users", "Settings", "My account"]);
   });
 
   it("Teacher after the change: Classes (own sections), no Users, Roles or Settings (G7 J14 expectation + Classes)", () => {
@@ -65,7 +66,31 @@ describe("B5 — ERP navigation before and after the forced password change", ()
   });
 
   it("Super Admin sees every item", () => {
-    expect(menu({ ...ctxFor("SCHOOL_ADMIN", false), isSuperAdmin: true })).toEqual(["Dashboard", "Admissions", "Students", "Roll numbers", "Classes", "Users", "Roles", "Settings", "My account"]);
+    expect(menu({ ...ctxFor("SCHOOL_ADMIN", false), isSuperAdmin: true })).toEqual(["Dashboard", "Admissions", "Students", "Roll numbers", "Staff", "Classes", "Users", "Roles", "Settings", "My account"]);
+  });
+});
+
+describe("Phase 3A M2 — the Staff menu item", () => {
+  it.each([
+    ["HR_MANAGER", true],
+    ["PRINCIPAL", true],
+    ["VICE_PRINCIPAL", true],
+    ["LIBRARIAN", true], // Q3: directory only
+    ["ACCOUNTANT", false],
+    ["ADMISSION_OFFICER", false],
+    ["TEACHER", false],
+    ["CLASS_TEACHER", false],
+    ["TRANSPORT_MANAGER", false],
+    ["PARENT", false],
+    ["STUDENT", false],
+  ])("%s sees Staff: %s", (role, shown) => {
+    expect(menu(ctxFor(role, false)).includes("Staff")).toBe(shown);
+  });
+
+  it("a SELF-only employee.read grant shows no Staff link (no directory for SELF; M3 adds My profile)", () => {
+    const ctx = ctxFor("TEACHER", false);
+    ctx.permissions.set("employee.read", new Set<Scope>(["SELF"]));
+    expect(menu(ctx).includes("Staff")).toBe(false);
   });
 });
 

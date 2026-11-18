@@ -57,7 +57,7 @@ The UI disables options the policy would reject (same functions), but the server
 | Students | `student.read` `student.create` `student.update` `student.delete` `student.sensitive.read` (Aadhaar, medical) `student.document.read` `student.document.manage` (upload/replace/verify/remove student & admission documents — Phase 2B) `student.promote` `student.transfer` `discipline.manage` |
 | Roll numbers | `rollnumber.generate` `rollnumber.finalize` `rollnumber.correct` |
 | ID cards/Docs | `idcard.generate` `document.generate` `certificate.issue` |
-| HR | `employee.read` `employee.manage` `employee.sensitive.read` `leave.request` `leave.approve` |
+| HR | `employee.read` (directory) `employee.personal.read` (personal details & documents — Phase 3A, H6) `employee.manage` `employee.document.manage` (Phase 3A, H8) `employee.sensitive.read` (PAN/bank — reserved for payroll 3C) `leave.request` `leave.approve` |
 | Attendance | `attendance.student.mark` `attendance.student.read` `attendance.employee.mark` `attendance.employee.read` |
 | Payroll | `payroll.read` `payroll.prepare` `payroll.approve` `payroll.pay` `salary.structure.manage` `salary.self.read` |
 | Fees | `fee.structure.manage` `fee.read` `fee.collect` `fee.concession.manage` `fee.refund` `fee.report` |
@@ -76,8 +76,8 @@ Scope shown in brackets; no bracket = ALL.
 | Role | Key grants |
 |---|---|
 | Super Admin | everything (system role) |
-| School Admin | user.read, settings.read, **settings.manage, session.manage** (school profile, logo, regional settings, academic sessions — owner decision 2026-11-09), cms.*, admission.* (incl. **admission.approve**), student.* (no sensitive; incl. **student.document.manage**), rollnumber.generate, idcard.generate, document.generate, employee.read, attendance.*.read, fee.read, transport.read, academic.read, academic.manage, library.read, inventory.read, export.run, import.run — **trimmed by Super Admin as needed** |
-| Principal | read on all academic/student/employee modules (incl. academic.read), **admission.approve** (approver with School Admin — D2, 2026-11-10), student.sensitive.read, leave.approve, marks.approve, result.publish, rollnumber.finalize, certificate.issue, payroll.approve, fee.report, cms.publish, audit.read |
+| School Admin | user.read, settings.read, **settings.manage, session.manage** (school profile, logo, regional settings, academic sessions — owner decision 2026-11-09), cms.*, admission.* (incl. **admission.approve**), student.* (no sensitive; incl. **student.document.manage**), rollnumber.generate, idcard.generate, document.generate, employee.read, **employee.manage, employee.personal.read, employee.document.manage** (Phase 3A — Q1/H6/H8, 2026-11-10), attendance.*.read, fee.read, transport.read, academic.read, academic.manage, library.read, inventory.read, export.run, import.run — **trimmed by Super Admin as needed** |
+| Principal | read on all academic/student/employee modules (incl. academic.read), **admission.approve** (approver with School Admin — D2, 2026-11-10), student.sensitive.read, **employee.personal.read** (Phase 3A, H6), leave.approve, marks.approve, result.publish, rollnumber.finalize, certificate.issue, payroll.approve, fee.report, cms.publish, audit.read |
 | Vice Principal | Principal minus payroll.approve, audit.read |
 | Accountant | fee.*, payroll.read, payroll.prepare, payroll.pay, transport.read, export.run (fee/payroll) |
 | HR Manager | employee.*, leave.approve, attendance.employee.*, salary.structure.manage, payroll.prepare, payroll.read |
@@ -85,7 +85,7 @@ Scope shown in brackets; no bracket = ALL.
 | Teacher | student.read [ASSIGNED], attendance.student.mark [ASSIGNED], marks.enter [ASSIGNED], timetable read, leave.request, salary.self.read [SELF], library.read, academic.read [ASSIGNED] |
 | Class Teacher | Teacher + attendance.student.mark/read for own section, discipline.manage [ASSIGNED], student.update (contact fields) [ASSIGNED] |
 | Transport Manager | transport.*, student.read (name/class/stop only) [ASSIGNED via route] |
-| Librarian | library.*, student.read (basic), employee.read (basic) |
+| Librarian | library.*, student.read (basic), employee.read (directory fields only — Q3; no personal tier) |
 | Parent | student.read [CHILDREN], attendance.student.read [CHILDREN], fee.read [CHILDREN], results [CHILDREN], online fee payment [CHILDREN], notices |
 | Student | own profile/attendance/results/timetable/library history [SELF] |
 

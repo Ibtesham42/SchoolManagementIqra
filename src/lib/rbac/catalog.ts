@@ -46,6 +46,10 @@ export const PERMISSIONS = {
   "employee.read": "View employee records",
   "employee.manage": "Create and edit employees",
   "employee.sensitive.read": "View employee PAN/bank details",
+  // Phase 3A (ADR-036, H6/H8): personal tier (date of birth, personal contact, address, emergency contact,
+  // documents) is separate from the staff directory; documents and photo are managed separately.
+  "employee.personal.read": "View employee personal details and documents",
+  "employee.document.manage": "Upload, verify and remove employee documents and photos",
   "leave.request": "Request leave",
   "leave.approve": "Approve or reject leave",
   // Attendance
@@ -175,6 +179,8 @@ export const ROLES: RoleDefinition[] = [
       "student.read", "student.create", "student.update", "student.delete", "student.document.read",
       "student.document.manage", "student.promote", "student.transfer", "rollnumber.generate", "idcard.generate", "document.generate",
       "employee.read", "attendance.student.read", "attendance.employee.read", "fee.read", "transport.read",
+      // Phase 3A (owner decisions Q1, H6, H8 — 2026-11-10): School Admin manages staff records and documents.
+      "employee.manage", "employee.personal.read", "employee.document.manage",
       "academic.read", "academic.manage", "timetable.read", "timetable.manage", "library.read", "inventory.read",
       "import.run", "export.run", "notice.read", "notification.send",
     ],
@@ -188,6 +194,8 @@ export const ROLES: RoleDefinition[] = [
       ...READ_ACADEMIC, "admission.approve", "student.sensitive.read", "student.document.read", "leave.approve", "marks.approve",
       "result.publish", "rollnumber.finalize", "rollnumber.correct", "certificate.issue", "document.revoke", "payroll.read",
       "payroll.approve", "fee.report", "cms.read", "cms.publish", "audit.read", "enquiry.read", "notification.send",
+      // Phase 3A (H6): staff personal details (read only).
+      "employee.personal.read",
     ],
   },
   {
@@ -214,7 +222,8 @@ export const ROLES: RoleDefinition[] = [
     name: "HR Manager",
     description: "Employees, leave, staff attendance and salary structures.",
     grants: [
-      "employee.read", "employee.manage", "employee.sensitive.read", "leave.approve", "leave.request",
+      "employee.read", "employee.manage", "employee.sensitive.read", "employee.personal.read", "employee.document.manage",
+      "leave.approve", "leave.request",
       "attendance.employee.mark", "attendance.employee.read", "salary.structure.manage", "payroll.prepare",
       "payroll.read", ["salary.self.read", "SELF"], "export.run", "notice.read",
     ],

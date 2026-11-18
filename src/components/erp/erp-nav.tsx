@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { ClipboardList, GraduationCap, IdCard, KeyRound, ListOrdered, LayoutDashboard, Menu, Settings, ShieldCheck, Users, type LucideIcon } from "lucide-react";
+import { ClipboardList, GraduationCap, IdCard, KeyRound, ListOrdered, LayoutDashboard, Menu, Settings, ShieldCheck, UserRoundCog, Users, type LucideIcon } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { activeNavHref, type NavIcon, type NavItem } from "./nav-items";
 
-const ICONS: Record<NavIcon, LucideIcon> = { dashboard: LayoutDashboard, admissions: ClipboardList, students: IdCard, rollNumbers: ListOrdered, academic: GraduationCap, users: Users, roles: ShieldCheck, settings: Settings, account: KeyRound };
+const ICONS: Record<NavIcon, LucideIcon> = { dashboard: LayoutDashboard, admissions: ClipboardList, students: IdCard, rollNumbers: ListOrdered, academic: GraduationCap, users: Users, roles: ShieldCheck, settings: Settings, account: KeyRound, staff: UserRoundCog };
 
 
 /** Desktop sidebar (≥ lg). */

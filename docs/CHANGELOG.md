@@ -7,6 +7,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ### Added (Phase 3A — HR core, in progress)
 - Database migration `20261112000000_phase3a_hr_core` (applied to the development and Test databases 2026-11-18): departments, designations, employees with a permanent employee code, teacher profiles, employee documents (one current photo) and append-only service history; a login account can be linked to one employee. Department and designation names accept any script (Hindi, Khasi, other Indian languages and English). No Aadhaar, PAN, bank or medical data is stored.
 - The database check (`db:check`) also verifies the HR constraints once the migration is applied; the backup drill restores linked staff accounts correctly.
+- Staff (new menu item for School Admin, Principal, Vice Principal, HR Manager and Librarian): staff directory with status counts, search by name, employee ID or phone, and filters (staff type, department, designation, status, appointment type); table on desktop, cards on phones.
+- Register employee (School Admin, HR Manager): four steps — personal, contact, employment, review. The permanent employee ID (`EMP-2026-0001`, joining year) is assigned on registration and never changes; teaching or non-teaching comes from the designation.
+- Employee profile with an overview for everyone who may see the directory; date of birth, personal contact details, home address, emergency contact and employment dates only for School Admin, Principal, HR Manager and Super Admin (the Librarian and Vice Principal see the directory only). Personal and contact details can be edited.
+- Departments and designations (names in any language, e.g. Hindi or Khasi): add, edit, deactivate — never deleted.
+- Permissions: new "View employee personal details and documents" and "Upload, verify and remove employee documents and photos"; School Admin can now manage staff records. Catalog: 84 permissions, 279 default grants.
+
+### Fixed (CI)
+- Five storage modules were missing from the repository because an ignore rule for local file storage also matched the source folder; CI now builds from a clean checkout again.
 
 ### Added (Phase 2B — admissions & students, in progress)
 - Database (development only): migration `20261111000000_phase2b_admissions_students` — admission applications, applicant guardians, students, guardians, documents, session enrollments, roll-number batches, status history; `school_setting.required_admission_documents` (default photo + birth certificate).

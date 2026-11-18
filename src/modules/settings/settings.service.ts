@@ -152,6 +152,17 @@ export async function readAdmissionSettings(tx: Tx) {
   };
 }
 
+/**
+ * Settings that staff registration needs (Phase 3A, H3), read INSIDE the caller's transaction (no
+ * authorization here — the calling HR service has authorized its own operation). No contact or address data.
+ */
+export async function readEmployeeSettings(tx: Tx) {
+  const row = await tx.schoolSetting.findUnique({ where: { id: SETTINGS_ID }, select: { shortCode: true, idFormats: true, timezone: true } });
+  if (!row) throw new ConflictError("Save the school profile before registering employees.");
+  const formats = row.idFormats && typeof row.idFormats === "object" && !Array.isArray(row.idFormats) ? (row.idFormats as Record<string, unknown>) : {};
+  return { shortCode: row.shortCode, timezone: row.timezone, employeeCodeFormat: typeof formats.employeeCode === "string" ? formats.employeeCode : null };
+}
+
 // ───────────────────────────── Academic sessions ─────────────────────────────
 
 /** Serializes session writes so overlap/current checks can't race (transaction-scoped; pooler-safe). */
