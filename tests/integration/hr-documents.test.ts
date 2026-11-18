@@ -72,6 +72,8 @@ describe.skipIf(!enabled)("HR staff documents (integration)", () => {
       user("lib", "LIBRARIAN"),
       user("staff", "ACCOUNTANT"),
     ]);
+    // KI-069: verifying documents needs the verifier's own login linked to a staff record.
+    await (await import("./staff-fixture")).linkTeachingEmployee(m.prisma, tag, h.id, { staffType: "NON_TEACHING" });
     [root, hr, librarian] = await Promise.all(
       [r, h, lib].map((u) => ctxFor(u.id)),
     );
@@ -114,6 +116,7 @@ describe.skipIf(!enabled)("HR staff documents (integration)", () => {
     const { prisma } = m;
     if (!prisma) return;
     m.setStorageDriverForTests(undefined);
+    await (await import("./staff-fixture")).removeStaffFixtures(prisma, tag);
     const docs = await prisma.employeeDocument.findMany({
       where: { employeeId: { in: employeeIds } },
       select: { fileId: true },

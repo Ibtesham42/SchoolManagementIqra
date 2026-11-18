@@ -201,6 +201,13 @@ describe("no self-verification of documents (final review L2)", () => {
   });
 });
 
+describe("KI-069: document verification needs the verifier's own link", () => {
+  it("an unlinked HR Manager can't verify documents (refused before any database access)", async () => {
+    const { verifyEmployeeDocument } = await import("@/modules/hr/employee-documents.service");
+    await expect(verifyEmployeeDocument(ctxFor("HR_MANAGER"), "e2", "doc1")).rejects.toThrow(/isn't linked/);
+  });
+});
+
 describe("registration gate (security review L2)", () => {
   it("a custom role with employee.manage but no personal read can't register (refused before any database access)", async () => {
     const { registerEmployee } = await import("@/modules/hr/employees.service");

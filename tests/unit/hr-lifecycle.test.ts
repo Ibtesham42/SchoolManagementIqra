@@ -115,6 +115,19 @@ describe("lifecycle service gates (refused before any database access)", () => {
   });
   it("H13: deactivating the login needs user.manage — HR Manager is refused before anything is written", async () => {
     const { changeStatus } = await import("@/modules/hr/employee-lifecycle.service");
-    await expect(changeStatus(ctxFor("HR_MANAGER"), { ...status, deactivateAccount: true })).rejects.toThrow(/manage users/);
+    await expect(changeStatus(ctxFor("HR_MANAGER", [], "hr-own"), { ...status, deactivateAccount: true })).rejects.toThrow(/manage users/);
+  });
+  it("KI-069: a non–Super Admin whose own login isn't linked to a staff record can't make lifecycle changes; Super Admin can", async () => {
+    const { changeStatus, changeReporting, changeEmployment } = await import("@/modules/hr/employee-lifecycle.service");
+    for (const role of ["HR_MANAGER", "SCHOOL_ADMIN"]) {
+      await expect(changeStatus(ctxFor(role), status), role).rejects.toThrow(/isn't linked to your staff record/);
+      await expect(changeReporting(ctxFor(role), changeReportingSchema.parse({ id: "e1", version: "1", effectiveDate: "2026-11-01", reportsToId: "", remarks: "" })), role).rejects.toThrow(/isn't linked/);
+      await expect(
+        changeEmployment(ctxFor(role), changeEmploymentSchema.parse({ id: "e1", version: "1", effectiveDate: "2026-11-01", departmentId: "d", designationId: "g", appointmentType: "PERMANENT", confirmationDate: "", remarks: "" })),
+        role,
+      ).rejects.toThrow(/isn't linked/);
+    }
+    const { assertActorLinked } = await import("@/modules/hr/hr.policy");
+    expect(() => assertActorLinked(ctxFor("SUPER_ADMIN"))).not.toThrow();
   });
 });

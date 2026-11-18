@@ -9,7 +9,7 @@ import { releaseClassTeacherAssignments } from "@/modules/academic/academic.tx";
 import { lockSuperAdminGuard } from "@/modules/identity/super-admin-guard";
 import { deactivateUserTx, linkedAccountTx } from "@/modules/identity/users.service";
 import { readEmployeeSettings } from "@/modules/settings/settings.service";
-import { canReadPersonal, employeeReadAccess, employeeRecordAccess, isOwnRecord } from "./hr.policy";
+import { assertActorLinked, canReadPersonal, employeeReadAccess, employeeRecordAccess, isOwnRecord } from "./hr.policy";
 import {
   assertEffectiveDate,
   createsReportingCycle,
@@ -45,6 +45,7 @@ function authorizeLifecycle(ctx: AuthContext, employeeId: string, opts: { ownAll
   authorize(ctx, "employee.manage");
   employeeReadAccess(ctx);
   if (!canReadPersonal(ctx)) throw new ForbiddenError("You need permission to view employees' personal details to change employment records.");
+  assertActorLinked(ctx); // KI-069: the own-record check below needs the actor's link
   if (!opts.ownAllowed && isOwnRecord(ctx, employeeId) && !ctx.isSuperAdmin) throw new ForbiddenError("You can't change your own employment record. Ask another administrator.");
 }
 

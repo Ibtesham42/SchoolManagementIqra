@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { prisma, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
-import { processStudentPhoto } from "@/lib/images/photo";
+import { processStudentPhoto, stripDocumentImageMetadata } from "@/lib/images/photo";
 import { authorize, type AuthContext } from "@/lib/rbac/authorize";
 import { detectFileType } from "@/lib/storage/file-types";
 import { discardUpload, prepareUpload, readStoredFile, recordUpload, retireStoredFile, type PreparedUpload } from "@/modules/files/files.service";
@@ -52,6 +52,10 @@ export async function addApplicationDocument(ctx: AuthContext, applicationId: st
     }
     bytes = (await processStudentPhoto(bytes)).bytes; // throws → nothing stored (fail closed)
     fileName = "photo.jpg";
+  } else {
+    // KI-068: document images are re-saved without metadata (e.g. GPS location of a phone scan); PDFs unchanged.
+    const detected = detectFileType(bytes);
+    if (detected === "image/jpeg" || detected === "image/png") bytes = await stripDocumentImageMetadata(bytes, detected);
   }
 
   const documentId = newDocumentId();

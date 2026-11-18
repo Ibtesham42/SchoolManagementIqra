@@ -3,11 +3,11 @@ import { prisma, type Tx } from "@/lib/db";
 import { audit, type AuditActor } from "@/lib/audit";
 import { isTransactionBusy } from "@/lib/db-errors";
 import { ConflictError, ForbiddenError, NotFoundError, ServiceBusyError, ValidationError } from "@/lib/errors";
-import { processStudentPhoto } from "@/lib/images/photo";
+import { processStudentPhoto, stripDocumentImageMetadata } from "@/lib/images/photo";
 import { authorize, type AuthContext } from "@/lib/rbac/authorize";
 import { detectFileType } from "@/lib/storage/file-types";
 import { discardUpload, prepareUpload, readStoredFile, recordUpload, retireStoredFile, type PreparedUpload } from "@/modules/files/files.service";
-import { canReadPersonal, employeeReadAccess, employeeRecordAccess, isOwnRecord } from "./hr.policy";
+import { assertActorLinked, canReadPersonal, employeeReadAccess, employeeRecordAccess, isOwnRecord } from "./hr.policy";
 import type { EmployeeDocumentFields } from "./hr.schemas";
 
 /**
@@ -24,7 +24,7 @@ import type { EmployeeDocumentFields } from "./hr.schemas";
  *   Removal/replacement retires the file; the S-15 job purges its blob after 30 days.
  * Audit entries carry ids, type, MIME type and size — never names or contents.
  * Documents stay manageable after an employee leaves (by design: relieving and experience letters are issued then).
- * Non-photo images are stored as uploaded (metadata included) — same as admission documents; see KI-068.
+ * Document images are re-saved without metadata (KI-068), like admission documents.
  */
 const actorOf = (ctx: AuthContext): AuditActor => ({ userId: ctx.userId, label: ctx.username, ipHash: ctx.ipHash, requestId: ctx.requestId });
 export const EMPLOYEE_DOCUMENT_OWNER_TYPE = "EmployeeDocument";
@@ -60,6 +60,10 @@ export async function addEmployeeDocument(ctx: AuthContext, employeeId: string, 
     if (detected !== "image/jpeg" && detected !== "image/png") throw new ValidationError("The photo must be a JPEG or PNG image.", [{ path: "file", message: "Use a JPEG or PNG photo." }]);
     bytes = (await processStudentPhoto(bytes)).bytes; // throws → nothing stored (fail closed)
     fileName = "photo.jpg";
+  } else {
+    // KI-068: document images are re-saved without metadata (e.g. GPS location of a phone scan); PDFs unchanged.
+    const detected = detectFileType(bytes);
+    if (detected === "image/jpeg" || detected === "image/png") bytes = await stripDocumentImageMetadata(bytes, detected);
   }
 
   const documentId = newDocumentId();
@@ -153,7 +157,9 @@ export async function removeEmployeeDocument(ctx: AuthContext, employeeId: strin
 /** Mark a document as checked against the original (who and when). */
 export async function verifyEmployeeDocument(ctx: AuthContext, employeeId: string, documentId: string) {
   authorizeManage(ctx);
-  // "Verified by" must be someone else for one's own documents (final review L2; Super Admin exempt).
+  // "Verified by" must be someone else for one's own documents (final review L2; Super Admin exempt) — which needs
+  // the verifier's own link (KI-069).
+  assertActorLinked(ctx);
   if (isOwnRecord(ctx, employeeId) && !ctx.isSuperAdmin) throw new ForbiddenError("You can't verify your own documents. Ask another administrator.");
   try {
     await prisma.$transaction(async (tx) => {
