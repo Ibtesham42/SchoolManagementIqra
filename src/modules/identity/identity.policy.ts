@@ -18,7 +18,7 @@
  */
 import { ForbiddenError, ValidationError } from "@/lib/errors";
 import { hasPermission, type AuthContext } from "@/lib/rbac/authorize";
-import type { PermissionKey, Scope } from "@/lib/rbac/catalog";
+import { isScopeAllowed, type PermissionKey, type Scope } from "@/lib/rbac/catalog";
 
 export const SUPER_ADMIN = "SUPER_ADMIN";
 
@@ -159,5 +159,17 @@ export function assertValidNewRoleKey(key: string, existing: Set<string>): void 
   }
   if (key === SUPER_ADMIN || existing.has(key)) {
     throw new ValidationError("A role with this key already exists.", [{ path: "key", message: "Already exists." }]);
+  }
+}
+
+/**
+ * S-08: a new or changed grant must use a scope the permission supports (catalog ALLOWED_SCOPES). An
+ * unchanged existing grant is left alone, so editing other permissions of an older role never fails.
+ */
+export function assertScopesSupported(current: { key: PermissionKey; scope: Scope }[], next: { key: PermissionKey; scope: Scope }[]): void {
+  const existing = new Set(current.map((g) => `${g.key}:${g.scope}`));
+  const bad = next.filter((g) => !existing.has(`${g.key}:${g.scope}`) && !isScopeAllowed(g.key, g.scope));
+  if (bad.length) {
+    throw new ValidationError(`These permissions can only be granted for all records: ${bad.map((g) => g.key).join(", ")}.`, bad.map((g) => ({ path: `perm.${g.key}`, message: "Scope not supported." })));
   }
 }

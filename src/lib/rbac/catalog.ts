@@ -29,6 +29,7 @@ export const PERMISSIONS = {
   "student.delete": "Soft-delete student records",
   "student.sensitive.read": "View Aadhaar and medical information",
   "student.document.read": "View student documents",
+  "student.document.manage": "Upload, replace, verify and remove student and admission documents",
   "student.promote": "Promote students",
   "student.transfer": "Transfer or withdraw students",
   "discipline.manage": "Record discipline incidents",
@@ -39,6 +40,7 @@ export const PERMISSIONS = {
   // Documents
   "idcard.generate": "Generate ID cards",
   "document.generate": "Generate school documents",
+  "document.revoke": "Revoke issued documents (they then fail public verification)",
   "certificate.issue": "Issue certificates",
   // HR
   "employee.read": "View employee records",
@@ -71,6 +73,7 @@ export const PERMISSIONS = {
   "transport.manage": "Manage vehicles, routes and stops",
   "transport.assign": "Assign students to routes",
   // Academics
+  "academic.read": "View classes and sections",
   "academic.manage": "Manage classes, sections, subjects and allocations",
   "timetable.read": "View timetables",
   "timetable.manage": "Manage timetables",
@@ -134,6 +137,7 @@ const READ_ACADEMIC: Grant[] = [
   "library.read",
   "inventory.read",
   "notice.read",
+  "academic.read",
 ];
 
 const TEACHER: Grant[] = [
@@ -147,6 +151,8 @@ const TEACHER: Grant[] = [
   ["salary.self.read", "SELF"],
   "library.read",
   "notice.read",
+  // ASSIGNED = the section(s) the teacher is class teacher of (academic.policy; TeacherAllocation in Phase 4).
+  ["academic.read", "ASSIGNED"],
 ];
 
 export const ROLES: RoleDefinition[] = [
@@ -162,12 +168,14 @@ export const ROLES: RoleDefinition[] = [
     name: "School Admin",
     description: "Day-to-day administration within the modules allowed by Super Admin.",
     grants: [
-      "user.read", "settings.read", "cms.read", "cms.edit", "cms.publish", "enquiry.read", "enquiry.manage",
+      // School-level settings and academic sessions (owner decision 2026-11-09). System-level authority
+      // (users, roles, backups, chatbot/AI, audit) stays with Super Admin.
+      "user.read", "settings.read", "settings.manage", "session.manage", "cms.read", "cms.edit", "cms.publish", "enquiry.read", "enquiry.manage",
       "admission.read", "admission.create", "admission.approve",
       "student.read", "student.create", "student.update", "student.delete", "student.document.read",
-      "student.promote", "student.transfer", "rollnumber.generate", "idcard.generate", "document.generate",
+      "student.document.manage", "student.promote", "student.transfer", "rollnumber.generate", "idcard.generate", "document.generate",
       "employee.read", "attendance.student.read", "attendance.employee.read", "fee.read", "transport.read",
-      "academic.manage", "timetable.read", "timetable.manage", "library.read", "inventory.read",
+      "academic.read", "academic.manage", "timetable.read", "timetable.manage", "library.read", "inventory.read",
       "import.run", "export.run", "notice.read", "notification.send",
     ],
   },
@@ -176,8 +184,9 @@ export const ROLES: RoleDefinition[] = [
     name: "Principal",
     description: "Academic head with approval authority.",
     grants: [
-      ...READ_ACADEMIC, "student.sensitive.read", "student.document.read", "leave.approve", "marks.approve",
-      "result.publish", "rollnumber.finalize", "rollnumber.correct", "certificate.issue", "payroll.read",
+      // admission.approve: Principal and School Admin approve admissions (owner decision D2, 2026-11-10).
+      ...READ_ACADEMIC, "admission.approve", "student.sensitive.read", "student.document.read", "leave.approve", "marks.approve",
+      "result.publish", "rollnumber.finalize", "rollnumber.correct", "certificate.issue", "document.revoke", "payroll.read",
       "payroll.approve", "fee.report", "cms.read", "cms.publish", "audit.read", "enquiry.read", "notification.send",
     ],
   },
@@ -218,6 +227,10 @@ export const ROLES: RoleDefinition[] = [
       "admission.read", "admission.create", "student.read", "student.create", "student.update",
       "student.document.read", "enquiry.read", "enquiry.manage", "rollnumber.generate", "idcard.generate",
       "document.generate", "leave.request", ["salary.self.read", "SELF"], "notice.read",
+      // Admissions need the class/section list (ADR-034).
+      "academic.read",
+      // Prepares and submits applications with their documents; never approves them (D2, maker-checker).
+      "student.document.manage",
     ],
   },
   { key: "TEACHER", name: "Teacher", description: "Access limited to assigned classes and subjects.", grants: TEACHER },
@@ -267,4 +280,27 @@ export const ROLES: RoleDefinition[] = [
 
 export function normalizeGrant(grant: Grant): { key: PermissionKey; scope: Scope } {
   return Array.isArray(grant) ? { key: grant[0], scope: grant[1] } : { key: grant, scope: "ALL" };
+}
+
+/**
+ * S-08 (2026-11-10): the scopes each permission may be granted with. "ALL" (except "*.self.*" keys); a narrower scope only
+ * where the catalog's own default roles use it — those are the scopes the owning module implements (or, for
+ * portal scopes not built yet, refuses). Every other service treats a narrower scope like ALL, so offering it
+ * in the role editor would silently grant everything. A module that starts honouring a new scope must list
+ * it here (and get a policy + tests) before roles can be given it.
+ */
+export const ALLOWED_SCOPES: Readonly<Record<PermissionKey, readonly Scope[]>> = (() => {
+  // "*.self.*" permissions (own salary slip) mean SELF by definition — never all records.
+  const out = Object.fromEntries(ALL_PERMISSION_KEYS.map((k) => [k, new Set<Scope>(k.includes(".self.") ? [] : ["ALL"])])) as Record<PermissionKey, Set<Scope>>;
+  // The system Super Admin role holds everything at ALL by construction and can't be edited — not a signal.
+  for (const role of ROLES) if (!role.isSystem) for (const g of role.grants) {
+    const { key, scope } = normalizeGrant(g);
+    out[key].add(scope);
+  }
+  const order: Scope[] = ["ALL", "ASSIGNED", "CHILDREN", "SELF"];
+  return Object.fromEntries(Object.entries(out).map(([k, set]) => [k, order.filter((s) => set.has(s))])) as unknown as Record<PermissionKey, readonly Scope[]>;
+})();
+
+export function isScopeAllowed(key: PermissionKey, scope: Scope): boolean {
+  return ALLOWED_SCOPES[key].includes(scope);
 }

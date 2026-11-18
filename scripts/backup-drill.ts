@@ -1,97 +1,85 @@
 /**
- * Logical backup → restore drill (docs/BACKUP_AND_RECOVERY.md).
+ * Logical backup → restore drill (docs/BACKUP_AND_RECOVERY.md, ADR-033):
  *
- *   tsx scripts/backup-drill.ts <SOURCE_URL> <TARGET_URL> [backupFile]
+ *   npm run backup:drill                          # in-memory only
+ *   npm run backup:drill -- --out D:\backups\school-YYYYMMDD.scbak   # + encrypted backup file
  *
- * 1. Exports every application table from SOURCE as JSON (file written only if backupFile given).
- * 2. Restores into TARGET, which must already be migrated and EMPTY (refuses otherwise).
- * 3. Resets identity sequences so new rows don't collide with restored ids.
- * 4. Verifies per-table row counts and content checksums are identical, and that the
- *    restored database accepts new writes.
- *
- * Never point TARGET at production. The backup contains password hashes and personal data:
- * keep any backup file on encrypted storage and delete drill copies afterwards.
+ * SOURCE is development (`.env`), read in a read-only session; TARGET is a disposable drill branch
+ * (`.env.restore.local`, written by `npm run drill:env`). No connection strings on the command
+ * line; both live identities are checked against allow-lists before anything is read or written.
+ * Logic in scripts/backup-drill-core.ts and scripts/drill-lib.ts. This file never prints secrets.
  */
-import { writeFileSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { parse as parseDotenv } from "dotenv";
 import pg from "pg";
+import { runDrill } from "./backup-drill-core";
+import { drillSessionOptions, MIN_PASSPHRASE, textDateTimeTypes } from "./drill-lib";
 
-// Parent tables first (FK order).
-const TABLES = [
-  "role", "permission", "role_permission", "academic_session", "school_setting", "user", "user_role",
-  "session", "password_reset_token", "stored_file", "audit_log", "notification", "sequence_counter",
-  "rate_limit_bucket", "usage_counter",
-];
+const shellEnv = { ...process.env }; // captured before anything reads an env file
 
-async function checksum(c: pg.Client, table: string) {
-  const { rows } = await c.query<{ n: string; md5: string | null }>(
-    `SELECT count(*)::text AS n, md5(string_agg(t::text, '|' ORDER BY t::text)) AS md5 FROM "${table}" t`,
-  );
-  return `${rows[0].n}:${rows[0].md5 ?? "empty"}`;
-}
+const readEnvFile = (name: string): Record<string, string | undefined> => {
+  const p = resolve(process.cwd(), name);
+  if (!existsSync(p)) throw new Error(`${name} not found in the project folder.`);
+  return parseDotenv(readFileSync(p));
+};
 
-async function main() {
-  const [source, target, file] = process.argv.slice(2);
-  if (!source || !target) throw new Error("usage: backup-drill <SOURCE_URL> <TARGET_URL> [backupFile]");
-  if (/prod/i.test(target)) throw new Error("Refusing: TARGET looks like production");
-
-  const src = new pg.Client({ connectionString: source });
-  const dst = new pg.Client({ connectionString: target });
-  await src.connect();
-  await dst.connect();
-  try {
-    // ── 1. Backup
-    const t0 = Date.now();
-    const backup: Record<string, unknown[]> = {};
-    for (const t of TABLES) backup[t] = (await src.query(`SELECT * FROM "${t}"`)).rows;
-    const json = JSON.stringify({ takenAt: new Date().toISOString(), tables: backup });
-    if (file) writeFileSync(file, json, "utf8");
-    console.log(`backup: ${TABLES.length} tables, ${(json.length / 1024).toFixed(1)} KB in ${Date.now() - t0} ms`);
-
-    // ── 2. Restore (target must be migrated + empty)
-    for (const t of TABLES) {
-      const { rows } = await dst.query<{ n: number }>(`SELECT count(*)::int AS n FROM "${t}"`);
-      if (rows[0].n > 0) throw new Error(`Refusing: target table "${t}" is not empty`);
-    }
-    const t1 = Date.now();
-    await dst.query("BEGIN");
-    try {
-      for (const t of TABLES) {
-        if (backup[t].length === 0) continue;
-        await dst.query(`INSERT INTO "${t}" SELECT * FROM json_populate_recordset(NULL::"${t}", $1::json)`, [
-          JSON.stringify(backup[t]),
-        ]);
+function readHidden(question: string): Promise<string> {
+  return new Promise((done, fail) => {
+    const stdin = process.stdin;
+    process.stdout.write(question);
+    let value = "";
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding("utf8");
+    const onData = (chunk: string) => {
+      for (const ch of chunk) {
+        if (ch === "\r" || ch === "\n") {
+          stdin.setRawMode(false);
+          stdin.pause();
+          stdin.off("data", onData);
+          process.stdout.write("\n");
+          return done(value);
+        }
+        if (ch === "\u0003") {
+          stdin.setRawMode(false);
+          return fail(new Error("Cancelled — nothing was written."));
+        }
+        if (ch === "\u0008" || ch === "\u007f") value = value.slice(0, -1);
+        else if (ch >= " ") value += ch;
       }
-      // ── 3. Identity sequences continue after restored ids
-      await dst.query(`SELECT setval(pg_get_serial_sequence('audit_log','id'), COALESCE((SELECT max(id) FROM audit_log), 0) + 1, false)`);
-      await dst.query("COMMIT");
-    } catch (e) {
-      await dst.query("ROLLBACK");
-      throw e;
-    }
-    console.log(`restore: committed in ${Date.now() - t1} ms`);
-
-    // ── 4. Verify
-    let ok = true;
-    for (const t of TABLES) {
-      const [a, b] = [await checksum(src, t), await checksum(dst, t)];
-      const same = a === b;
-      ok &&= same;
-      console.log(`${same ? "✓" : "✗"} ${t.padEnd(22)} ${a.split(":")[0].padStart(4)} rows  ${same ? "identical" : `MISMATCH ${a} vs ${b}`}`);
-    }
-    // New writes must work on the restored DB (catches stale identity sequences).
-    await dst.query("BEGIN");
-    await dst.query(`INSERT INTO audit_log (action, entity_type) VALUES ('backup.drill.write_check', 'Drill')`);
-    await dst.query("ROLLBACK");
-    console.log("✓ restored database accepts new writes (audit_log identity continues)");
-    if (!ok) process.exitCode = 1;
-    console.log(ok ? "DRILL PASSED" : "DRILL FAILED");
-  } finally {
-    await src.end();
-    await dst.end();
-  }
+    };
+    stdin.on("data", onData);
+  });
 }
 
-main().catch((e) => {
-  console.error("DRILL FAILED:", (e as Error).message);
-  process.exitCode = 1;
-});
+const sanitize = (m: string) => m.replace(/postgres(ql)?:\/\/[^\s]+/g, "<url>").replace(/npg_[A-Za-z0-9]+/g, "***");
+
+runDrill(process.argv.slice(2), {
+  shellEnv,
+  loadDevEnv: () => readEnvFile(".env"),
+  loadRestoreEnv: () => readEnvFile(".env.restore.local"),
+  connect: async (url, { readOnly }) => {
+    // UTC/ISO sessions and date/time values as text: timezone-safe on any machine (drill-lib).
+    const c = new pg.Client({ connectionString: url, connectionTimeoutMillis: 30_000, options: drillSessionOptions(readOnly), types: textDateTimeTypes(pg.types) });
+    await c.connect();
+    return c as unknown as import("./backup-drill-core").DrillClient;
+  },
+  isInteractive: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
+  promptPassphrase: async () => {
+    const a = await readHidden(`Backup passphrase (hidden, ${MIN_PASSPHRASE}+ characters): `);
+    const b = await readHidden("Repeat passphrase: ");
+    if (a !== b) throw new Error("Passphrases did not match — nothing was written.");
+    return a;
+  },
+  writeFile: (p, data) => writeFileSync(p, data, { flag: "wx" }), // never overwrite an existing backup
+  log: (l) => console.log(l),
+  projectDir: process.cwd(),
+})
+  .then((ok) => {
+    if (!ok) process.exitCode = 1;
+  })
+  .catch((e: unknown) => {
+    console.error(`DRILL FAILED: ${sanitize(e instanceof Error ? e.message : String(e))}`);
+    process.exitCode = 1;
+  });

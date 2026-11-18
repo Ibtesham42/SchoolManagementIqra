@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { AppError } from "@/lib/errors";
+import { isTransactionBusy } from "@/lib/db-errors";
+import { AppError, ServiceBusyError } from "@/lib/errors";
 
 /** Uniform result for server actions used with useActionState. */
 export interface ActionState {
@@ -34,6 +35,8 @@ export function fromError(e: unknown): ActionState {
       fieldErrors: e.details ? Object.fromEntries(e.details.map((d) => [d.path, d.message])) : undefined,
     };
   }
+  // KI-044: a transaction that couldn't start / timed out / hit the lock timeout is "busy", not broken.
+  if (isTransactionBusy(e)) return { error: new ServiceBusyError().message };
   console.error("action failed", e instanceof Error ? e.name : "unknown");
   return { error: "Something went wrong. Please try again." };
 }

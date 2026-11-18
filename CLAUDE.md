@@ -17,14 +17,14 @@ This is a real product used for daily administration. No placeholder buttons, no
 |---|---|
 | Runtime | **Node.js 26 LTS** (`engines: >=26.0.0`, `.nvmrc`). npm 11 install-script allowlist in `package.json → allowScripts` (only `prisma`, `@prisma/engines`, `esbuild`); review before approving any new one |
 | App | Next.js 16 App Router, React 19, TypeScript `strict`, `output: "standalone"` (portable) |
-| UI | Tailwind CSS v4, shadcn/ui (Radix primitives), lucide icons, Recharts |
-| Forms | React Hook Form + Zod (the same Zod schema validates on the server) |
+| UI | Tailwind CSS v4, shadcn/ui (Radix primitives, `radix-nova`), lucide icons; Recharts planned (dashboards) |
+| Forms | Server actions + `useActionState` + Zod (`lib/action-state.ts`, `components/erp/form.tsx`); the same Zod schema validates on the server. React Hook Form is not installed |
 | DB | **Neon Postgres Free** with `pgvector`; Prisma 7 + `@prisma/adapter-pg`. Runtime → pooled `DATABASE_URL`; CLI/migrations → `DIRECT_URL` (`prisma.config.ts`) |
 | Auth | Custom DB-backed sessions, Argon2id (`@node-rs/argon2`) |
-| Files | Public media → Cloudinary Free / local. Private documents → local or S3-compatible, **app-encrypted**, served only via authorized route |
+| Files | *Planned (Phase 2/8):* public media → Cloudinary Free / local; private documents → local or S3-compatible, **app-encrypted**, served only via authorized route. Not implemented yet |
 | Email | Provider interface: `log` (dev preview, default) / Resend Free |
-| PDF | `@react-pdf/renderer` (server-side) |
-| Import/Export | `exceljs`, `papaparse` |
+| PDF | *Planned (Phase 2):* `@react-pdf/renderer` (server-side). Not installed yet |
+| Import/Export | *Planned (Phases 2–7):* `exceljs`, `papaparse`. Not installed yet |
 | AI | Default **no LLM**: FAQ + Postgres FTS. Optional LLM (`openai-compatible`) with hard daily cap; optional local embeddings |
 | Tests | Vitest (unit + integration against real Postgres), Playwright (e2e, mobile viewports) |
 
@@ -54,7 +54,7 @@ src/
   components/ui         shadcn/ui primitives (owned code; mobile sizes + AA colours customised)
   components/erp        shared ERP blocks: TextField, FormStatus, SubmitButton, PageHeader,
                         ConfirmAction, OneTimeSecret, NotPermitted, navigation
-  components/public     public website sections (Phase 2)
+  components/public     public website sections (Roadmap Phase 8 — not created yet)
 tests/unit|integration|e2e
 docs/                   all project documentation
 ```
@@ -78,6 +78,7 @@ docs/                   all project documentation
 15. **Layer boundaries are enforced** (`npm run lint`, `npm run check:deps`): `lib` → nothing above it; `modules` → no `app`/`components`; `components` → no `app`/`modules`; `chatbot` → no `modules`. Fix the design, don't disable the rule.
 16. **Every page renders dynamically** (nonce CSP, ADR-024). Never add `export const dynamic = "force-static"`; cache data, not pages.
 17. **Changes to Super Admin membership** must call `lockSuperAdminGuard(tx)` as the first statement of the transaction (ADR-025).
+18. **Owner approval required** for: running migrations or seeds on any shared database, anything touching the production Neon branch or production data, deployments, secret changes, and git commits/pushes. Never read `.env*` files or production connection strings.
 
 ## Coding conventions
 
@@ -90,8 +91,8 @@ docs/                   all project documentation
 ## Workflow
 
 1. Read CLAUDE.md, the relevant `.claude/rules/*`, and the relevant skill.
-2. Check `docs/DEVELOPMENT_PROGRESS.md` and `docs/KNOWN_ISSUES.md`.
-3. Schema change → edit `prisma/schema.prisma` → `npx prisma migrate dev --name <change>` → update `docs/DATABASE_SCHEMA.md`.
+2. Check `docs/DEVELOPMENT_ROADMAP.md` (current phase/scope), `docs/DEVELOPMENT_PROGRESS.md` and `docs/KNOWN_ISSUES.md`.
+3. Schema change → edit `prisma/schema.prisma` → `npx prisma migrate dev --create-only --name <change>` → **review the SQL and get owner approval** → apply to the Neon `development`/`test` branches only → update `docs/DATABASE_SCHEMA.md` (database-migrations skill).
 4. Implement service + schemas + policy → route/action → UI.
 5. Tests: unit for pure logic, integration for services (real DB), e2e for critical flows.
 6. Run `npm run lint && npm run typecheck && npm run check:deps && npm test` before claiming completion. CI (`.github/workflows/ci.yml`) runs the offline subset on every push/PR to `main`.
@@ -108,7 +109,7 @@ npm run test:unit    # unit tests only (what CI runs)
 npm run check:deps   # circular imports + layer boundaries
 npm run test:e2e     # playwright
 npm run db:migrate   # prisma migrate dev (development branch only)
-npm run db:deploy    # prisma migrate deploy (production branch)
+npm run db:deploy    # prisma migrate deploy — reviewed migrations; production only with explicit owner approval
 npm run db:check     # verify connection, pgvector, migrations, tables, storage budget
 npm run db:seed      # roles, permissions, placeholder settings, first Super Admin
 ```
@@ -117,4 +118,12 @@ Prisma 7 notes: the client is generated to `src/generated/prisma` (import from `
 
 ## Documentation index (`docs/`)
 
-PROJECT_PLAN · FREE_TIER · SYSTEM_ARCHITECTURE · DATABASE_SCHEMA · DATABASE_RELATIONSHIPS · API_DOCUMENTATION · AUTHENTICATION_AND_RBAC · SECURITY · UI_UX_GUIDELINES · DEPLOYMENT · ENVIRONMENT_VARIABLES · TESTING_STRATEGY · DEVELOPMENT_PROGRESS · CHANGELOG · ROADMAP · KNOWN_ISSUES · BACKUP_AND_RECOVERY
+DEVELOPMENT_ROADMAP (current phases) · PHASE_2A_DB_VERIFICATION_CHECKLIST · NEON_SETUP_GUIDE · LOCAL_UI_AUDIT · PROJECT_PLAN (historical) · FREE_TIER · SYSTEM_ARCHITECTURE · DATABASE_SCHEMA · DATABASE_RELATIONSHIPS · API_DOCUMENTATION · AUTHENTICATION_AND_RBAC · SECURITY · UI_UX_GUIDELINES · DEPLOYMENT · ENVIRONMENT_VARIABLES · TESTING_STRATEGY · DEVELOPMENT_PROGRESS · CHANGELOG · ROADMAP · KNOWN_ISSUES · BACKUP_AND_RECOVERY
+
+## Claude Code setup (`.claude/`)
+
+- **Rules** (`.claude/rules/`): architecture, backend, database, frontend, security, testing — path-scoped where relevant.
+- **Agents** (10, non-overlapping): architect (plans), database-engineer, backend-developer, frontend-developer, ui-ux-designer (specs/reviews), qa-engineer, security-auditor (read-only), ai-engineer (chatbot), devops-ci-engineer (CI, config, deployment prep), documentation-manager (docs only). Every agent carries the same guardrails: no secrets or production data, migrations reviewed and approved before execution, no deploy/commit/push without the owner, tests before "complete".
+- **Skills** (20): cross-cutting — school-erp-architecture, nextjs-standards, auth-rbac, security-review, database-migrations, ui-accessibility, testing-and-quality, documentation-management, deployment-ci, import-export; domain — student-admission, student-id-generation, roll-number-generation, student-information, teacher-hr-management, payroll-management, academic-examination, fee-management, school-cms, chatbot-knowledge.
+- **Third-party skill** (1): `neon-postgres` from `neondatabase/agent-skills` (installed with `neon skills -s neon-postgres --agent claude-code`; pinned in `skills-lock.json`; update with `neon skills update`). Neon reference only — **this file and `.claude/rules/` take precedence over it**: never fetch, print or store connection strings (the owner puts them in `.env`; `.env*` stays on the deny list); creating, resetting or deleting Neon branches, `neon env pull`, SQL and migrations need owner approval naming the branch; never touch production; free-tier only (no Neon Auth/Functions/Object Storage — ADR-016).
+- **Why no per-domain agents** (student/academic/finance/HR specialists): they would duplicate the backend/frontend agents' scope. Domain knowledge lives in skills that any agent loads; this keeps responsibilities separated and instructions in one place.

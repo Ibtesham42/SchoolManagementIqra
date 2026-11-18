@@ -14,7 +14,7 @@ Threat model summary: public internet exposure; data about minors (high sensitiv
 | CSP & headers | `Content-Security-Policy` (nonce-based scripts), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`, HSTS in prod, `frame-ancestors 'none'` (except map embed source allowlisted in `frame-src`). |
 | CSRF | SameSite=Lax cookie + Origin check on all cookie-authenticated mutations. |
 | Rate limiting | Login, reset, enquiry, chatbot, upload, export endpoints. |
-| File uploads | Size caps per type; MIME detection from magic bytes (not extension); allowlist (jpg/png/webp/pdf/docx/xlsx/csv); images re-encoded with `sharp` (strips EXIF/GPS); random storage keys; private bucket; served via authorized handler with `Content-Disposition: attachment` for non-images. |
+| File uploads | Size caps per purpose (`lib/storage/upload-rules`); MIME detection from magic bytes (not extension or browser type); per-purpose allowlist (student documents: PDF/JPEG/PNG); **student photos re-encoded with `sharp` 0.35.5** (EXIF incl. GPS, XMP, ICC and appended data dropped; orientation applied; fail closed — an unprocessed photo is never stored); random storage keys; PRIVATE files encrypted (AES-256-GCM) outside `public/`/`.next/`; served only via owner-bound, audited handlers (`private, no-store`, PDFs as sandboxed attachments). Files > 1 MB go through the dedicated upload route (same-origin check, rate limit, Content-Length before reading, capped read, concurrency limit) — never server actions (KI-048). |
 | Sensitive fields | Aadhaar, PAN, bank account: AES-256-GCM (key `DATA_ENCRYPTION_KEY`, versioned for rotation) + HMAC for lookup; masked in UI; full value only with `*.sensitive.read`, and each reveal is audited. |
 | QR codes | Encode `https://<site>/verify/<verificationCode>` where the code is a random 128-bit token. The verify page shows only: valid/invalid, name initials, class, session, school. No DOB, phone, address, or IDs that allow enumeration. |
 | Exports | Permission per module + per sensitive column; every export audited (who, what filter, row count). Formula injection prevented in CSV/XLSX (prefix `'` to cells starting with `= + - @`). |
@@ -37,7 +37,7 @@ Threat model summary: public internet exposure; data about minors (high sensitiv
 | F4 | Medium | No DB connect timeout → requests could hang. | `connectionTimeoutMillis` (default 10 s, `DB_CONNECT_TIMEOUT_MS`). | Degraded run: responses < 0.1 s |
 | F5 | Medium | Per-IP rate limit used the leftmost (client-controlled) `X-Forwarded-For` entry. | Use the entry appended by our proxy (`TRUSTED_PROXY_HOPS`, default 1). | Unit tests |
 | F6 | Medium | `Secure` cookie tied to NODE_ENV: over plain HTTP, Safari/WebKit silently drops it (login appears to fail). | `Secure` follows `APP_URL` scheme; production boot **refuses** a non-HTTPS `APP_URL` (except localhost). | Unit tests; WebKit e2e |
-| F7 | Low | Current-password check on password change not rate limited. | Shares the per-user login limit. | Code review |
+| F7 | Low | Current-password check on password change not rate limited. | Rate limited per user in its own bucket (`passwordChange`, S-03 2026-11-10 — no longer shared with login). | Code review |
 
 Static sweep: no unsafe raw SQL, no `dangerouslySetInnerHTML`, no `eval`, no hard-coded credentials, no secret values in logs; interpolated SQL only uses constant table names (scripts).
 
@@ -77,6 +77,10 @@ Scope: password reset, RBAC/escalation, Super Admin concurrency, sessions & clea
 | A20 | Low (a11y) | No skip link; filter chips used `aria-current="page"`. | Skip-to-content link + focusable `<main>`; `aria-current="true"`. | Code review |
 
 Reviewed and found sound: Argon2id parameters; 256-bit session and reset tokens stored as SHA-256; session revocation on deactivate/password change/reset; lockout with generic errors and timing equalization; server actions' built-in Origin check (CSRF); bearer secret compared in constant time; AES-256-GCM with versioned keys and tamper detection; audit writes inside the same transaction; Zod `.strict()` on every action; `AppError`-only user messages; no circular dependencies.
+
+## Phase 2B closure security audit (2026-11-10)
+
+Full report, evidence and fix status: [SECURITY_AUDIT_2026-11-10_PHASE_2B.md](SECURITY_AUDIT_2026-11-10_PHASE_2B.md). No Critical or High findings. Fixed (offline-verified; database behaviour in `tests/integration/security-fixes-2b.test.ts`, pending a run): S-01 upload authorization before slot/body + 120 s read deadline; S-02 class-teacher access ends with a CLOSED session (removal allowed there); S-03 login limits per (username, IP) + failures-only ceiling, cleared by admin unlock/resets; S-04 public file route: in-process per-IP limit + anonymous negative cache (no database per probe); S-05 integration-test target allow-list + live identity; S-06 e2e setup guard, Super Admin lock, audit, teardown; S-08 role editor offers only supported scopes; S-09 losing the teacher role releases class-teacher sections; S-10 private PDFs sandboxed on the generic file route; S-11 CSV quoting on `;`/tab + wider formula prefixing; S-12 roll-number sheet requires `student.read` ALL; S-13 class teachers can't edit guardians shared outside their section; S-14 no self-approval of admissions; export audit without search text, capped body read, single-query row limit. Open: S-07 (append-only `audit_log` trigger — design only), S-15 (file purge lifecycle — proposal), S-20 (Claude Code deny list — diff only), and the Low/Info items listed in KNOWN_ISSUES KI-060.
 
 ## Data retention (to be confirmed with school — see KNOWN_ISSUES)
 

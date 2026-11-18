@@ -1,7 +1,7 @@
 # Security rules
 
 - Every non-public service function takes `ctx: AuthContext` and calls `authorize(ctx, "<permission>")` before touching data, then a record-scope policy for the specific IDs. UI hiding is never sufficient.
-- Responses go through serializers that drop sensitive fields (Aadhaar, PAN, bank, medical, salary) unless the caller holds the matching `*.sensitive.read` / payroll permission.
+- Responses only contain safe fields (explicit Prisma `select`, never whole rows) and drop sensitive fields (Aadhaar, PAN, bank, medical, salary) unless the caller holds the matching `*.sensitive.read` / payroll permission.
 - Sensitive fields are encrypted with `lib/crypto` (AES-256-GCM) and looked up by HMAC. Never log, export, or put them in error messages, audit `before/after` (store `"[REDACTED]"`), notifications, or chatbot context.
 - Validate all input with Zod `.strict()` schemas on the server, even when the form already validated it.
 - File uploads: use `lib/storage` only — it enforces size limits, magic-byte MIME detection, allowlist, image re-encoding and random keys.

@@ -1,0 +1,4 @@
+# Prisma checksums every migration.sql byte for byte; applied migrations must keep LF line endings on
+# every checkout (core.autocrlf=true on Windows would otherwise rewrite them to CRLF and make applied
+# migrations look modified).
+prisma/migrations/** text eol=lf

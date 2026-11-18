@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/erp/page-header";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/format";
+import { getSchoolTimezone } from "@/modules/settings/settings.public";
 import { NotPermitted } from "@/components/erp/not-permitted";
 
 export const metadata = { title: "Users" };
@@ -25,6 +27,7 @@ function StatusBadge({ active, locked }: { active: boolean; locked: boolean }) {
 
 export default async function UsersPage({ searchParams }: { searchParams: Promise<Search> }) {
   const ctx = await requireAuth();
+  const tz = await getSchoolTimezone();
   if (!hasPermission(ctx, "user.read")) return <NotPermitted />;
   const sp = await searchParams;
   const parsed = listUsersSchema.safeParse({ q: sp.q || undefined, status: sp.status ?? "all", page: sp.page ?? 1 });
@@ -69,7 +72,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
             href={href({ status: s, page: "1" })}
             aria-current={input.status === s ? "true" : undefined}
             className={cn(
-              "inline-flex min-h-11 items-center rounded-full border px-4 text-sm capitalize sm:min-h-9",
+              "inline-flex min-h-11 items-center rounded-full border px-4 text-sm capitalize sm:pointer-fine:min-h-9",
               input.status === s ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted",
             )}
           >
@@ -110,7 +113,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                     <TableCell>
                       <StatusBadge active={u.isActive} locked={u.isLocked} />
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{u.lastLoginAt ? u.lastLoginAt.toLocaleDateString("en-IN", { dateStyle: "medium" }) : "Never"}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{u.lastLoginAt ? formatDate(u.lastLoginAt, tz) : "Never"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

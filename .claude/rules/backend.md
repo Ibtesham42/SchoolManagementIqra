@@ -8,9 +8,9 @@ paths:
 
 # Backend rules
 
-- Module layout: `<name>.service.ts` (business logic, the only mutation path), `<name>.schemas.ts` (Zod), `<name>.policy.ts` (record scopes), `<name>.serializers.ts` (response shaping).
+- Module layout (as implemented in `src/modules/identity/`): `<name>.service.ts` (business logic, the only mutation path), `<name>.schemas.ts` (Zod `.strict()`), `<name>.policy.ts` (pure, unit-tested authorization/scope rules). Services return only safe fields via explicit Prisma `select` (e.g. `SAFE_USER`) — there are no separate serializer files.
 - Service signature: `async function verbNoun(ctx: AuthContext, input: ParsedInput, deps?)`. Pure calculations (fees, payroll, grades, roll numbers) live in separate side-effect-free files so they are unit-testable.
-- Throw `AppError` subclasses; never return error strings. Route handlers use `withRoute()` from `lib/http` to map errors, attach request id and rate-limit.
+- Throw `AppError` subclasses; never return error strings. Server actions map errors with `fromError`/`fromZod` (`lib/action-state.ts`); route handlers map them explicitly (see `app/api/cron/cleanup/route.ts`). A shared route wrapper does not exist yet — add one (with tests) when the first REST module needs it.
 - Write `audit(tx, {...})` inside the same transaction as the change it records.
 - Notifications are enqueued after commit, never inside the transaction.
 - Money math with `decimal.js`; round only at defined points (line totals, final amount) with `ROUND_HALF_UP` to 2 decimals.

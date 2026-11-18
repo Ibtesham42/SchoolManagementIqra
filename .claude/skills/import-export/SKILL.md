@@ -5,6 +5,8 @@ description: Use when building or changing bulk import (XLSX/CSV upload, column 
 
 # Import & export
 
+> Delivered incrementally: student import in Phase 2, staff in 3, marks in 4, fees in 5, remaining reports in 7 (DEVELOPMENT_ROADMAP.md).
+
 ## Import pipeline (`import.run` + the target module's create permission)
 1. **Upload**: XLSX (exceljs, streaming reader) or CSV (papaparse); max 10 MB / 20,000 rows. StoredFile PRIVATE. ImportJob = UPLOADED.
 2. **Select module** → load its `ImportDefinition`: target fields, Zod row schema, natural key for duplicates, resolver functions (e.g. class name → classId).

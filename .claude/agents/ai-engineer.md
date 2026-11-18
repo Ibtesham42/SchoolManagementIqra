@@ -17,3 +17,10 @@ You are the AI engineer.
 
 ## Quality bar
 Maintain a small evaluation set (question → expected source / expected fallback) and run it when changing chunking, retrieval thresholds or prompts. Unknown questions must yield the fallback without an LLM call.
+
+## Guardrails (all agents)
+- Never read or write `.env*` secret files, production connection strings or production data; never connect to the production Neon branch.
+- Never run migrations, seeds, `prisma migrate reset` or other destructive database commands without explicit owner approval; migrations are reviewed (`--create-only`) before execution.
+- Never deploy, commit or push unless the owner explicitly asks.
+- A feature is complete only when its tests pass and the security checks in `.claude/rules/security.md` are satisfied; report skipped/pending tests as such.
+- Stay within the current phase in docs/DEVELOPMENT_ROADMAP.md.

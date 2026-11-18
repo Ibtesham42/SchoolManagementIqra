@@ -1,39 +1,32 @@
 /**
  * Environment + Neon branch identity check: `npm run env:check`
- * Prints NO secret values — only pass/fail per check, masked hosts and opaque branch fingerprints.
+ * Prints NO secret values — only pass/fail per check, counts and opaque 8-character fingerprints.
  * Exits non-zero if anything is uncertain, so migrations/seed are never run against the wrong branch.
  *
- * Optional: FORBIDDEN_BRANCH_IDS=br-a,br-b  (branches that must never be targeted, e.g. production)
+ * Connected mode requires both protections (ids are not secrets):
+ *   FORBIDDEN_BRANCH_IDS=br-…     (e.g. the production branch) — refused after reading the branch id
+ *   FORBIDDEN_ENDPOINT_IDS=ep-…   (e.g. the production endpoint) — refused from the host name,
+ *                                 BEFORE any connection is attempted
+ * It connects only if every other check passed, and only to DATABASE_URL, DIRECT_URL and
+ * TEST_DATABASE_URL, in read-only sessions.
+ *
+ * `npm run env:check -- --offline` (`npm run env:check:offline`) — files and formats only, never
+ * opens a connection.
+ *
+ * All logic lives in scripts/env-check-lib.ts (unit-tested); this file only loads .env and supplies
+ * the real side effects.
  */
 import "dotenv/config";
-import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import pg from "pg";
+import { runEnvCheck, sanitizeError, type BranchIdentity } from "./env-check-lib";
 
-let failed = false;
-const ok = (msg: string) => console.log(`✓ ${msg}`);
-const bad = (msg: string) => {
-  failed = true;
-  console.log(`✗ ${msg}`);
-};
-const fp = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 8); // opaque fingerprint
-
-function parse(name: string) {
-  const raw = process.env[name];
-  if (!raw) return null;
-  try {
-    return new URL(raw);
-  } catch {
-    bad(`${name}: not a valid URL`);
-    return null;
-  }
-}
-
-async function identity(name: string, url: URL) {
+async function identity(_name: string, url: URL): Promise<BranchIdentity> {
   const c = new pg.Client({ connectionString: url.toString(), connectionTimeoutMillis: 20_000 });
   await c.connect();
   try {
     await c.query("SET default_transaction_read_only = on");
-    const { rows } = await c.query<{ branch: string | null; endpoint: string | null; version: string }>(
+    const { rows } = await c.query<BranchIdentity>(
       `SELECT current_setting('neon.branch_id', true) AS branch,
               current_setting('neon.endpoint_id', true) AS endpoint,
               current_setting('server_version') AS version`,
@@ -44,65 +37,16 @@ async function identity(name: string, url: URL) {
   }
 }
 
-async function main() {
-  // 1. Required variables present (names only)
-  const required = ["DATABASE_URL", "DIRECT_URL", "TEST_DATABASE_URL", "APP_URL", "SESSION_SECRET", "DATA_ENCRYPTION_KEY", "DATA_HMAC_KEY"];
-  const missing = required.filter((k) => !process.env[k]);
-  if (missing.length) bad(`missing variables: ${missing.join(", ")}`);
-  else ok(`all ${required.length} required variables present`);
-
-  for (const k of ["DATA_ENCRYPTION_KEY", "DATA_HMAC_KEY"]) {
-    const v = process.env[k];
-    if (v && Buffer.from(v, "base64").length !== 32) bad(`${k}: must decode to 32 bytes`);
-  }
-  if ((process.env.SESSION_SECRET ?? "").length < 32) bad("SESSION_SECRET: shorter than 32 characters");
-  if (process.env.DATA_ENCRYPTION_KEY && process.env.DATA_ENCRYPTION_KEY === process.env.DATA_HMAC_KEY) {
-    bad("DATA_ENCRYPTION_KEY and DATA_HMAC_KEY must differ");
-  }
-  const seedUser = process.env.SEED_SUPERADMIN_USERNAME;
-  const seedPass = process.env.SEED_SUPERADMIN_PASSWORD;
-  if (!seedUser || !seedPass) bad("SEED_SUPERADMIN_USERNAME/PASSWORD not set");
-  else if (seedPass.length < 10) bad("SEED_SUPERADMIN_PASSWORD shorter than 10 characters");
-
-  // 2. URL shape
-  const dev = parse("DATABASE_URL");
-  const direct = parse("DIRECT_URL");
-  const test = parse("TEST_DATABASE_URL");
-  if (!dev || !direct || !test) return finish();
-
-  const pooled = (u: URL) => u.hostname.includes("-pooler");
-  pooled(dev) ? ok("DATABASE_URL uses the pooled endpoint") : bad("DATABASE_URL should be the POOLED string (host contains -pooler)");
-  !pooled(direct) ? ok("DIRECT_URL uses the direct endpoint") : bad("DIRECT_URL must be the DIRECT string (no -pooler)");
-  for (const [n, u] of [["DATABASE_URL", dev], ["DIRECT_URL", direct], ["TEST_DATABASE_URL", test]] as const) {
-    const mode = u.searchParams.get("sslmode");
-    if (!mode || mode === "disable" || mode === "allow") bad(`${n}: sslmode must be require/verify-full`);
-    if (/prod/i.test(u.toString())) bad(`${n}: contains "prod" — refusing`);
-  }
-  if (dev.toString() === test.toString()) bad("TEST_DATABASE_URL is identical to DATABASE_URL");
-
-  // 3. Branch identity (read-only sessions)
-  const [a, b, t] = await Promise.all([identity("DATABASE_URL", dev), identity("DIRECT_URL", direct), identity("TEST_DATABASE_URL", test)]);
-  if (!a.branch || !b.branch || !t.branch) bad("could not read neon.branch_id — cannot confirm branch identity");
-  else {
-    console.log(`  development branch fingerprint ${fp(a.branch)} (pooled) / ${fp(b.branch)} (direct); test ${fp(t.branch)}; PostgreSQL ${a.version}`);
-    a.branch === b.branch ? ok("DATABASE_URL and DIRECT_URL are the same branch") : bad("DATABASE_URL and DIRECT_URL point to DIFFERENT branches");
-    t.branch !== a.branch ? ok("test branch is different from development") : bad("TEST_DATABASE_URL is the SAME branch as development");
-    const forbidden = (process.env.FORBIDDEN_BRANCH_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-    for (const [label, id] of [["development", a.branch], ["test", t.branch]] as const) {
-      if (forbidden.includes(id)) bad(`${label} branch is in FORBIDDEN_BRANCH_IDS (e.g. production) — refusing`);
-    }
-    if (forbidden.length) ok(`neither branch is one of the ${forbidden.length} forbidden branch id(s)`);
-  }
-  finish();
-}
-
-function finish() {
-  console.log(failed ? "ENV CHECK FAILED — do not migrate or seed" : "ENV CHECK PASSED");
-  if (failed) process.exitCode = 1;
-}
-
-main().catch((e) => {
-  console.log(`✗ ${(e as Error).message.replace(/postgres(ql)?:\/\/[^\s]+/g, "<url>").replace(/npg_[A-Za-z0-9]+/g, "***")}`);
-  console.log("ENV CHECK FAILED — do not migrate or seed");
-  process.exitCode = 1;
-});
+runEnvCheck(
+  process.env,
+  { identity, exists: existsSync, readFile: (p) => readFileSync(p, "utf8"), log: (l) => console.log(l), cwd: process.cwd() },
+  process.argv.includes("--offline"),
+)
+  .then((passed) => {
+    if (!passed) process.exitCode = 1;
+  })
+  .catch((e: unknown) => {
+    console.log(`✗ ${sanitizeError(e instanceof Error ? e.message : String(e))}`);
+    console.log("ENV CHECK FAILED — do not migrate or seed");
+    process.exitCode = 1;
+  });

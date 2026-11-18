@@ -6,7 +6,7 @@
 
 Legend: ✓ = all records · A = assigned records only · S = own record only · C = linked children only · blank = denied
 
-Roles: 13 · Permissions: 79
+Roles: 13 · Permissions: 82
 
 | Permission | SUPER_ADMIN | SCHOOL_ADMIN | PRINCIPAL | VICE_PRINCIPAL | ACCOUNTANT | HR_MANAGER | ADMISSION_OFFICER | TEACHER | CLASS_TEACHER | TRANSPORT_MANAGER | LIBRARIAN | PARENT | STUDENT |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -14,8 +14,8 @@ Roles: 13 · Permissions: 79
 | `user.manage` — Create, edit, deactivate users and assign roles | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |
 | `role.manage` — Edit roles and their permissions | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |
 | `settings.read` — View school settings | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |
-| `settings.manage` — Change school settings | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |
-| `session.manage` — Manage academic sessions | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |
+| `settings.manage` — Change school settings | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |
+| `session.manage` — Manage academic sessions | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |
 | `template.manage` — Manage document and ID card templates | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |
 | `cms.read` — View website content in the CMS | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |  |
 | `cms.edit` — Edit website content drafts | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |
@@ -24,13 +24,14 @@ Roles: 13 · Permissions: 79
 | `enquiry.manage` — Update admission enquiries | ✓ | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |
 | `admission.read` — View admissions | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |  |  |  |  |  |  |
 | `admission.create` — Create admissions | ✓ | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |
-| `admission.approve` — Approve admissions and override duplicate warnings | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |
+| `admission.approve` — Approve admissions and override duplicate warnings | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |
 | `student.read` — View student records | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | A | A | A | ✓ | C | S |
 | `student.create` — Create students | ✓ | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |
 | `student.update` — Edit student records | ✓ | ✓ |  |  |  |  | ✓ |  | A |  |  |  |  |
 | `student.delete` — Soft-delete student records | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |
 | `student.sensitive.read` — View Aadhaar and medical information | ✓ |  | ✓ | ✓ |  |  |  |  |  |  |  |  |  |
 | `student.document.read` — View student documents | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |  |  |  |  |  |  |
+| `student.document.manage` — Upload, replace, verify and remove student and admission documents | ✓ | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |
 | `student.promote` — Promote students | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |
 | `student.transfer` — Transfer or withdraw students | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |
 | `discipline.manage` — Record discipline incidents | ✓ |  |  |  |  |  |  |  | A |  |  |  |  |
@@ -39,6 +40,7 @@ Roles: 13 · Permissions: 79
 | `rollnumber.correct` — Correct finalized roll numbers | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |
 | `idcard.generate` — Generate ID cards | ✓ | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |
 | `document.generate` — Generate school documents | ✓ | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |
+| `document.revoke` — Revoke issued documents (they then fail public verification) | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |
 | `certificate.issue` — Issue certificates | ✓ |  | ✓ | ✓ |  |  |  |  |  |  |  |  |  |
 | `employee.read` — View employee records | ✓ | ✓ | ✓ | ✓ |  | ✓ |  |  |  |  | ✓ |  |  |
 | `employee.manage` — Create and edit employees | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |
@@ -65,6 +67,7 @@ Roles: 13 · Permissions: 79
 | `transport.read` — View transport | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  | ✓ |  |  |  |
 | `transport.manage` — Manage vehicles, routes and stops | ✓ |  |  |  |  |  |  |  |  | ✓ |  |  |  |
 | `transport.assign` — Assign students to routes | ✓ |  |  |  |  |  |  |  |  | ✓ |  |  |  |
+| `academic.read` — View classes and sections | ✓ | ✓ | ✓ | ✓ |  |  | ✓ | A | A |  |  |  |  |
 | `academic.manage` — Manage classes, sections, subjects and allocations | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |
 | `timetable.read` — View timetables | ✓ | ✓ | ✓ | ✓ |  |  |  | ✓ | ✓ |  |  | C | S |
 | `timetable.manage` — Manage timetables | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |
@@ -94,15 +97,15 @@ Roles: 13 · Permissions: 79
 
 | Role | Permissions granted |
 |---|--:|
-| Super Admin (`SUPER_ADMIN`) | 79 |
-| School Admin (`SCHOOL_ADMIN`) | 34 |
-| Principal (`PRINCIPAL`) | 28 |
-| Vice Principal (`VICE_PRINCIPAL`) | 22 |
+| Super Admin (`SUPER_ADMIN`) | 82 |
+| School Admin (`SCHOOL_ADMIN`) | 38 |
+| Principal (`PRINCIPAL`) | 31 |
+| Vice Principal (`VICE_PRINCIPAL`) | 23 |
 | Accountant (`ACCOUNTANT`) | 15 |
 | HR Manager (`HR_MANAGER`) | 13 |
-| Admission Officer (`ADMISSION_OFFICER`) | 14 |
-| Teacher (`TEACHER`) | 10 |
-| Class Teacher (`CLASS_TEACHER`) | 12 |
+| Admission Officer (`ADMISSION_OFFICER`) | 16 |
+| Teacher (`TEACHER`) | 11 |
+| Class Teacher (`CLASS_TEACHER`) | 13 |
 | Transport Manager (`TRANSPORT_MANAGER`) | 7 |
 | Librarian (`LIBRARIAN`) | 8 |
 | Parent (`PARENT`) | 7 |

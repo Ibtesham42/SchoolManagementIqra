@@ -3,7 +3,7 @@ import { Lock, Trash2 } from "lucide-react";
 import { requireAuth } from "@/lib/auth/context";
 import { hasPermission } from "@/lib/rbac/authorize";
 import { NotFoundError } from "@/lib/errors";
-import { ALL_PERMISSION_KEYS, PERMISSIONS, moduleOf } from "@/lib/rbac/catalog";
+import { ALL_PERMISSION_KEYS, PERMISSIONS, moduleOf, ALLOWED_SCOPES } from "@/lib/rbac/catalog";
 import { getRole } from "@/modules/identity/roles.service";
 import { actorCovers, assertCanEditRole } from "@/modules/identity/identity.policy";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -41,6 +41,8 @@ export default async function RoleDetailPage({ params }: { params: Promise<{ id:
     module: moduleOf(key),
     description: PERMISSIONS[key],
     scope: granted.get(key) ?? "",
+    // S-08: only scopes the owning module honours (an older grant outside them stays visible as-is).
+    allowedScopes: [...new Set([...ALLOWED_SCOPES[key], ...(granted.has(key) ? [granted.get(key)!] : [])])],
     // Non–Super Admins may only change permissions they hold themselves (anti-escalation).
     locked: !editable || (!ctx.isSuperAdmin && !actorCovers(ctx, key, "SELF")),
   }));

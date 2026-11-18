@@ -3,6 +3,8 @@ import { Ban, KeyRound, LogOut, RotateCcw, Unlock } from "lucide-react";
 import { requireAuth } from "@/lib/auth/context";
 import { hasPermission } from "@/lib/rbac/authorize";
 import { NotFoundError } from "@/lib/errors";
+import { formatDateTime } from "@/lib/format";
+import { getSchoolTimezone } from "@/modules/settings/settings.public";
 import { getUser, listAssignableRoles } from "@/modules/identity/users.service";
 import { SUPER_ADMIN, assertCanModifyUser } from "@/modules/identity/identity.policy";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +25,7 @@ export const metadata = { title: "User" };
 
 export default async function UserDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireAuth();
+  const tz = await getSchoolTimezone();
   if (!hasPermission(ctx, "user.read")) return <NotPermitted />;
   const { id } = await params;
   const user = await getUser(ctx, id).catch((e) => {
@@ -62,7 +65,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         <CardHeader>
           <CardTitle>Details</CardTitle>
           <CardDescription>
-            Last sign-in: {user.lastLoginAt ? user.lastLoginAt.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "never"} · Active
+            Last sign-in: {user.lastLoginAt ? formatDateTime(user.lastLoginAt, tz) : "never"} · Active
             sessions: {user._count.sessions}
           </CardDescription>
         </CardHeader>

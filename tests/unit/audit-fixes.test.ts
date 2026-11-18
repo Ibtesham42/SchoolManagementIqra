@@ -135,8 +135,8 @@ describe("J — public school name is cached (crawlers mustn't keep Neon awake)"
     findUnique.mockReset();
   });
   it("hits the DB at most once per 5 minutes and degrades gracefully", async () => {
-    const { getSchoolName, invalidateSchoolNameCache } = await import("@/modules/settings/settings.public");
-    invalidateSchoolNameCache();
+    const { getSchoolName, invalidateSchoolProfileCache } = await import("@/modules/settings/settings.public");
+    invalidateSchoolProfileCache();
     findUnique.mockResolvedValue({ name: "Demo Public School" });
     const t = 1_000_000;
     expect(await getSchoolName(t)).toBe("Demo Public School");

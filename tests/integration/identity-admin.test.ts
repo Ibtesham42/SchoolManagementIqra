@@ -1,12 +1,15 @@
 import { readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { integrationEnabled } from "../test-scope";
+import type { PermissionKey } from "@/lib/rbac/catalog";
 
 /**
  * PENDING until TEST_DATABASE_URL (Neon "test" branch, migrated) is configured — skipped otherwise.
  * Exercises user/role administration and password reset through real transactions.
  */
-const enabled = !!process.env.TEST_DATABASE_URL;
+// KI-043: runs only via `npm run test:integration` (explicit opt-in) AND with TEST_DATABASE_URL.
+const enabled = integrationEnabled();
 
 const load = async () => ({
   ...(await import("@/lib/db")),
@@ -32,22 +35,9 @@ describe.skipIf(!enabled)("identity administration (integration)", () => {
   }
 
   beforeAll(async () => {
-    const { prisma, ROLES, ALL_PERMISSION_KEYS, normalizeGrant } = m;
-    for (const key of ALL_PERMISSION_KEYS) {
-      await prisma.permission.upsert({ where: { key }, create: { key, module: key.split(".")[0], description: key }, update: {} });
-    }
-    const permIds = new Map((await prisma.permission.findMany()).map((p) => [p.key, p.id]));
-    for (const def of ROLES) {
-      const role = await prisma.role.upsert({ where: { key: def.key }, create: { key: def.key, name: def.name, isSystem: !!def.isSystem }, update: {} });
-      for (const g of def.grants) {
-        const { key, scope } = normalizeGrant(g);
-        await prisma.rolePermission.upsert({
-          where: { roleId_permissionId: { roleId: role.id, permissionId: permIds.get(key)! } },
-          create: { roleId: role.id, permissionId: permIds.get(key)!, scope },
-          update: {},
-        });
-      }
-    }
+    const { prisma } = m;
+    // KI-044: full catalog (82 / 13 / 271) in one batched transaction, verified exactly — no user, no Super Admin.
+    await (await import("./catalog-setup")).ensureCatalog();
     const sa = await prisma.role.findUniqueOrThrow({ where: { key: "SUPER_ADMIN" } });
     const u = await prisma.user.create({
       data: { username: `${run}-root`, displayName: "Root", passwordHash: "x", roles: { create: { roleId: sa.id } } },
@@ -103,7 +93,14 @@ describe.skipIf(!enabled)("identity administration (integration)", () => {
     await expect(m.createUser(dctx, { username: `${run}-x`, displayName: "X", email: null, roleKeys: ["SUPER_ADMIN"] })).rejects.toThrow(/Super Admin role/);
     await expect(m.createUser(dctx, { username: `${run}-y`, displayName: "Y", email: null, roleKeys: ["ACCOUNTANT"] })).rejects.toThrow(/do not hold/);
     const lib = await m.prisma.role.findUniqueOrThrow({ where: { key: "LIBRARIAN" } });
-    await expect(m.setRolePermissions(dctx, { id: lib.id, grants: [{ key: "payroll.read", scope: "ALL" }] })).rejects.toThrow(/payroll.read/);
+    // Keep the Librarian's existing grants and add only payroll.read, so the one attempted change —
+    // granting a permission the delegated admin does not hold — is the violation under test.
+    const libGrants = (await m.prisma.rolePermission.findMany({ where: { roleId: lib.id }, select: { scope: true, permission: { select: { key: true } } } })).map(
+      (g) => ({ key: g.permission.key as PermissionKey, scope: g.scope }),
+    );
+    expect(libGrants.length).toBeGreaterThan(0);
+    expect(libGrants.some((g) => g.key === "payroll.read")).toBe(false);
+    await expect(m.setRolePermissions(dctx, { id: lib.id, grants: [...libGrants, { key: "payroll.read", scope: "ALL" }] })).rejects.toThrow(/payroll.read/);
     await expect(m.setRolePermissions(dctx, { id: custom.id, grants: [] })).rejects.toThrow(/role you hold/);
   });
 

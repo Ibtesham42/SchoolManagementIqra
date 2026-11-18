@@ -5,6 +5,8 @@ description: Use when working on the public school website or its CMS — pages,
 
 # School CMS & public website
 
+> Roadmap Phase 8 (Public School Website and CMS). Pages render dynamically (nonce CSP) — cache public data, not pages.
+
 ## Responsibilities
 All public content comes from the database, is editable by authorized staff, and only PUBLISHED content is ever shown publicly.
 

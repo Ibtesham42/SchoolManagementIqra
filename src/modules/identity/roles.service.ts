@@ -9,6 +9,7 @@ import {
   assertCanDeleteRole,
   assertCanEditRole,
   assertGrantsWithinActor,
+  assertScopesSupported,
   assertValidNewRoleKey,
 } from "./identity.policy";
 import type { createRoleSchema, setRolePermissionsSchema, updateRoleSchema } from "./identity.schemas";
@@ -97,6 +98,7 @@ export async function setRolePermissions(ctx: AuthContext, input: z.infer<typeof
     if (!role) throw new NotFoundError("Role not found.");
     assertCanEditRole(ctx, role);
     const current = role.permissions.map((p) => ({ key: p.permission.key as PermissionKey, scope: p.scope as Scope }));
+    assertScopesSupported(current, input.grants);
     assertGrantsWithinActor(ctx, current, input.grants);
 
     const ids = new Map(
@@ -128,3 +130,4 @@ export async function deleteRole(ctx: AuthContext, id: string) {
     await audit(tx, actorOf(ctx), { action: "role.delete", entityType: "Role", entityId: id, before: { key: role.key, name: role.name } });
   });
 }
+

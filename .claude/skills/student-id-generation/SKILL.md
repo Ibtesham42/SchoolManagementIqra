@@ -5,12 +5,14 @@ description: Use when generating or formatting any human-facing serial identifie
 
 # Permanent ID & sequence generation
 
+> Roadmap Phase 2 for student IDs/admission numbers; reused by later phases (employee codes, receipts, slips). `nextSequence` in `src/lib/sequence.ts` already exists and is tested.
+
 ## Responsibilities
 Produce unique, never-reused, never-changing identifiers under concurrency.
 
 ## Mechanism
 - Table `SequenceCounter(key PK, value Int)`.
-- `sequence.next(tx, key)` executes inside the caller's transaction:
+- `nextSequence(tx, key)` (`src/lib/sequence.ts`) executes inside the caller's transaction:
   ```sql
   INSERT INTO sequence_counter(key, value) VALUES ($1, 1)
   ON CONFLICT (key) DO UPDATE SET value = sequence_counter.value + 1

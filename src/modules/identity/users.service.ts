@@ -6,8 +6,12 @@ import { generateTemporaryPassword } from "@/lib/auth/temp-password";
 import { isUniqueViolation } from "@/lib/db-errors";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import { authorize, type AuthContext } from "@/lib/rbac/authorize";
+import { clearLoginLimits } from "./auth.service";
+import { CLASS_TEACHER_ROLE_KEYS } from "@/modules/academic/academic.policy";
+import { releaseClassTeacherAssignments } from "@/modules/academic/academic.tx";
 import type { PermissionKey, Scope } from "@/lib/rbac/catalog";
 import type { Prisma } from "@/generated/prisma/client";
+import { activeSuperAdminIds, lockSuperAdminGuard } from "./super-admin-guard";
 import {
   SUPER_ADMIN,
   actorCovers,
@@ -118,28 +122,6 @@ async function loadTarget(tx: Tx, id: string): Promise<TargetUser & { username: 
   };
 }
 
-/**
- * Serializes every operation that can change who is an active Super Admin.
- * A transaction-scoped advisory lock (released at commit/rollback; works through Neon's
- * transaction-mode pooler). Row locks on a JOIN are NOT enough under READ COMMITTED: a blocked
- * `SELECT … FOR UPDATE` re-checks only the locked rows, while joined rows (user_role) come from the
- * old snapshot — so "remove A's role" racing "deactivate B" could leave zero Super Admins.
- * Must be the FIRST statement of the transaction, before any reads it depends on.
- */
-async function lockSuperAdminGuard(tx: Tx): Promise<void> {
-  await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext('school_erp.super_admin_guard'))) AS l`;
-}
-
-/** Read AFTER lockSuperAdminGuard(): each READ COMMITTED statement sees all prior commits. */
-async function activeSuperAdminIds(tx: Tx): Promise<string[]> {
-  const rows = await tx.$queryRaw<{ id: string }[]>`
-    SELECT u.id FROM "user" u
-    JOIN user_role ur ON ur.user_id = u.id
-    JOIN role r ON r.id = ur.role_id
-    WHERE r.key = ${SUPER_ADMIN} AND u.is_active AND u.deleted_at IS NULL`;
-  return rows.map((r) => r.id);
-}
-
 async function setRoles(tx: Tx, userId: string, roleKeys: string[]) {
   const roles = await tx.role.findMany({ where: { key: { in: roleKeys } }, select: { id: true } });
   await tx.userRole.deleteMany({ where: { userId } });
@@ -194,6 +176,10 @@ export async function updateUser(ctx: AuthContext, input: z.infer<typeof updateU
         select: { displayName: true, email: true },
       });
       await setRoles(tx, target.id, input.roleKeys);
+      // S-09: losing every class-teacher-eligible role ends the user's class-teacher assignments (same transaction).
+      if (!input.roleKeys.some((k) => (CLASS_TEACHER_ROLE_KEYS as readonly string[]).includes(k))) {
+        await releaseClassTeacherAssignments(tx, actorOf(ctx), target.id);
+      }
       // Permissions are loaded on every request, so role changes take effect immediately — no session revocation needed.
       await audit(tx, actorOf(ctx), {
         action: "user.update",
@@ -240,7 +226,7 @@ export async function adminResetPassword(ctx: AuthContext, id: string) {
   authorize(ctx, "user.manage");
   const temporaryPassword = generateTemporaryPassword();
   const passwordHash = await hashPassword(temporaryPassword);
-  await prisma.$transaction(async (tx) => {
+  const username = await prisma.$transaction(async (tx) => {
     const target = await loadTarget(tx, id);
     assertCanModifyUser(ctx, target);
     await tx.user.update({
@@ -250,18 +236,23 @@ export async function adminResetPassword(ctx: AuthContext, id: string) {
     await tx.session.deleteMany({ where: { userId: id } });
     await tx.passwordResetToken.updateMany({ where: { userId: id, usedAt: null }, data: { usedAt: new Date() } });
     await audit(tx, actorOf(ctx), { action: "user.password_reset_by_admin", entityType: "User", entityId: id });
+    return target.username;
   });
+  await clearLoginLimits(username); // S-03: after commit
   return { temporaryPassword };
 }
 
+/** Clears the account lock AND (after commit) the user's login limiter buckets (S-03). */
 export async function unlockUser(ctx: AuthContext, id: string) {
   authorize(ctx, "user.manage");
-  await prisma.$transaction(async (tx) => {
+  const username = await prisma.$transaction(async (tx) => {
     const target = await loadTarget(tx, id);
     assertCanModifyUser(ctx, target);
     await tx.user.update({ where: { id }, data: { failedLoginCount: 0, lockedUntil: null } });
     await audit(tx, actorOf(ctx), { action: "user.unlock", entityType: "User", entityId: id });
+    return target.username;
   });
+  await clearLoginLimits(username);
 }
 
 /** Sign a user out of every device. Users may always do this for themselves. */

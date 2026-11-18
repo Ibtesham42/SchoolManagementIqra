@@ -5,6 +5,8 @@ description: Use when building or changing the student admission form, admission
 
 # Student admission
 
+> Roadmap Phase 2 (Student Information System).
+
 ## Responsibilities
 Create a Student, Guardians, Admission, Documents and the session Enrollment atomically, with permanent identifiers and full audit.
 
@@ -16,7 +18,7 @@ Create a Student, Guardians, Admission, Documents and the session Enrollment ato
    - same `fullNameNormalized` + `dob` + any guardian phone.
    Return `ConflictError` with the existing student's code (if caller may read it) — let the user confirm "this is a different student" only with `admission.approve`.
 4. `prisma.$transaction`:
-   - `sequence.next(tx, "admission_no:<year>")`, `sequence.next(tx, "student_id:<year>")` → format via settings (see student-id-generation skill).
+   - `nextSequence(tx, "admission_no:<year>")`, `nextSequence(tx, "student_id:<year>")` → format via settings (see student-id-generation skill).
    - Create Student (Aadhaar encrypted), upsert Guardians (reuse by phone for siblings), StudentGuardian links, Admission (status SUBMITTED or APPROVED per settings), StudentEnrollment (session/class/section), StudentDocument rows (files already uploaded to storage as PRIVATE with a pending reference).
    - `audit(tx, …)` with Aadhaar redacted.
 5. After commit: notification `admission.created`; documents (receipt/confirmation PDF) generated on demand.

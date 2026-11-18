@@ -4,6 +4,8 @@ PostgreSQL 16+ (Neon Free), Prisma 7, extension `vector` (pgvector). `prisma/sch
 
 **Implemented (Phase 1, migration `20261108000000_init`, 15 tables):** User, Session, PasswordResetToken, Role, Permission, RolePermission, UserRole, SchoolSetting, AcademicSession, SequenceCounter, StoredFile, AuditLog, Notification, RateLimitBucket, UsageCounter. Everything else below is still the plan for later phases.
 
+**Phase 2, migration `20261110000000_phase2_classes_sections` — applied to the development branch 2026-11-10 05:20Z (owner-approved; drift exit 0, `db:check` ✓); test branch pending:** SchoolClass, Section (→ 18 tables), `SchoolSetting.defaultSectionCapacity`. The Section partial unique index is expressed in the schema via the `partialIndexes` preview feature (ADR-034), so drift checks keep it.
+
 Phase 1 deviations from the original plan (to avoid raw-SQL partial indexes that Prisma's diffing would try to drop):
 - `User.email` is stored lowercased with a plain unique constraint (NULLs allowed) instead of a `lower(email)` partial index.
 - `AcademicSession.isCurrent` was replaced by `SchoolSetting.currentAcademicSessionId` (unique FK) — guarantees at most one current session.
@@ -36,19 +38,19 @@ Legend: **PK** primary key · **U** unique · **IX** index · **FK** foreign key
 
 | Model | Key fields | Constraints |
 |---|---|---|
-| SchoolSetting | singleton (`id = 'default'`): name, shortCode, affiliationNo, board, address JSON, phones, email, logoFileId, timezone, timings JSON, branding JSON, idFormats JSON, rollNumberRules JSON, chatbot/notification/backup/integration JSON (no secrets) | — |
+| SchoolSetting | singleton (`id = 'default'`): name, shortCode, affiliationNo, board, address JSON, phones, email, logoFileId → StoredFile (FK, ON DELETE SET NULL), timezone, **locale** (default `en-IN`), **currency** (default `INR`), **dateFormat** (default `DD/MM/YYYY`; allowlist in settings.schemas), **defaultSectionCapacity** (SmallInt, default 40, CHECK 1–200 — a default for new sections, not a limit; migration `20261110000000`, applied to **development** 2026-11-10 05:20Z; test pending), timings JSON, branding JSON, idFormats JSON, rollNumberRules JSON, chatbot/notification/backup/integration JSON (no secrets) | — |
 | AcademicSession | name ("2026-27"), startDate, endDate, isCurrent, status (PLANNED/ACTIVE/CLOSED) | U(name); partial U(isCurrent) where true |
 | SequenceCounter | key (e.g. `student_id:2026`), value Int | PK(key) — updated via `UPDATE … SET value = value + 1 RETURNING value` |
-| StoredFile | storageKey, originalName, mimeType, sizeBytes, sha256, visibility (PUBLIC/PRIVATE), uploadedById | U(storageKey), IX(sha256) |
+| StoredFile | storageKey, originalName, mimeType, sizeBytes, sha256, visibility (PUBLIC/PRIVATE), encrypted, keyVersion, uploadedById, **purpose** (UPLOAD_RULES key; `unclassified` for pre-2a rows, owner `LegacyFile`/<own id>, Super Admin only), **ownerType/ownerId** (owning record, polymorphic), deletedAt | U(storageKey), IX(sha256), IX(visibility), IX(ownerType, ownerId); CHECKs (all validated): private ⇒ owner set; private ⇒ encrypted with key_version; owner columns both set or both null |
 | DocumentTemplate | kind (ID_CARD/CERTIFICATE/RECEIPT/SLIP/REPORT_CARD), name, config JSON, isDefault | IX(kind) |
-| GeneratedDocument | kind, entityType, entityId, fileId, serialNo?, generatedById, verificationCode? | IX(entityType, entityId), U(verificationCode) |
+| GeneratedDocument | type (ID_CARD/CERTIFICATE/RECEIPT/REPORT_CARD/SALARY_SLIP/OTHER), **verificationCodeHash** (HMAC-SHA256 hex with `DOCUMENT_VERIFICATION_KEY` — raw code never stored), **verificationKeyVersion** (SmallInt ≥ 1, no default), subjectType/subjectId (polymorphic), fileId → StoredFile (PRIVATE PDF; ON DELETE RESTRICT), generatedById → User (SET NULL), generatedAt, revokedAt?, revokedById → User (SET NULL), revocationReason? | U(verificationCodeHash), U(fileId), IX(subjectType, subjectId), IX(type, generatedAt); CHECK hash is 64 lowercase hex; CHECK key version ≥ 1; CHECK revoker/reason only when revoked. *(Implemented in migration `20261109000000`, awaiting approval; `serialNo` deferred to the first numbered document type.)* |
 
 ## 3. Academics
 
 | Model | Key fields | Constraints |
 |---|---|---|
-| SchoolClass | name ("Class 6"), numericLevel, displayOrder, isActive | U(name) |
-| Section | classId, name ("A"), capacity, academicSessionId, classTeacherId? (Employee) | U(academicSessionId, classId, name) |
+| SchoolClass | master data (not session-scoped, never deleted — deactivate): **code** (VarChar 10, e.g. `C06`, `C11-SCI`; immutable once a section uses it), name (VarChar 60, e.g. "Class 11 Science" — streams are separate classes), **nameKey** (= lower(name)), numericLevel (SmallInt −3…12; not unique), displayOrder, defaultSectionCapacity? (1–200), isActive, **version** (optimistic concurrency) | U(code), U(nameKey), IX(isActive, displayOrder); CHECKs: code `^[A-Z0-9]+(-[A-Z0-9]+)*$`, name printable ASCII trimmed/collapsed, name_key = lower(name), level −3…12, display_order ≥ 0, capacity null or 1–200, version ≥ 1. *(Migration `20261110000000`, applied to **development** 2026-11-10 05:20Z; test pending.)* |
+| Section | academicSessionId → AcademicSession (RESTRICT), classId → SchoolClass (RESTRICT), name (VarChar 20, e.g. "A"), **nameKey** (= lower(name)), **code** (`<class code>-<NAME>`, e.g. `C06-A`), capacity (SmallInt 1–200, required; form → class default → setting default 40), **classTeacherId? → User** (RESTRICT; interim, ADR-034 — Phase 3 reaches Employee via User.employeeId), isActive, **version** | U(academicSessionId, classId, nameKey), U(academicSessionId, code), **partial U(academicSessionId, classTeacherId) WHERE classTeacherId IS NOT NULL**, IX(classId); CHECKs: name letters/digits with single spaces, name_key = lower(name), code format, capacity 1–200, version ≥ 1. Editable only in PLANNED/ACTIVE sessions (service). *(Migration `20261110000000`, applied to **development** 2026-11-10 05:20Z; test pending.)* |
 | Subject | code, name, type (THEORY/PRACTICAL/BOTH), isElective | U(code) |
 | ClassSubject | academicSessionId, classId, subjectId, maxTheory, maxPractical, maxInternal | U(session, class, subject) |
 | TeacherAllocation | academicSessionId, employeeId, sectionId, subjectId | U(session, section, subject, employee) |
@@ -57,31 +59,43 @@ Legend: **PK** primary key · **U** unique · **IX** index · **FK** foreign key
 
 ## 4. Students & admissions
 
+**Applied to development 2026-11-10 06:19Z** — migration `20261111000000_phase2b_admissions_students` (owner-approved design PHASE_2B_STUDENTS_DESIGN.md, ADR-035; drift exit 0 after KI-055). Test branch not migrated yet. No Aadhaar or medical columns in Phase 2B (D6). Enums: AdmissionStatus (DRAFT/SUBMITTED/UNDER_REVIEW/APPROVED/REJECTED), Gender, GuardianRelation (FATHER/MOTHER/GUARDIAN/OTHER), StudentStatus (ACTIVE/TRANSFERRED/GRADUATED/WITHDRAWN), EnrollmentStatus (ACTIVE/PROMOTED/DETAINED/LEFT), StudentDocumentType (BIRTH_CERTIFICATE/TRANSFER_CERTIFICATE/PREVIOUS_MARKSHEET/PHOTO/OTHER), RollNumberBatchStatus, RollNumberSource (GENERATED/APPENDED/CORRECTED).
+
 | Model | Key fields | Constraints |
 |---|---|---|
-| Student (SD) | studentCode (permanent ID, e.g. `JNV-2026-0001`), admissionNo, firstName, middleName?, lastName?, fullNameNormalized, dob, gender, bloodGroup?, aadhaarEnc?, aadhaarHmac?, aadhaarLast4?, category?, religion?, nationality, address JSON, state, district, pinCode, photoFileId?, status (ACTIVE/TRANSFERRED/WITHDRAWN/ALUMNI/PASSED_OUT), admissionDate | U(studentCode), U(admissionNo), partial U(aadhaarHmac) where not null and deletedAt null, IX(fullNameNormalized), IX(status) |
-| Guardian (SD) | name, relation-agnostic person: phone, altPhone?, email?, occupation?, address JSON? | IX(phone) |
-| StudentGuardian | studentId, guardianId, relation (FATHER/MOTHER/GUARDIAN/OTHER), isPrimary, isEmergencyContact | PK(studentId, guardianId) |
-| Admission | studentId, academicSessionId, admittedClassId, previousSchool?, previousClass?, previousRecords JSON?, status (DRAFT/SUBMITTED/APPROVED/REJECTED), approvedById?, approvedAt?, enquiryId? | U(studentId, academicSessionId) |
-| StudentDocument (SD) | studentId, type (BIRTH_CERT/PREV_SCHOOL_CERT/TC/PHOTO/OTHER), fileId, verifiedById?, verifiedAt? | IX(studentId) |
-| StudentEnrollment | studentId, academicSessionId, classId, sectionId, status (ACTIVE/PROMOTED/DETAINED/LEFT), enrolledAt, leftAt? | U(studentId, academicSessionId), IX(sectionId) |
-| RollNumberBatch | academicSessionId, sectionId, status (DRAFT/FINALIZED), generatedById, finalizedById?, finalizedAt?, version | U(academicSessionId, sectionId) |
-| StudentRollNumber | enrollmentId, batchId, rollNumber, isFinal | U(enrollmentId), U(batchId, rollNumber) |
-| StudentStatusChange | studentId, fromStatus, toStatus, reason, effectiveDate, tcIssued, actedById | IX(studentId) |
-| DisciplineRecord (SD) | studentId, academicSessionId, date, category, description, actionTaken, recordedById | IX(studentId) |
-| MedicalRecord | studentId (1:1), allergies?, conditions?, medications?, doctorContact?, notes? — **restricted** | U(studentId) |
-| StudentHistory | studentId, field, oldValue (redacted if sensitive), newValue, changedById — denormalised view of AuditLog for profile timeline (optional; may be a query over AuditLog) | IX(studentId) |
+| AdmissionApplication | applicationNo? (`APP-{SESSION}-{SEQ:4}`, on first submit), academicSessionId, classId, sectionId?, status, first/middle/last name, fullName, fullNameNormalized, dob, gender, phone?, email?, address JSON?, previousSchool JSON?, admissionDate?, duplicateMatches JSON?, duplicateOverride?, rejectionReason?, created/submitted/reviewStarted/decided timestamps + actors, studentId? (set by approval), version | U(applicationNo), U(studentId); IX(session, status), IX(fullNameNormalized, dob), IX(status, updatedAt); CHECKs: non-DRAFT ⇒ number; APPROVED ⇔ studentId (+ section, decidedAt, admissionDate); REJECTED ⇒ reason + decidedAt; dob ≥ 1990-01-01; 10-digit phone; version ≥ 1 |
+| AdmissionGuardian | applicationId (CASCADE), relation, name, phone, altPhone?, email?, occupation?, isPrimary, isEmergencyContact, linkGuardianId? (reviewer-chosen existing Guardian, D9), sortOrder | partial U(application, relation) WHERE FATHER/MOTHER (schema predicate in canonical `= ANY (ARRAY[…])` form, KI-055); partial U(application) WHERE is_primary; IX(phone); CHECK phones |
+| Student (SD) | studentCode, admissionNo (both permanent), names, fullNameNormalized, dob, gender, phone?, email?, address JSON?, previousSchool JSON?, status, admissionDate, admittedSessionId, version, deletedAt? | U(studentCode), U(admissionNo); IX(fullNameNormalized, dob), IX(status); CHECKs version, dob, name, phone, codes |
+| Guardian (SD) | name, phone, altPhone?, email?, occupation?, deletedAt? | IX(phone); CHECK phones |
+| StudentGuardian | studentId, guardianId, relation, isPrimary, isEmergencyContact | PK(student, guardian); partial U(student) WHERE is_primary |
+| StudentDocument | applicationId?, studentId? (set by approval), type, fileId (owns its PRIVATE StoredFile: ownerType "StudentDocument"), label?, uploadedById?, verifiedById?/verifiedAt?, deletedAt? | U(fileId); partial U one current PHOTO per application / per student; CHECKs owner set, OTHER ⇒ label, verifier ⇒ verifiedAt |
+| StudentEnrollment | studentId, academicSessionId, sectionId, status, enrolledOn, leftOn? | U(student, session); **composite FK (sectionId, academicSessionId) → Section(id, academicSessionId)**; IX(section, status), IX(session, status); CHECK leftOn |
+| RollNumberBatch | sectionId, status, version, generated/finalized by + at | U(sectionId); CHECKs version, FINALIZED ⇒ finalizedAt |
+| StudentRollNumber | batchId (CASCADE), enrollmentId, rollNumber (SmallInt), source | U(enrollmentId), U(batch, rollNumber); CHECK ≥ 1 |
+| StudentStatusChange | studentId, fromStatus, toStatus, reason, effectiveDate, actedById? | IX(student, createdAt); CHECK from ≠ to, reason |
+| SchoolSetting (change) | **requiredAdmissionDocuments** StudentDocumentType[] default {PHOTO, BIRTH_CERTIFICATE} (D10) | CHECK NOT NULL |
+| Section (change) | — | **U(id, academicSessionId)** (target of the enrollment composite FK) |
+
+*Not in Phase 2B (planned later):* DisciplineRecord (SD) — studentId, academicSessionId, date, category, description, actionTaken, recordedById; MedicalRecord (restricted, 1:1) and Aadhaar fields (encrypted + HMAC) — only with `student.sensitive.read`; a profile timeline reads AuditLog (no StudentHistory table).
 
 ## 5. HR
 
+**Phase 3A HR core — migration `20261112000000_phase3a_hr_core` (SQL approved by the owner 2026-11-18; **applied to development 2026-11-18 08:19Z and Test 08:22Z**, drift exit 0 on both).** Design: PHASE_3_PLAN.md §3a (H1–H14), ADR-036, PHASE_3A_M1_SCHEMA_PROPOSAL.md. One school per installation (no `school_id`). No Aadhaar, PAN, bank or medical columns in 3A (H5) — PAN/bank arrive with payroll (3C), encrypted + HMAC. Enums: StaffType (TEACHING/NON_TEACHING), AppointmentType (PERMANENT/PROBATION/CONTRACT/PART_TIME/GUEST), EmploymentStatus (ACTIVE/ON_LEAVE/RESIGNED/TERMINATED/RETIRED), EmployeeDocumentType (PHOTO/RESUME/QUALIFICATION_CERTIFICATE/EXPERIENCE_LETTER/APPOINTMENT_LETTER/RELIEVING_LETTER/OTHER), ServiceEventType (JOINED/CONFIRMED/DEPARTMENT_CHANGED/DESIGNATION_CHANGED/APPOINTMENT_TYPE_CHANGED/REPORTING_CHANGED/TRANSFERRED/STATUS_CHANGED/RESIGNED/TERMINATED/RETIRED/REJOINED). Every FK RESTRICT except actor columns (SET NULL); 21 CHECKs; one transaction with `lock_timeout` 5 s and a pre-check that `user.employee_id` is empty. Guarded rollback: `ROLLBACK.sql.txt` in the migration folder (refuses while any HR row or linked account exists).
+
 | Model | Key fields | Constraints |
 |---|---|---|
-| Department | name, code | U(code) |
-| Designation | name, code, category (TEACHING/NON_TEACHING) | U(code) |
-| Employee (SD) | employeeCode, type (TEACHING/NON_TEACHING), firstName, lastName?, dob, gender, phone, email?, address JSON, photoFileId?, departmentId, designationId, joiningDate, appointmentType (PERMANENT/CONTRACT/PROBATION/GUEST/PART_TIME), employmentStatus (ACTIVE/ON_LEAVE/RESIGNED/TERMINATED/RETIRED), bankAccountEnc?, ifsc?, panEnc?, panLast4? | U(employeeCode), IX(type, employmentStatus) |
-| TeacherProfile | employeeId (1:1), qualifications JSON, professionalQualifications JSON, specializations, experienceYears | U(employeeId) |
-| EmployeeDocument (SD) | employeeId, type, fileId | IX(employeeId) |
-| ServiceHistory | employeeId, eventType (JOINED/PROMOTED/TRANSFERRED/DESIGNATION_CHANGE/RESIGNED…), effectiveDate, details JSON | IX(employeeId) |
+| Department | code (VarChar 20), name (VarChar 80, any script, NFC), **nameKey** (app-built NFKC + Unicode lower case), isActive, version | U(code), U(nameKey); CHECKs code `^[A-Z0-9]+(-[A-Z0-9]+)*$`, name NFC-normalized + trimmed single spaces + no control/zero-width characters, name_key NFKC-normalized (same shape), version ≥ 1. Deactivated, never deleted once used (H9) |
+| Designation | code, name, nameKey, **staffType**, isActive, version | as Department; an employee's staffType must equal the designation's (service rule) |
+| Employee (SD) | **employeeCode** (permanent, `EMP-{YYYY}-{SEQ:4}`, joining year, `lib/sequence`), staffType, appointmentType, employmentStatus (default ACTIVE), first/middle/last name, fullName, fullNameNormalized, dob, gender, workPhone?, personalPhone, workEmail?, personalEmail?, address JSON? and emergencyContact JSON? (personal tier, H6), departmentId, designationId, reportsToId? (self), joiningDate, confirmationDate?, leavingDate?, leavingReason?, version, createdById?, deletedAt? | U(employeeCode); IX(fullNameNormalized), IX(staffType, employmentStatus), IX(departmentId), IX(designationId), IX(reportsToId); CHECKs version, code non-empty, name, 10-digit phones, dob ≥ 1940 and before joining, confirmation/leaving ≥ joining, leaving status ⇔ leaving date ⇔ reason (H11), no self-reporting (cycles: service, H10) |
+| TeacherProfile | employeeId (PK, 1:1, TEACHING employees — service rule), qualifications JSON[] ≤ 10, professionalQualifications JSON[] ≤ 10, specializations VarChar(60)[] ≤ 10 (free text until Phase 4 subjects, H14), experienceYearsBefore (0–60), teacherRegistrationNo?, version | CHECKs version, experience, array sizes |
+| EmployeeDocument | employeeId, type, fileId (owns its PRIVATE encrypted StoredFile: ownerType "EmployeeDocument"), label? (required for OTHER), uploadedById?, verifiedById?/verifiedAt?, deletedAt? | U(fileId); **partial U(employeeId) WHERE type = 'PHOTO' AND deleted_at IS NULL** (schema-expressed); IX(employeeId); CHECK OTHER ⇒ label |
+| EmployeeServiceEvent | employeeId, eventType, effectiveDate, before JSON?, after JSON? (changed ids/codes/enum values only — never personal-tier values), remarks?, actedById? | IX(employeeId, effectiveDate). **Append-only at application level** (H12): no update/delete service path; a DB trigger is a separate S-07 decision |
+| User (change) | **employeeId → Employee** (FK `user_employee_id_fkey`, RESTRICT; existing unique index reused) | Optional 1:1 link (H2); linking needs `employee.manage` + `user.manage`, audited |
+
+*Phase 3B (attendance & leave, planned):*
+
+| Model | Key fields | Constraints |
+|---|---|---|
 | LeaveType | code, name, annualQuota, isPaid, carryForward | U(code) |
 | LeaveBalance | employeeId, leaveTypeId, academicSessionId, allotted, used | U(employee, leaveType, session) |
 | LeaveRequest | employeeId, leaveTypeId, fromDate, toDate, halfDay, days Decimal(4,1), reason, status (PENDING/APPROVED/REJECTED/CANCELLED), decidedById?, decidedAt? | IX(employeeId, status) |

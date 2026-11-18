@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { burnPasswordCheck, verifyPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
-import { RULES, enforce } from "@/lib/rate-limit";
+import { RULES, assertBelowLimit, enforce, hit, resetSubject } from "@/lib/rate-limit";
 import { AppError } from "@/lib/errors";
 
 export const loginSchema = z
@@ -27,9 +27,21 @@ export class InvalidCredentialsError extends AppError {
 
 const LONG_SESSION_ROLES = new Set(["PARENT", "STUDENT"]);
 
+/**
+ * Rate limits (S-03): per IP and per (username, IP) count every attempt; the per-username ceiling counts only
+ * FAILED attempts and is checked before any work. So an attacker can't keep a user out from another address
+ * by spending a shared bucket, while distributed guessing stays bounded — and the account lock after
+ * MAX_FAILED_ATTEMPTS failures remains the primary brute-force control. Every failure path records a failure
+ * (unknown, inactive, locked, wrong password), so they also cost the same extra round trip.
+ */
 export async function login(input: LoginInput, meta: { ipHash: string; userAgent?: string }) {
   await enforce(RULES.loginPerIp, meta.ipHash);
-  await enforce(RULES.loginPerUser, input.username);
+  await enforce(RULES.loginPerUserIp, input.username, meta.ipHash);
+  await assertBelowLimit(RULES.loginFailuresPerUser, input.username);
+  const fail = async (): Promise<never> => {
+    await hit(RULES.loginFailuresPerUser, input.username);
+    throw new InvalidCredentialsError();
+  };
 
   const user = await prisma.user.findUnique({
     where: { username: input.username },
@@ -38,12 +50,12 @@ export async function login(input: LoginInput, meta: { ipHash: string; userAgent
 
   if (!user || !user.isActive || user.deletedAt) {
     await burnPasswordCheck(input.password);
-    throw new InvalidCredentialsError();
+    return fail();
   }
 
   if (user.lockedUntil && user.lockedUntil > new Date()) {
     await burnPasswordCheck(input.password);
-    throw new InvalidCredentialsError();
+    return fail();
   }
 
   const ok = await verifyPassword(user.passwordHash, input.password);
@@ -62,7 +74,7 @@ export async function login(input: LoginInput, meta: { ipHash: string; userAgent
         await audit(tx, { userId: null, ipHash: meta.ipHash }, { action: "auth.locked", entityType: "User", entityId: user.id });
       }
     });
-    throw new InvalidCredentialsError();
+    return fail();
   }
 
   const long = input.remember && user.roles.some((r) => LONG_SESSION_ROLES.has(r.role.key));
@@ -76,4 +88,15 @@ export async function login(input: LoginInput, meta: { ipHash: string; userAgent
   });
 
   return { ...session, mustChangePassword: user.mustChangePassword };
+}
+
+/**
+ * Clears a user's login limiter state (S-03): the failures ceiling and every (username, IP) bucket. Called
+ * AFTER an admin unlock, admin password reset or completed password reset has committed — the account lock
+ * itself is cleared in that transaction. Best effort: a limiter outage must not undo the committed unlock.
+ */
+export async function clearLoginLimits(username: string): Promise<void> {
+  await Promise.all([resetSubject(RULES.loginFailuresPerUser, username), resetSubject(RULES.loginPerUserIp, username)]).catch(() => {
+    console.error("login limiter reset failed", "RateLimitResetError");
+  });
 }
