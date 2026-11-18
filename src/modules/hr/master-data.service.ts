@@ -4,12 +4,14 @@ import { isTransactionBusy, isUniqueViolation } from "@/lib/db-errors";
 import { ConflictError, NotFoundError, ServiceBusyError } from "@/lib/errors";
 import { authorize, type AuthContext } from "@/lib/rbac/authorize";
 import type { Prisma } from "@/generated/prisma/client";
+import { employeeReadAccess } from "./hr.policy";
 import { changedFields, masterNameKeyOf } from "./hr.rules";
 import type { CreateDepartmentInput, CreateDesignationInput, SetMasterActiveInput, UpdateDepartmentInput, UpdateDesignationInput } from "./hr.schemas";
 
 /**
- * Departments and designations (H9): master data, deactivated — never deleted. Reads: `employee.read` (any
- * scope — the lists hold no personal data and the registration form needs them); writes: `employee.manage`.
+ * Departments and designations (H9): master data, deactivated — never deleted. Reads: `employee.read` at ALL
+ * (directory readers; a SELF grant for "My profile" doesn't reach school-wide lists — security review M3b L1);
+ * writes: `employee.manage`.
  * A code (and a designation's staff type) is fixed once any employee uses it: codes appear in imports and
  * reports, and an employee's staff type must equal their designation's (H9).
  */
@@ -33,7 +35,7 @@ const stale = (what: string) => new ConflictError(`This ${what} was changed by s
 export const DEPARTMENT_SELECT = { id: true, code: true, name: true, isActive: true, version: true } satisfies Prisma.DepartmentSelect;
 
 export async function listDepartments(ctx: AuthContext, opts: { includeInactive?: boolean } = {}) {
-  authorize(ctx, "employee.read");
+  employeeReadAccess(ctx);
   return prisma.department.findMany({
     where: opts.includeInactive ? {} : { isActive: true },
     orderBy: [{ name: "asc" }, { id: "asc" }],
@@ -114,7 +116,7 @@ export async function setDepartmentActive(ctx: AuthContext, input: SetMasterActi
 export const DESIGNATION_SELECT = { id: true, code: true, name: true, staffType: true, isActive: true, version: true } satisfies Prisma.DesignationSelect;
 
 export async function listDesignations(ctx: AuthContext, opts: { includeInactive?: boolean } = {}) {
-  authorize(ctx, "employee.read");
+  employeeReadAccess(ctx);
   return prisma.designation.findMany({
     where: opts.includeInactive ? {} : { isActive: true },
     orderBy: [{ staffType: "asc" }, { name: "asc" }, { id: "asc" }],

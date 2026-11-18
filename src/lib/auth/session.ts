@@ -102,6 +102,7 @@ export async function validateSessionToken(token: string): Promise<AuthContext |
     isSuperAdmin: roles.some((r) => r.key === "SUPER_ADMIN" && r.isSystem),
     permissions: buildPermissionMap(rows),
     sessionId: session.id,
+    employeeId: user.employeeId,
     mustChangePassword: user.mustChangePassword,
   };
 }

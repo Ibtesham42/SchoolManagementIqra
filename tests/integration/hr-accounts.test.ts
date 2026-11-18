@@ -164,9 +164,9 @@ describe.skipIf(!enabled)("HR teacher profiles and account links (integration)",
     expect(await m.prisma.user.count({ where: { employeeId: fourth } })).toBe(0);
     // A Teacher's permissions are not all held by the linker either (student.read etc.) — refused too.
     await expect(m.linkStaffAccount(linker, { employeeId: fourth, userId: otherUserId })).rejects.toBeInstanceOf(m.ForbiddenError);
-    // Its own account: allowed today (self-modification is exempt) — recorded as the M3b decision (review L1).
-    await m.linkStaffAccount(linker, { employeeId: fourth, userId: linkerUserId });
-    await m.unlinkStaffAccount(linker, fourth);
+    // KI-065 (M3b): a non–Super Admin can't link their OWN account (it would gain SELF access to that record).
+    await expect(m.linkStaffAccount(linker, { employeeId: fourth, userId: linkerUserId })).rejects.toThrow(/your own account/);
+    expect(await m.prisma.user.count({ where: { employeeId: fourth } })).toBe(0);
   });
 
   it("review L2: a soft-deleted linked account doesn't block unlinking", async () => {
@@ -186,5 +186,19 @@ describe.skipIf(!enabled)("HR teacher profiles and account links (integration)",
     expect(await m.prisma.auditLog.count({ where: { action: "user.employee_unlink", entityId: staffUserId } })).toBe(1);
     expect(await m.staffAccountPanel(librarian, teacherEmpId)).toBeNull(); // no user.read
     expect(await m.staffAccountPanel(schoolAdmin, teacherEmpId)).toMatchObject({ linked: null, canLink: false, candidates: [] });
+  });
+
+  it("M3b \"My profile\": a linked staff account reads its OWN record with personal details; nothing else", async () => {
+    const own = employeeIds[1]; // the clerk record
+    await m.linkStaffAccount(root, { employeeId: own, userId: staffUserId });
+    const me = await ctxFor(staffUserId); // a new session carries the link (AuthContext.employeeId)
+    expect(me.employeeId).toBe(own);
+    expect(await m.getEmployee(me, own)).toMatchObject({ tier: "personal", id: own });
+    await expect(m.getEmployee(me, teacherEmpId)).rejects.toBeInstanceOf(m.NotFoundError);
+    await expect(m.listEmployees(me, { page: 1, pageSize: 25 })).rejects.toBeInstanceOf(m.NotFoundError);
+    await expect(m.getTeacherProfile(me, teacherEmpId)).rejects.toBeInstanceOf(m.NotFoundError);
+    await m.unlinkStaffAccount(root, own);
+    const after = await ctxFor(staffUserId);
+    await expect(m.getEmployee(after, own)).rejects.toBeInstanceOf(m.NotFoundError); // link removed → SELF gives nothing
   });
 });

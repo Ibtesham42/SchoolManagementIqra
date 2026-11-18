@@ -8,7 +8,7 @@ import { nextSequence } from "@/lib/sequence";
 import { Prisma } from "@/generated/prisma/client";
 import { readEmployeeSettings } from "@/modules/settings/settings.service";
 import { fullNameOf, normalizeName, normalizePhone } from "@/modules/students/person-fields";
-import { canReadPersonal, employeeReadAccess, type EmployeeTier } from "./hr.policy";
+import { canReadPersonal, employeeReadAccess, employeeRecordAccess, type EmployeeTier } from "./hr.policy";
 import {
   assertEmployeeDates,
   changedFields,
@@ -238,7 +238,7 @@ export type EmployeeProfile =
 
 /** Missing, soft-deleted and out-of-scope all look the same (NotFound — no oracle). */
 export async function getEmployee(ctx: AuthContext, id: string): Promise<EmployeeProfile> {
-  const { tier } = employeeReadAccess(ctx);
+  const { tier } = employeeRecordAccess(ctx, id);
   if (tier === "personal") {
     const row = await prisma.employee.findFirst({ where: { id, deletedAt: null }, select: PROFILE_PERSONAL_SELECT });
     if (!row) throw new NotFoundError("Employee not found.");

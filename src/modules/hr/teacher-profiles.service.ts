@@ -4,7 +4,7 @@ import { isTransactionBusy } from "@/lib/db-errors";
 import { ConflictError, NotFoundError, ServiceBusyError } from "@/lib/errors";
 import { authorize, type AuthContext } from "@/lib/rbac/authorize";
 import type { Prisma } from "@/generated/prisma/client";
-import { employeeReadAccess } from "./hr.policy";
+import { employeeReadAccess, employeeRecordAccess } from "./hr.policy";
 import type { TeacherProfileInput } from "./hr.schemas";
 
 /**
@@ -27,7 +27,7 @@ export const TEACHER_PROFILE_SELECT = {
 } satisfies Prisma.TeacherProfileSelect;
 
 export async function getTeacherProfile(ctx: AuthContext, employeeId: string) {
-  employeeReadAccess(ctx);
+  employeeRecordAccess(ctx, employeeId);
   return prisma.teacherProfile.findFirst({ where: { employeeId, employee: { deletedAt: null } }, select: TEACHER_PROFILE_SELECT });
 }
 

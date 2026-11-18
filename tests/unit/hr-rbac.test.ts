@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { authorize, buildPermissionMap, type AuthContext } from "@/lib/rbac/authorize";
 import { ALLOWED_SCOPES, ALL_PERMISSION_KEYS, normalizeGrant, ROLES, type PermissionKey, type Scope } from "@/lib/rbac/catalog";
 import { ForbiddenError, NotFoundError } from "@/lib/errors";
-import { canBrowseEmployees, canManageEmployees, canReadPersonal, employeeReadAccess } from "@/modules/hr/hr.policy";
+import { canBrowseEmployees, canManageEmployees, canReadPersonal, canViewOwnProfile, employeeReadAccess, employeeRecordAccess } from "@/modules/hr/hr.policy";
 import {
   createDepartmentSchema,
   createDesignationSchema,
@@ -37,6 +37,7 @@ describe("staff permissions (catalog, M2)", () => {
     expect(ALL_PERMISSION_KEYS).toEqual(expect.arrayContaining(["employee.personal.read", "employee.document.manage"]));
   });
 
+  const atAll = (key: PermissionKey) => holders(key).filter((r) => scopeOf(r, key) === "ALL");
   it.each<[PermissionKey, string[]]>([
     // Q3: Librarian keeps the directory (existing grant), Vice Principal via READ_ACADEMIC.
     ["employee.read", ["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HR_MANAGER", "LIBRARIAN"]],
@@ -48,9 +49,21 @@ describe("staff permissions (catalog, M2)", () => {
     ["employee.document.manage", ["SUPER_ADMIN", "SCHOOL_ADMIN", "HR_MANAGER"]],
     // Reserved for payroll (3C) — unchanged.
     ["employee.sensitive.read", ["SUPER_ADMIN", "HR_MANAGER"]],
-  ])("%s is held by exactly %j at ALL", (key, expected) => {
-    expect(holders(key)).toEqual(expected);
-    for (const r of expected) expect(scopeOf(r, key)).toBe("ALL");
+  ])("%s is held at ALL by exactly %j", (key, expected) => {
+    expect(atAll(key)).toEqual(expected);
+  });
+
+  it("M3b (H7): staff roles read their OWN record at SELF — never Parent or Student", () => {
+    expect(holders("employee.read").filter((r) => scopeOf(r, "employee.read") === "SELF")).toEqual(["ACCOUNTANT", "ADMISSION_OFFICER", "TEACHER", "CLASS_TEACHER", "TRANSPORT_MANAGER"]);
+    expect(holders("employee.personal.read").filter((r) => scopeOf(r, "employee.personal.read") === "SELF")).toEqual([
+      "VICE_PRINCIPAL",
+      "ACCOUNTANT",
+      "ADMISSION_OFFICER",
+      "TEACHER",
+      "CLASS_TEACHER",
+      "TRANSPORT_MANAGER",
+      "LIBRARIAN",
+    ]);
   });
 
   it("H7: Parent and Student hold no staff permission at all", () => {
@@ -61,17 +74,25 @@ describe("staff permissions (catalog, M2)", () => {
     expect(scopeOf("HR_MANAGER", "user.manage")).toBeNull();
   });
 
-  it("no SELF scope is grantable for staff permissions yet (M3 brings the employee link with its own approval)", () => {
-    for (const key of ["employee.read", "employee.personal.read", "employee.manage", "employee.document.manage"] as const) expect(ALLOWED_SCOPES[key]).toEqual(["ALL"]);
+  it("SELF is grantable only for the two read permissions (M3b); manage/documents stay ALL-only", () => {
+    expect(ALLOWED_SCOPES["employee.read"]).toEqual(["ALL", "SELF"]);
+    expect(ALLOWED_SCOPES["employee.personal.read"]).toEqual(["ALL", "SELF"]);
+    for (const key of ["employee.manage", "employee.document.manage", "employee.sensitive.read"] as const) expect(ALLOWED_SCOPES[key]).toEqual(["ALL"]);
   });
 
   it("a seed sync gives the two NEW permissions their defaults on existing roles — but never adds School Admin employee.manage (needs owner approval)", () => {
     const plan = planSeed();
     const grants = newPermissionGrants(plan, ["employee.personal.read", "employee.document.manage"], new Set());
-    expect(grants.map((g) => `${g.roleKey}:${g.key}`).sort()).toEqual(
-      ["SCHOOL_ADMIN:employee.personal.read", "PRINCIPAL:employee.personal.read", "HR_MANAGER:employee.personal.read", "SCHOOL_ADMIN:employee.document.manage", "HR_MANAGER:employee.document.manage"].sort(),
+    expect(grants.map((g) => `${g.roleKey}:${g.key}:${g.scope}`).sort()).toEqual(
+      [
+        ...["SCHOOL_ADMIN", "PRINCIPAL", "HR_MANAGER"].map((r) => `${r}:employee.personal.read:ALL`),
+        ...["VICE_PRINCIPAL", "ACCOUNTANT", "ADMISSION_OFFICER", "TEACHER", "CLASS_TEACHER", "TRANSPORT_MANAGER", "LIBRARIAN"].map((r) => `${r}:employee.personal.read:SELF`),
+        "SCHOOL_ADMIN:employee.document.manage:ALL",
+        "HR_MANAGER:employee.document.manage:ALL",
+      ].sort(),
     );
-    expect(grants.some((g) => g.key === "employee.manage")).toBe(false);
+    // Grants on the EXISTING permissions (School Admin employee.manage, employee.read SELF) are never added by a sync.
+    expect(grants.some((g) => g.key === "employee.manage" || g.key === "employee.read")).toBe(false);
   });
 });
 
@@ -89,16 +110,36 @@ describe("hr.policy tiers", () => {
     expect(canReadPersonal(ctxFor(role))).toBe(tier === "personal");
   });
 
-  it.each(["ACCOUNTANT", "ADMISSION_OFFICER", "TEACHER", "CLASS_TEACHER", "TRANSPORT_MANAGER", "PARENT", "STUDENT"])("%s can't read staff records (403)", (role) => {
-    expect(canBrowseEmployees(ctxFor(role))).toBe(false);
-    expect(() => employeeReadAccess(ctxFor(role))).toThrow(ForbiddenError);
+  it.each(["ACCOUNTANT", "ADMISSION_OFFICER", "TEACHER", "CLASS_TEACHER", "TRANSPORT_MANAGER"])("%s: no directory (lists look empty — NotFound), own record only, with personal details", (role) => {
+    const ctx = { ...ctxFor(role), employeeId: "me" };
+    expect(canBrowseEmployees(ctx)).toBe(false);
+    expect(() => employeeReadAccess(ctx)).toThrow(NotFoundError);
+    expect(employeeRecordAccess(ctx, "me")).toEqual({ tier: "personal", own: true });
+    expect(() => employeeRecordAccess(ctx, "someone-else")).toThrow(NotFoundError);
+    expect(canViewOwnProfile(ctx)).toBe(true);
   });
 
-  it("a SELF grant (custom role) gives no access in M2 — fails closed until the employee link exists", () => {
-    const ctx = ctxFor("TEACHER", [["employee.read", "SELF"], ["employee.personal.read", "SELF"]]);
-    expect(canBrowseEmployees(ctx)).toBe(false);
-    expect(canReadPersonal(ctx)).toBe(false);
-    expect(() => employeeReadAccess(ctx)).toThrow(NotFoundError);
+  it.each(["PARENT", "STUDENT"])("%s can't read staff records at all (403), even with a link", (role) => {
+    const ctx = { ...ctxFor(role), employeeId: "me" };
+    expect(() => employeeRecordAccess(ctx, "me")).toThrow(ForbiddenError);
+    expect(canViewOwnProfile(ctx)).toBe(false);
+  });
+
+  it("SELF without a linked employee gives nothing (fail closed): no own record, no profile link", () => {
+    for (const employeeId of [undefined, null, ""]) {
+      const ctx = { ...ctxFor("TEACHER"), employeeId };
+      expect(() => employeeRecordAccess(ctx, "")).toThrow(NotFoundError);
+      expect(canViewOwnProfile(ctx)).toBe(false);
+    }
+  });
+
+  it("Librarian and Vice Principal: directory for everyone, personal details only for their own record", () => {
+    for (const role of ["LIBRARIAN", "VICE_PRINCIPAL"]) {
+      const ctx = { ...ctxFor(role), employeeId: "me" };
+      expect(employeeRecordAccess(ctx, "other")).toEqual({ tier: "directory", own: false });
+      expect(employeeRecordAccess(ctx, "me")).toEqual({ tier: "personal", own: true });
+      expect(canReadPersonal(ctx)).toBe(false); // lists and searches stay directory-only
+    }
   });
 
   it("employee.manage holders: Super Admin, School Admin, HR Manager", () => {
@@ -128,13 +169,26 @@ describe("directory filters by tier (security review M1)", () => {
   });
 });
 
+describe("school-wide lists need the directory (ALL) — SELF is not enough (security review M3b L1)", () => {
+  it("department and designation lists refuse a SELF-only reader before any database access", async () => {
+    const { listDepartments, listDesignations } = await import("@/modules/hr/master-data.service");
+    for (const role of ["TEACHER", "ACCOUNTANT", "ADMISSION_OFFICER", "TRANSPORT_MANAGER"]) {
+      const ctx = { ...ctxFor(role), employeeId: "me" };
+      await expect(listDepartments(ctx), role).rejects.toBeInstanceOf(NotFoundError);
+      await expect(listDesignations(ctx), role).rejects.toBeInstanceOf(NotFoundError);
+    }
+    await expect(listDepartments(ctxFor("PARENT"))).rejects.toBeInstanceOf(ForbiddenError);
+  });
+});
+
 describe("registration gate (security review L2)", () => {
   it("a custom role with employee.manage but no personal read can't register (refused before any database access)", async () => {
     const { registerEmployee } = await import("@/modules/hr/employees.service");
     const ctx = ctxFor("TEACHER", [["employee.manage", "ALL"], ["employee.read", "ALL"]]);
     await expect(registerEmployee(ctx, {} as Parameters<typeof registerEmployee>[1])).rejects.toBeInstanceOf(ForbiddenError);
+    // Directory read only at SELF (Teacher's own grant): refused like any out-of-scope access.
     const noDirectory = ctxFor("TEACHER", [["employee.manage", "ALL"], ["employee.personal.read", "ALL"]]);
-    await expect(registerEmployee(noDirectory, {} as Parameters<typeof registerEmployee>[1])).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(registerEmployee(noDirectory, {} as Parameters<typeof registerEmployee>[1])).rejects.toBeInstanceOf(NotFoundError);
   });
 });
 

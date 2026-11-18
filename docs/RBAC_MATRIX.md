@@ -42,10 +42,10 @@ Roles: 13 · Permissions: 84
 | `document.generate` — Generate school documents | ✓ | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |
 | `document.revoke` — Revoke issued documents (they then fail public verification) | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |
 | `certificate.issue` — Issue certificates | ✓ |  | ✓ | ✓ |  |  |  |  |  |  |  |  |  |
-| `employee.read` — View employee records | ✓ | ✓ | ✓ | ✓ |  | ✓ |  |  |  |  | ✓ |  |  |
+| `employee.read` — View employee records | ✓ | ✓ | ✓ | ✓ | S | ✓ | S | S | S | S | ✓ |  |  |
 | `employee.manage` — Create and edit employees | ✓ | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |
 | `employee.sensitive.read` — View employee PAN/bank details | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |
-| `employee.personal.read` — View employee personal details and documents | ✓ | ✓ | ✓ |  |  | ✓ |  |  |  |  |  |  |  |
+| `employee.personal.read` — View employee personal details and documents | ✓ | ✓ | ✓ | S | S | ✓ | S | S | S | S | S |  |  |
 | `employee.document.manage` — Upload, verify and remove employee documents and photos | ✓ | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |
 | `leave.request` — Request leave | ✓ |  |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |
 | `leave.approve` — Approve or reject leave | ✓ |  | ✓ | ✓ |  | ✓ |  |  |  |  |  |  |  |
@@ -102,13 +102,13 @@ Roles: 13 · Permissions: 84
 | Super Admin (`SUPER_ADMIN`) | 84 |
 | School Admin (`SCHOOL_ADMIN`) | 41 |
 | Principal (`PRINCIPAL`) | 32 |
-| Vice Principal (`VICE_PRINCIPAL`) | 23 |
-| Accountant (`ACCOUNTANT`) | 15 |
+| Vice Principal (`VICE_PRINCIPAL`) | 24 |
+| Accountant (`ACCOUNTANT`) | 17 |
 | HR Manager (`HR_MANAGER`) | 15 |
-| Admission Officer (`ADMISSION_OFFICER`) | 16 |
-| Teacher (`TEACHER`) | 11 |
-| Class Teacher (`CLASS_TEACHER`) | 13 |
-| Transport Manager (`TRANSPORT_MANAGER`) | 7 |
-| Librarian (`LIBRARIAN`) | 8 |
+| Admission Officer (`ADMISSION_OFFICER`) | 18 |
+| Teacher (`TEACHER`) | 13 |
+| Class Teacher (`CLASS_TEACHER`) | 15 |
+| Transport Manager (`TRANSPORT_MANAGER`) | 9 |
+| Librarian (`LIBRARIAN`) | 9 |
 | Parent (`PARENT`) | 7 |
 | Student (`STUDENT`) | 7 |

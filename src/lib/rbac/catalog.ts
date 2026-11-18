@@ -144,6 +144,15 @@ const READ_ACADEMIC: Grant[] = [
   "academic.read",
 ];
 
+/**
+ * Phase 3A M3b — "My profile" (owner decision H7, approved 2026-11-18): staff roles read their OWN employee record
+ * (directory + personal tier) at SELF scope = AuthContext.employeeId. Never Parent or Student. Roles that already
+ * read the directory at ALL (Vice Principal, Librarian) get only the personal tier at SELF — one scope per
+ * permission per role (role_permission primary key).
+ */
+const MY_PROFILE: Grant[] = [["employee.read", "SELF"], ["employee.personal.read", "SELF"]];
+const MY_PERSONAL: Grant[] = [["employee.personal.read", "SELF"]];
+
 const TEACHER: Grant[] = [
   ["student.read", "ASSIGNED"],
   ["attendance.student.mark", "ASSIGNED"],
@@ -157,6 +166,7 @@ const TEACHER: Grant[] = [
   "notice.read",
   // ASSIGNED = the section(s) the teacher is class teacher of (academic.policy; TeacherAllocation in Phase 4).
   ["academic.read", "ASSIGNED"],
+  ...MY_PROFILE,
 ];
 
 export const ROLES: RoleDefinition[] = [
@@ -205,6 +215,7 @@ export const ROLES: RoleDefinition[] = [
     grants: [
       ...READ_ACADEMIC, "student.sensitive.read", "student.document.read", "leave.approve", "marks.approve",
       "result.publish", "rollnumber.finalize", "certificate.issue", "fee.report", "cms.read", "enquiry.read",
+      ...MY_PERSONAL,
     ],
   },
   {
@@ -214,7 +225,7 @@ export const ROLES: RoleDefinition[] = [
     grants: [
       "fee.structure.manage", "fee.read", "fee.collect", "fee.concession.manage", "fee.refund", "fee.report",
       "payroll.read", "payroll.prepare", "payroll.pay", "student.read", "transport.read", "export.run",
-      "leave.request", ["salary.self.read", "SELF"], "notice.read",
+      "leave.request", ["salary.self.read", "SELF"], "notice.read", ...MY_PROFILE,
     ],
   },
   {
@@ -240,6 +251,7 @@ export const ROLES: RoleDefinition[] = [
       "academic.read",
       // Prepares and submits applications with their documents; never approves them (D2, maker-checker).
       "student.document.manage",
+      ...MY_PROFILE,
     ],
   },
   { key: "TEACHER", name: "Teacher", description: "Access limited to assigned classes and subjects.", grants: TEACHER },
@@ -255,7 +267,7 @@ export const ROLES: RoleDefinition[] = [
     description: "Vehicles, routes, stops and student allocation.",
     grants: [
       "transport.read", "transport.manage", "transport.assign", ["student.read", "ASSIGNED"],
-      "leave.request", ["salary.self.read", "SELF"], "notice.read",
+      "leave.request", ["salary.self.read", "SELF"], "notice.read", ...MY_PROFILE,
     ],
   },
   {
@@ -264,7 +276,7 @@ export const ROLES: RoleDefinition[] = [
     description: "Library catalogue, issues and returns.",
     grants: [
       "library.read", "library.manage", "library.issue", "student.read", "employee.read",
-      "leave.request", ["salary.self.read", "SELF"], "notice.read",
+      "leave.request", ["salary.self.read", "SELF"], "notice.read", ...MY_PERSONAL,
     ],
   },
   {

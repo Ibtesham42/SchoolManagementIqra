@@ -20,6 +20,7 @@ import {
 } from "./academic.rules";
 // Shared with admissions (lock order and enrollment counts live in one place).
 import { activeEnrollmentCount, lockClassShared, lockSessionShared } from "./academic.tx";
+import { ELIGIBLE_CLASS_TEACHER_EMPLOYEE, lockEligibleClassTeacherEmployee } from "@/modules/hr/hr.tx";
 import type { AssignClassTeacherInput, CopySectionsInput, CreateSectionInput, CreateSectionsBulkInput, UpdateSectionInput } from "./academic.schemas";
 
 /**
@@ -150,7 +151,10 @@ export async function listSessionsForSections(ctx: AuthContext) {
   return { sessions, currentId: setting?.currentAcademicSessionId ?? null };
 }
 
-/** Active, non-deleted users holding the TEACHER or CLASS_TEACHER role — the class-teacher picker. */
+/**
+ * The class-teacher picker: active, non-deleted users holding the TEACHER or CLASS_TEACHER role whose account is
+ * linked to an ACTIVE, TEACHING employee (H4, Phase 3A M3b). Existing assignments are not affected by this rule.
+ */
 export async function listEligibleClassTeachers(ctx: AuthContext) {
   authorize(ctx, "academic.manage");
   return prisma.user.findMany({
@@ -162,7 +166,13 @@ export async function listEligibleClassTeachers(ctx: AuthContext) {
 }
 
 function eligibleTeacherWhere(id?: string): Prisma.UserWhereInput {
-  return { ...(id ? { id } : {}), isActive: true, deletedAt: null, roles: { some: { role: { key: { in: [...CLASS_TEACHER_ROLE_KEYS] } } } } };
+  return {
+    ...(id ? { id } : {}),
+    isActive: true,
+    deletedAt: null,
+    roles: { some: { role: { key: { in: [...CLASS_TEACHER_ROLE_KEYS] } } } },
+    employee: { is: ELIGIBLE_CLASS_TEACHER_EMPLOYEE },
+  };
 }
 
 // ───────────────────────────── Create ─────────────────────────────
@@ -289,11 +299,15 @@ export async function assignClassTeacher(ctx: AuthContext, input: AssignClassTea
   authorize(ctx, "academic.manage");
   try {
     await prisma.$transaction(async (tx) => {
+      // H4 first: lock order employee → session/section → user (see hr.tx). The link itself can't change while we
+      // hold the employee row (link/unlink take it FOR UPDATE); re-checked below under the user lock anyway.
+      const linked = (await tx.user.findFirst({ where: { id: input.userId, deletedAt: null }, select: { employeeId: true } }))?.employeeId ?? null;
+      await lockEligibleClassTeacherEmployee(tx, linked);
       const row = await lockSectionForWrite(tx, input.id, input.version);
       if (row.classTeacherId === input.userId) return;
       // Lock the user row too, so a concurrent deactivation can't slip between the check and the write.
       await tx.$queryRaw`SELECT id FROM "user" WHERE id = ${input.userId} FOR SHARE`;
-      const eligible = await tx.user.count({ where: eligibleTeacherWhere(input.userId) });
+      const eligible = await tx.user.count({ where: { ...eligibleTeacherWhere(input.userId), employeeId: linked } });
       if (eligible !== 1) throw new ValidationError("Choose an active teacher.", [{ path: "userId", message: "Choose an active teacher." }]);
       await bump(tx, row, { classTeacherId: input.userId });
       await audit(tx, actorOf(ctx), {

@@ -66,6 +66,8 @@ describe.skipIf(!enabled)("student records (integration)", () => {
       user("acc", "ACCOUNTANT"),
     ]);
     classTeacherId = ct.id;
+    // H4 (Phase 3A M3b): class teachers need a linked ACTIVE, TEACHING employee.
+    await (await import("./staff-fixture")).linkTeachingEmployee(m.prisma, tag, ct.id);
     [admin, principal, officer, classTeacher, otherTeacher, accountant] = await Promise.all([root, pr, ao, ct, t2, acc].map((u) => ctxFor(u.id)));
     sessionId = (await m.createAcademicSession(admin, { name: sessionName, startDate: `${year}-04-01`, endDate: `${year + 1}-03-31` })).id;
     await m.changeAcademicSessionStatus(admin, sessionId, "ACTIVE");
@@ -80,6 +82,7 @@ describe.skipIf(!enabled)("student records (integration)", () => {
 
   afterAll(async () => {
     const { prisma } = m;
+    await (await import("./staff-fixture")).removeStaffFixtures(prisma, tag);
     if (!sessionId) return void (await prisma.user.deleteMany({ where: { username: { startsWith: run } } }), await prisma.$disconnect()); // setup failed early
     const ids = Object.values(students).map((s) => s.studentId);
     const guardians = await prisma.studentGuardian.findMany({ where: { studentId: { in: ids } }, select: { guardianId: true } });
