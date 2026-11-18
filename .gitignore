@@ -21,11 +21,12 @@ src/generated/
 *.p12
 *.pfx
 
-# local file storage (may hold confidential documents) & generated output
-storage/
-uploads/
-private-files/
-tmp/
+# local file storage (may hold confidential documents) & generated output — anchored to the project root:
+# an unanchored "storage/" also matched the source folder src/lib/storage/ and kept it out of git.
+/storage/
+/uploads/
+/private-files/
+/tmp/
 *.dump
 *.sql.gz
 
