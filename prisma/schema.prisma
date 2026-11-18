@@ -999,7 +999,8 @@ model EmployeeServiceEvent {
   employeeId    String           @map("employee_id")
   eventType     ServiceEventType @map("event_type")
   effectiveDate DateTime         @map("effective_date") @db.Date
-  /// Changed fields only (ids / codes / enum values — never personal-tier values).
+  /// Changed fields only (ids, codes, enum values and dates). Includes employment terms (appointment type,
+  /// confirmation date) — personal tier: the history is shown only with employee.personal.read (or SELF).
   before        Json?
   after         Json?
   remarks       String?          @db.VarChar(500)

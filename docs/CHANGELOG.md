@@ -17,6 +17,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - Class teachers: a teacher can be made class teacher only when their login is linked to an active teaching staff record; the teacher list on the Sections page shows only those teachers. Existing class-teacher assignments are not changed.
 - Account linking: only an administrator who can see staff personal details may link accounts, and nobody except a Super Admin can link their own account.
 - Permissions: staff roles can now read their own staff record. Catalog: 84 permissions, 291 default grants.
+- Employment changes (department, designation, appointment type, confirmation), reporting line (no loops) and status — resigned, terminated, retired, long-term leave, rejoined — each recorded with its date in the employee's service history, shown on the profile to staff who may see personal details (and to the employee on My profile).
+- Leaving releases the person's class-teacher sections and offers to deactivate their login (an administrator who manages users can do it in the same step; otherwise the screen says it still has to be done). Rejoining keeps the same employee ID. Nobody can change their own employment record.
 - Permissions: new "View employee personal details and documents" and "Upload, verify and remove employee documents and photos"; School Admin can now manage staff records. Catalog: 84 permissions, 279 default grants.
 
 ### Fixed (CI)

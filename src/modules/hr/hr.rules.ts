@@ -156,3 +156,103 @@ export function redactForAudit<T extends Record<string, unknown>>(values: Partia
   const hidden = new Set<string>([...PERSONAL_FIELDS, ...NAME_FIELDS, ...EMPLOYMENT_TERMS, "workPhone", "workEmail"]);
   return Object.fromEntries(Object.entries(values).map(([k, v]) => [k, hidden.has(k) ? "[REDACTED]" : v]));
 }
+
+// ───────────────────────────── Lifecycle (M4a — H10, H11, H12) ─────────────────────────────
+
+export const STATUS_ACTIONS = ["RESIGN", "TERMINATE", "RETIRE", "START_LEAVE", "END_LEAVE", "REJOIN"] as const;
+export type StatusAction = (typeof STATUS_ACTIONS)[number];
+export type ServiceEventType =
+  | "JOINED"
+  | "CONFIRMED"
+  | "DEPARTMENT_CHANGED"
+  | "DESIGNATION_CHANGED"
+  | "APPOINTMENT_TYPE_CHANGED"
+  | "REPORTING_CHANGED"
+  | "TRANSFERRED"
+  | "STATUS_CHANGED"
+  | "RESIGNED"
+  | "TERMINATED"
+  | "RETIRED"
+  | "REJOINED";
+
+export const STATUS_ACTION_LABEL: Record<StatusAction, string> = {
+  RESIGN: "Resigned",
+  TERMINATE: "Terminated",
+  RETIRE: "Retired",
+  START_LEAVE: "Long-term leave starts",
+  END_LEAVE: "Back from long-term leave",
+  REJOIN: "Rejoined",
+};
+export const SERVICE_EVENT_LABEL: Record<ServiceEventType, string> = {
+  JOINED: "Joined",
+  CONFIRMED: "Confirmed",
+  DEPARTMENT_CHANGED: "Department changed",
+  DESIGNATION_CHANGED: "Designation changed",
+  APPOINTMENT_TYPE_CHANGED: "Appointment type changed",
+  REPORTING_CHANGED: "Reporting line changed",
+  TRANSFERRED: "Transferred",
+  STATUS_CHANGED: "Status changed",
+  RESIGNED: "Resigned",
+  TERMINATED: "Terminated",
+  RETIRED: "Retired",
+  REJOINED: "Rejoined",
+};
+
+const LEAVER: readonly EmploymentStatus[] = ["RESIGNED", "TERMINATED", "RETIRED"];
+export const isLeaverStatus = (s: EmploymentStatus) => LEAVER.includes(s);
+
+/**
+ * H11 status machine. Leaving (resign/terminate/retire) from ACTIVE or ON_LEAVE sets a leaving date and reason;
+ * REJOIN brings a leaver back to ACTIVE with the same employee code (the leaving details stay in the history);
+ * ON_LEAVE is informational until Phase 3B (long-term leave).
+ */
+export function planStatusChange(current: EmploymentStatus, action: StatusAction): { next: EmploymentStatus; event: ServiceEventType; leaving: boolean; rejoining: boolean } {
+  const refuse = (msg: string): never => {
+    throw new ConflictError(msg);
+  };
+  switch (action) {
+    case "RESIGN":
+    case "TERMINATE":
+    case "RETIRE": {
+      if (isLeaverStatus(current)) refuse("This employee has already left. Record a rejoining first.");
+      const next = ({ RESIGN: "RESIGNED", TERMINATE: "TERMINATED", RETIRE: "RETIRED" } as const)[action];
+      return { next, event: next, leaving: true, rejoining: false };
+    }
+    case "START_LEAVE":
+      if (current !== "ACTIVE") refuse("Only an active employee can start long-term leave.");
+      return { next: "ON_LEAVE", event: "STATUS_CHANGED", leaving: false, rejoining: false };
+    case "END_LEAVE":
+      if (current !== "ON_LEAVE") refuse("This employee is not on long-term leave.");
+      return { next: "ACTIVE", event: "STATUS_CHANGED", leaving: false, rejoining: false };
+    case "REJOIN":
+      if (!isLeaverStatus(current)) refuse("Only an employee who has left can rejoin.");
+      return { next: "ACTIVE", event: "REJOINED", leaving: false, rejoining: true };
+  }
+}
+
+/**
+ * Effective dates (school-local ISO): never before joining. Leaving and status changes happen today or earlier
+ * (§9 "leaving ≤ today"); a rejoining is on or after the recorded leaving date; employment changes may be
+ * entered up to JOINING_MAX_DAYS_AHEAD ahead (planned transfers).
+ */
+export function assertEffectiveDate(kind: "status" | "employment" | "rejoin", input: { effectiveDate: string; joiningDate: string; leavingDate?: string | null }, today: string): void {
+  const problem = (message: string) => new ValidationError("Please correct the highlighted fields.", [{ path: "effectiveDate", message }]);
+  if (input.effectiveDate < input.joiningDate) throw problem("The date can't be before the joining date.");
+  if (kind === "employment" && input.effectiveDate > addDaysIso(today, JOINING_MAX_DAYS_AHEAD)) throw problem(`The date can be at most ${JOINING_MAX_DAYS_AHEAD} days from today.`);
+  if (kind !== "employment" && input.effectiveDate > today) throw problem("The date can't be in the future.");
+  if (kind === "rejoin" && input.leavingDate && input.effectiveDate < input.leavingDate) throw problem("Rejoining can't be before the leaving date.");
+}
+
+/**
+ * H10: would making `managerId` the manager of `employeeId` create a reporting cycle (including self-reporting)?
+ * `reportsTo` maps every employee id to its current manager id (or null). Walks up from the new manager.
+ */
+export function createsReportingCycle(employeeId: string, managerId: string, reportsTo: ReadonlyMap<string, string | null>): boolean {
+  const seen = new Set<string>();
+  for (let cur: string | null | undefined = managerId; cur; cur = reportsTo.get(cur)) {
+    if (cur === employeeId) return true;
+    if (seen.has(cur)) return true; // existing cycle (shouldn't exist): refuse rather than loop
+    seen.add(cur);
+  }
+  return false;
+}

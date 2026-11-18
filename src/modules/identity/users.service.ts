@@ -366,3 +366,32 @@ export async function listLinkableAccounts(ctx: AuthContext) {
     select: { id: true, username: true, displayName: true },
   });
 }
+
+/** The account linked to an employee (id only), inside the caller's transaction (no authorization here). */
+export async function linkedAccountTx(tx: Tx, employeeId: string): Promise<{ id: string; isActive: boolean } | null> {
+  return tx.user.findFirst({ where: { employeeId, deletedAt: null }, select: { id: true, isActive: true } });
+}
+
+/**
+ * Deactivation inside the caller's transaction (Phase 3A M4a, H13: leaving an employee may deactivate their
+ * login). The CALLER must run lockSuperAdminGuard(tx) as the first statement of its transaction (rule 17); this
+ * function takes it again too (a transaction-scoped advisory lock is re-entrant), so a caller that forgot can't
+ * race a concurrent Super Admin change (review M4a L2).
+ * Same rules as setUserActive(false): user.manage + delegation check, not your own account, a Super Admin must
+ * remain; sessions revoked; audited.
+ */
+export async function deactivateUserTx(tx: Tx, ctx: AuthContext, userId: string, reason: string): Promise<boolean> {
+  authorize(ctx, "user.manage");
+  await lockSuperAdminGuard(tx);
+  await tx.$queryRaw`SELECT id FROM "user" WHERE id = ${userId} FOR UPDATE`;
+  const target = await loadTarget(tx, userId);
+  assertCanDeactivate(ctx, target);
+  if (target.roleKeys.includes(SUPER_ADMIN)) {
+    assertKeepsASuperAdmin(await activeSuperAdminIds(tx), target.id, { isActive: false, isSuperAdmin: true });
+  }
+  if (!target.isActive) return false;
+  await tx.user.update({ where: { id: userId }, data: { isActive: false, failedLoginCount: 0 } });
+  await tx.session.deleteMany({ where: { userId } });
+  await audit(tx, actorOf(ctx), { action: "user.deactivate", entityType: "User", entityId: userId, before: { isActive: true }, after: { isActive: false, reason } });
+  return true;
+}
