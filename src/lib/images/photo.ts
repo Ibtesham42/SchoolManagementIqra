@@ -61,3 +61,20 @@ export async function processStudentPhoto(input: Uint8Array): Promise<ProcessedP
     throw new ValidationError("This photo couldn't be processed. Use a clear JPEG or PNG image.", [{ path: "file", message: "Unreadable or too large image." }]);
   }
 }
+
+/**
+ * KI-068 (owner decision 2026-11-18): document images (JPEG/PNG uploaded as a document, not as the photo) are
+ * re-saved WITHOUT metadata — EXIF (incl. GPS location of a phone scan), XMP, IPTC, comments and appended data
+ * are dropped. Same pixels and resolution (no resize, no crop); orientation applied so scans stay upright; same
+ * format (JPEG stays JPEG at high quality, PNG stays lossless PNG). Fail closed like photos: if the image can't be
+ * decoded, nothing is stored.
+ */
+export async function stripDocumentImageMetadata(input: Uint8Array, format: "image/jpeg" | "image/png"): Promise<Buffer> {
+  const sharp = await loadSharp();
+  try {
+    const image = sharp(input, { limitInputPixels: PHOTO_MAX_INPUT_PIXELS, failOn: "error", sequentialRead: true }).rotate();
+    return format === "image/jpeg" ? await image.jpeg({ quality: 92, mozjpeg: true }).toBuffer() : await image.png({ compressionLevel: 9 }).toBuffer();
+  } catch {
+    throw new ValidationError("This image couldn't be processed. Use a clear JPEG or PNG, or a PDF.", [{ path: "file", message: "Unreadable or too large image." }]);
+  }
+}

@@ -28,6 +28,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - Claude Code may no longer display the secret environment files with shell commands (deny list extended).
 - Prepared, not yet applied: the audit log becomes append-only in the database; deleted private files are purged 30 days after removal (metadata kept), with a dry-run-first maintenance job.
 
+### Changed (owner decisions 2026-11-18)
+- Photos and scans uploaded as documents (JPEG/PNG) are saved without hidden data such as the location where they were taken. PDFs are stored as uploaded.
+- Administrators must have their own login linked to their staff record before changing employment records or verifying documents (a Super Admin links it on the staff profile). This makes sure nobody changes their own record.
+
 ### Fixed (CI)
 - Five storage modules were missing from the repository because an ignore rule for local file storage also matched the source folder; CI now builds from a clean checkout again.
 

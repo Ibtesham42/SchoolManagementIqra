@@ -1,4 +1,4 @@
-import { NotFoundError } from "@/lib/errors";
+import { ForbiddenError, NotFoundError } from "@/lib/errors";
 import { authorize, hasPermission, scopeFor, type AuthContext } from "@/lib/rbac/authorize";
 
 /**
@@ -34,6 +34,18 @@ export function isOwnRecord(ctx: AuthContext, employeeId: string): boolean {
 /** "My profile" link on the account page: the account is linked and may read (at least) its own record. */
 export function canViewOwnProfile(ctx: AuthContext): boolean {
   return typeof ctx.employeeId === "string" && ctx.employeeId !== "" && hasPermission(ctx, "employee.read");
+}
+
+/**
+ * KI-069 (owner decision 2026-11-18): "approver ≠ subject" needs to know who the actor is as a staff member. A
+ * non–Super Admin whose own login is NOT linked to a staff record may not change employment records or verify
+ * documents until a Super Admin links it — otherwise they could change their own record unnoticed.
+ */
+export function assertActorLinked(ctx: AuthContext): void {
+  if (ctx.isSuperAdmin) return;
+  if (typeof ctx.employeeId !== "string" || ctx.employeeId === "") {
+    throw new ForbiddenError("Your login isn't linked to your staff record yet. Ask a Super Admin to link it, then try again.");
+  }
 }
 
 export function canReadPersonal(ctx: AuthContext): boolean {

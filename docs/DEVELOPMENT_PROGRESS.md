@@ -10,6 +10,12 @@
 
 ## Log
 
+### 2026-11-18 — Owner decisions: Phase 3B approved; KI-068 and KI-069 implemented; KI-059 still not effective
+- **Decisions (owner):** Phase 3B recommendations L1–L12 approved; KI-069 "require a linked login"; KI-068 "strip metadata"; KI-059 reported as done.
+- **KI-059:** `npm run test:integration -- --no-file-parallelism` (16:31Z) → the S-05 guard still reports `TEST_TARGET_BRANCH_ID` / `TEST_TARGET_ENDPOINT_ID` not set in `.env` — nothing written. Owner to check the lines are in `.env` itself (not `.env.test` / `.env.example`) and saved.
+- **KI-069:** `assertActorLinked` in lifecycle writes and document verification (Super Admin exempt); unit tests; integration fixtures link the HR actor (`staff-fixture`); new integration case (unlinked HR Manager refused).
+- **KI-068:** `stripDocumentImageMetadata` (sharp re-save, no resize) for JPEG/PNG documents in admissions and staff uploads; unit tests with real EXIF-bearing images.
+
 ### 2026-11-18 — S-15 orphan-blob reconciliation (KI-067; within the approved S-15 lifecycle)
 - `StorageDriver.listPrivate(limit)` (local driver: `private/YYYY/MM/<key>` matching the strict key pattern only; temp files and anything else ignored; memory driver for tests) and `reconcileOrphans` (pure `planOrphans`: unreferenced blobs older than 24 h; dry run by default; strict-key deletes; failures by error name; rows whose blob is missing are counted, never auto-fixed; `file.reconcile` audit with counts). `npm run files:purge` runs purge + reconciliation.
 - Bug found by the new unit test and fixed: `listPrivate(0)` returned one entry.

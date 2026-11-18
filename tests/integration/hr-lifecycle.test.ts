@@ -74,6 +74,8 @@ describe.skipIf(!enabled)("HR employment lifecycle (integration)", () => {
   beforeAll(async () => {
     await (await import("./catalog-setup")).ensureCatalog();
     const [r, h, lib] = await Promise.all([user("root", "SUPER_ADMIN"), user("hr", "HR_MANAGER"), user("lib", "LIBRARIAN")]);
+    // KI-069: lifecycle changes need the actor's own login linked to a staff record (before the session is created).
+    await (await import("./staff-fixture")).linkTeachingEmployee(m.prisma, tag, h.id, { staffType: "NON_TEACHING" });
     [root, hr, librarian] = await Promise.all([r, h, lib].map((u) => ctxFor(u.id)));
     dept1 = (await m.createDepartment(hr, { code: `${tag}-D1`, name: `${run} Dept 1` }))!.id;
     dept2 = (await m.createDepartment(hr, { code: `${tag}-D2`, name: `${run} Dept 2` }))!.id;
@@ -87,6 +89,7 @@ describe.skipIf(!enabled)("HR employment lifecycle (integration)", () => {
   afterAll(async () => {
     const { prisma } = m;
     if (!prisma) return;
+    await (await import("./staff-fixture")).removeStaffFixtures(prisma, tag);
     await prisma.section.deleteMany({ where: { classId } });
     await prisma.schoolClass.deleteMany({ where: { id: classId } });
     await prisma.academicSession.deleteMany({ where: { id: sessionId } });
@@ -166,6 +169,12 @@ describe.skipIf(!enabled)("HR employment lifecycle (integration)", () => {
     await m.changeStatus(hr, { id: e, version: 2, action: "REJOIN", effectiveDate: "2026-08-01", reason: "Synthetic return", deactivateAccount: false });
     expect(await m.prisma.employee.findUniqueOrThrow({ where: { id: e }, select: { employeeCode: true, employmentStatus: true, leavingDate: true, leavingReason: true } })).toEqual({ employeeCode: code, employmentStatus: "ACTIVE", leavingDate: null, leavingReason: null });
     expect((await events(e)).map((x) => x.eventType)).toEqual(["JOINED", "TERMINATED", "REJOINED"]);
+  });
+
+  it("KI-069: an HR Manager whose login isn't linked to a staff record is refused; nothing written", async () => {
+    const unlinked = await ctxFor((await user("hrx", "HR_MANAGER")).id);
+    const e = employeeIds[0];
+    await expect(m.changeStatus(unlinked, { id: e, version: await version(e), action: "START_LEAVE", effectiveDate: "2026-10-31", reason: "Synthetic", deactivateAccount: false })).rejects.toThrow(/isn't linked/);
   });
 
   it("history is personal tier: Librarian gets none; HR sees events with remarks; nobody can edit or delete events via a service", async () => {
