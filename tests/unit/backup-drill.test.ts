@@ -135,7 +135,7 @@ describe("encrypted backup file", () => {
     expect(() => decryptBackup(header, pass)).toThrow(DrillError);
     expect(() => decryptBackup(f.subarray(0, 40), pass)).toThrow(DrillError);
     expect(() => decryptBackup(Buffer.from("not a backup"), pass)).toThrow(/Not a SchoolERP backup/);
-  });
+  }, 30_000); // KI-061: several deliberately slow key derivations; CPU-bound under a parallel full run
   it("requires a passphrase of at least 12 characters", () => {
     expect(() => encryptBackup(plain, "short", "t")).toThrow(/at least 12/);
   });

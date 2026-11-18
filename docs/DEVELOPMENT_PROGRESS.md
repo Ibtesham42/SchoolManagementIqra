@@ -10,6 +10,11 @@
 
 ## Log
 
+### 2026-11-18 — Known-issue fixes KI-061 and KI-066 (code + unit tests; no database access)
+- **KI-066:** `identity.updateUser` locks the account row FOR UPDATE after `lockSuperAdminGuard`, closing the role-change vs class-teacher-assignment race (pre-existing S-09 path, found by the M3b review).
+- **KI-061:** the slow backup-encryption unit test has an explicit 30 s timeout.
+- Gates: lint, typecheck, check:deps, unit, build (see commit). Integration verification of KI-066 is part of the M6 Test run.
+
 ### 2026-11-18 — Phase 3A M5: HR dashboard and staff directory export (owner: "go ahead with M5"; code + unit tests; no database access)
 - **Dashboard** `/erp/hr` (`hr/hr-dashboard.service.ts`): current teaching / non-teaching staff, long-term leave, former staff; staff per department and per status (directory readers, aggregates only); recent joiners and leavers (personal tier only — employment dates); current staff without a linked login account (`user.read`) and active teaching staff without a class-teacher section in the current session (`user.read` + `academic.read` ALL; `academic.classTeachersOfCurrentSession`). "Overview" tab; the Staff menu item now opens the overview.
 - **Export** `POST /api/v1/employees/export` (+ "Download CSV" on the directory): same pattern as the student export — same-origin, rate limit, ≤ 4 KB form body with deadline, strict Zod, `export.run` + directory (ALL); **directory columns only** (never personal-tier data), ≤ 5,000 rows (refused, never truncated), spreadsheet-safe cells (S-11), audited with applied filter names + row count; fixed error codes (`STAFF_EXPORT_MESSAGES`).
