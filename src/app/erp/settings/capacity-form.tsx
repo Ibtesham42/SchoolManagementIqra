@@ -7,7 +7,10 @@ import { updateDefaultCapacityAction } from "./actions";
 
 /** School-wide default capacity for new sections (a default, not a limit). */
 export function CapacityForm({ value }: { value: number }) {
-  const [state, action] = useActionState(updateDefaultCapacityAction, initialState);
+  const [state, action] = useActionState(
+    updateDefaultCapacityAction,
+    initialState,
+  );
   const fe = state.fieldErrors ?? {};
   return (
     <form action={action} className="grid gap-4" noValidate>
@@ -26,7 +29,9 @@ export function CapacityForm({ value }: { value: number }) {
           required
         />
       </div>
-      <SubmitButton className="w-full sm:w-fit">Save default capacity</SubmitButton>
+      <SubmitButton className="w-full sm:w-fit">
+        Save default capacity
+      </SubmitButton>
     </form>
   );
 }

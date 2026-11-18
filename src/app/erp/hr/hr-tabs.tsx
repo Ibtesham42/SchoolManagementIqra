@@ -2,12 +2,28 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /** Server-rendered sub-navigation for the staff area (links, no client state). */
-export function HrTabs({ current }: { current: "overview" | "employees" | "departments" | "designations" }) {
+export function HrTabs({
+  current,
+}: {
+  current:
+    | "overview"
+    | "employees"
+    | "departments"
+    | "designations"
+    | "leave-types"
+    | "holidays";
+}) {
   const tabs = [
     { key: "overview", href: "/erp/hr", label: "Overview" },
     { key: "employees", href: "/erp/hr/employees", label: "Staff" },
     { key: "departments", href: "/erp/hr/departments", label: "Departments" },
-    { key: "designations", href: "/erp/hr/designations", label: "Designations" },
+    {
+      key: "designations",
+      href: "/erp/hr/designations",
+      label: "Designations",
+    },
+    { key: "leave-types", href: "/erp/hr/leave-types", label: "Leave types" },
+    { key: "holidays", href: "/erp/hr/holidays", label: "Holidays" },
   ];
   return (
     <nav aria-label="Staff" className="flex gap-1 overflow-x-auto border-b">

@@ -4,6 +4,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added (Phase 3B — attendance & leave, in progress)
+- Leave types (Staff → Leave types; School Admin and HR Manager): the school's own leave types with a quota per academic session, paid or unpaid, half days, carry-forward limit and who can use it (all, teaching or non-teaching staff). Deactivate instead of delete; once a type is in use its code, paid setting and staff group are fixed.
+- Holidays (Staff → Holidays): the school calendar per academic session — for everyone, staff only or students only. A holiday can't be added or removed on a date that pending or approved leave already covers.
+- Staff weekly off (Settings): for example Sunday plus the 2nd and 4th Saturday. Not set by default — every day counts as a working day until the school sets it.
+- Leave balances on the employee page (current academic session): available, used and carried-forward days; HR sets or corrects opening balances. Nobody except a Super Admin can set their own balance, and an administrator's login must be linked to their staff record first.
+- `db:check` verifies the 20 Phase 3B constraints.
+
 ### Added (Phase 3A — HR core, in progress)
 - Database migration `20261112000000_phase3a_hr_core` (applied to the development and Test databases 2026-11-18): departments, designations, employees with a permanent employee code, teacher profiles, employee documents (one current photo) and append-only service history; a login account can be linked to one employee. Department and designation names accept any script (Hindi, Khasi, other Indian languages and English). No Aadhaar, PAN, bank or medical data is stored.
 - The database check (`db:check`) also verifies the HR constraints once the migration is applied; the backup drill restores linked staff accounts correctly.

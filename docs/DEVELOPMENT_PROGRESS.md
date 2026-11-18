@@ -10,6 +10,12 @@
 
 ## Log
 
+### 2026-11-18 — Phase 3B M2: leave set-up (branch `feat/phase3b-m2-leave-setup`)
+- **Built:** `src/modules/hr/leave.rules.ts` (weekly off incl. nth Saturdays, working-day classification, half days, decimal days), `leave.schemas.ts` (strict), `leave-setup.service.ts` (leave types, holidays, opening balances); settings `getStaffWeeklyOff` / `updateStaffWeeklyOff` / `readLeaveCalendarTx` / `listSessionsForStaffPlanning`; pages `/erp/hr/leave-types`, `/erp/hr/holidays`, weekly-off card in Settings, leave-balance card on the employee profile (table ≥ md, cards below; 44 px targets).
+- **Security review (security-auditor, read-only):** no critical/high. Fixed: F1 leave_type `FOR SHARE` in balance writes (race with type edits; concurrency test), F2 personal tier required to write balances, F3 usage counts only for `employee.manage` (`inUse` yes/no), F4 weekly off row-locked + lock_timeout, F6 session row `FOR SHARE` (close race). F5 logged as **KI-071** (for M3). KI-069 applied: approver ≠ subject for balances.
+- **Tests:** unit `tests/unit/leave-rules.test.ts` (14); integration `tests/integration/hr-leave-setup.test.ts` (RBAC table over all 13 roles, unlinked actor, versions, CHECKs, closed session, holiday/leave conflicts, concurrency) — **not yet run: KI-059 guard refuses** (TEST_TARGET_* not visible in `.env`). Gates: lint, typecheck, check:deps, unit 58 files, build ✓. `db:check` on development: 20/20 Phase 3B CHECKs ✓.
+- **No schema change, no new permissions or grants.**
+
 ### 2026-11-18 — Phase 3B M1 APPLIED to development and Test (owner-approved SQL); KI-059 still not effective
 - **Approval (owner):** 3B SQL approved; apply to development + Test. Merged locally (`e690079`).
 - **Development:** read-only pre-check (identity `br-morning-scene-aoxm8ctk` / `ep-quiet-river-aoywr8xg`); only `20261119000000` pending; live diff = the 37 offline statements; restore point **16:50:43Z**; `db:deploy` exit 0 (16:50:56Z); 8/8; drift exit 0; `db:check` ✓ (40 tables); read-only check: 20/20 Phase 3B CHECKs validated.
