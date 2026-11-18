@@ -18,10 +18,10 @@ function ctxFor(roleKey: string, extra: Partial<AuthContext> = {}): AuthContext 
   };
 }
 
-describe("full RBAC matrix — 13 roles × 82 permissions", () => {
-  it("catalog has 13 roles and 82 permissions", () => {
+describe("full RBAC matrix — 13 roles × 84 permissions", () => {
+  it("catalog has 13 roles and 84 permissions", () => {
     expect(ROLES).toHaveLength(13);
-    expect(ALL_PERMISSION_KEYS).toHaveLength(82);
+    expect(ALL_PERMISSION_KEYS).toHaveLength(84);
   });
 
   it("docs/RBAC_MATRIX.md is up to date with the code", () => {
@@ -29,7 +29,7 @@ describe("full RBAC matrix — 13 roles × 82 permissions", () => {
     expect(onDisk).toBe(renderMatrixMarkdown());
   });
 
-  // Every one of the 13 × 82 = 1,066 cells: authorize() must agree exactly with the declared grant.
+  // Every one of the 13 × 84 = 1,092 cells: authorize() must agree exactly with the declared grant.
   const matrix = defaultGrantMatrix();
   describe.each(ROLES.map((r) => r.key))("%s", (roleKey) => {
     const ctx = ctxFor(roleKey);

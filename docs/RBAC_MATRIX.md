@@ -6,7 +6,7 @@
 
 Legend: ✓ = all records · A = assigned records only · S = own record only · C = linked children only · blank = denied
 
-Roles: 13 · Permissions: 82
+Roles: 13 · Permissions: 84
 
 | Permission | SUPER_ADMIN | SCHOOL_ADMIN | PRINCIPAL | VICE_PRINCIPAL | ACCOUNTANT | HR_MANAGER | ADMISSION_OFFICER | TEACHER | CLASS_TEACHER | TRANSPORT_MANAGER | LIBRARIAN | PARENT | STUDENT |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -43,8 +43,10 @@ Roles: 13 · Permissions: 82
 | `document.revoke` — Revoke issued documents (they then fail public verification) | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |
 | `certificate.issue` — Issue certificates | ✓ |  | ✓ | ✓ |  |  |  |  |  |  |  |  |  |
 | `employee.read` — View employee records | ✓ | ✓ | ✓ | ✓ |  | ✓ |  |  |  |  | ✓ |  |  |
-| `employee.manage` — Create and edit employees | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |
+| `employee.manage` — Create and edit employees | ✓ | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |
 | `employee.sensitive.read` — View employee PAN/bank details | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |
+| `employee.personal.read` — View employee personal details and documents | ✓ | ✓ | ✓ |  |  | ✓ |  |  |  |  |  |  |  |
+| `employee.document.manage` — Upload, verify and remove employee documents and photos | ✓ | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |
 | `leave.request` — Request leave | ✓ |  |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |
 | `leave.approve` — Approve or reject leave | ✓ |  | ✓ | ✓ |  | ✓ |  |  |  |  |  |  |  |
 | `attendance.student.mark` — Mark student attendance | ✓ |  |  |  |  |  |  | A | A |  |  |  |  |
@@ -97,12 +99,12 @@ Roles: 13 · Permissions: 82
 
 | Role | Permissions granted |
 |---|--:|
-| Super Admin (`SUPER_ADMIN`) | 82 |
-| School Admin (`SCHOOL_ADMIN`) | 38 |
-| Principal (`PRINCIPAL`) | 31 |
+| Super Admin (`SUPER_ADMIN`) | 84 |
+| School Admin (`SCHOOL_ADMIN`) | 41 |
+| Principal (`PRINCIPAL`) | 32 |
 | Vice Principal (`VICE_PRINCIPAL`) | 23 |
 | Accountant (`ACCOUNTANT`) | 15 |
-| HR Manager (`HR_MANAGER`) | 13 |
+| HR Manager (`HR_MANAGER`) | 15 |
 | Admission Officer (`ADMISSION_OFFICER`) | 16 |
 | Teacher (`TEACHER`) | 11 |
 | Class Teacher (`CLASS_TEACHER`) | 13 |

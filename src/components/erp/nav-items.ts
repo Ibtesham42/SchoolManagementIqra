@@ -1,6 +1,6 @@
 import type { PermissionKey, Scope } from "@/lib/rbac/catalog";
 
-export type NavIcon = "dashboard" | "admissions" | "students" | "rollNumbers" | "academic" | "users" | "roles" | "settings" | "account";
+export type NavIcon = "dashboard" | "admissions" | "students" | "rollNumbers" | "academic" | "users" | "roles" | "settings" | "account" | "staff";
 
 export interface NavItem {
   href: string;
@@ -22,6 +22,8 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/erp/admissions", label: "Admissions", icon: "admissions", anyOf: ["admission.read"] },
   { href: "/erp/students", label: "Students", icon: "students", anyOf: ["student.read"], scope: { key: "student.read", scopes: ["ALL", "ASSIGNED"] } },
   { href: "/erp/students/registration", label: "Roll numbers", icon: "rollNumbers", anyOf: ["rollnumber.generate", "rollnumber.finalize", "rollnumber.correct"] },
+  // Staff directory: ALL readers only (SELF "my profile" arrives with M3, on the account page).
+  { href: "/erp/hr/employees", label: "Staff", icon: "staff", anyOf: ["employee.read"], scope: { key: "employee.read", scopes: ["ALL"] } },
   { href: "/erp/academic", label: "Classes", icon: "academic", anyOf: ["academic.read"] }, // every academic screen reads first; manage alone shows nothing
   { href: "/erp/users", label: "Users", icon: "users", anyOf: ["user.read"] },
   { href: "/erp/roles", label: "Roles", icon: "roles", anyOf: ["role.manage"] },
