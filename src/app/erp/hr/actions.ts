@@ -10,7 +10,10 @@ import {
   createDepartmentSchema,
   createDesignationSchema,
   createEmployeeSchema,
+  linkAccountSchema,
   setMasterActiveSchema,
+  teacherProfileSchema,
+  unlinkAccountSchema,
   updateDepartmentSchema,
   updateDesignationSchema,
   updateEmployeeContactSchema,
@@ -18,6 +21,8 @@ import {
 } from "@/modules/hr/hr.schemas";
 import { createDepartment, createDesignation, setDepartmentActive, setDesignationActive, updateDepartment, updateDesignation } from "@/modules/hr/master-data.service";
 import { registerEmployee, updateEmployeeContact, updateEmployeePersonal } from "@/modules/hr/employees.service";
+import { linkStaffAccount, unlinkStaffAccount } from "@/modules/hr/staff-accounts.service";
+import { saveTeacherProfile } from "@/modules/hr/teacher-profiles.service";
 
 /** requireAuth → Zod parse → service → refresh; every error becomes a safe ActionState. */
 async function run<S extends z.ZodType>(schema: S, raw: unknown, call: (ctx: AuthContext, data: z.infer<S>) => Promise<ActionState | string>): Promise<ActionState> {
@@ -112,4 +117,41 @@ export async function updateEmployeePersonalAction(_prev: ActionState, fd: FormD
 }
 export async function updateEmployeeContactAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return run(updateEmployeeContactSchema, { ...ref(fd), ...contact(fd) }, async (ctx, d) => (await updateEmployeeContact(ctx, d), "Contact details saved."));
+}
+
+// ───────────────────────────── Teacher profile & login account (M3) ─────────────────────────────
+
+/** Repeated rows "prefix.<i>.<field>" → array of objects; fully blank rows are dropped (empty extra rows). */
+function rows(fd: FormData, prefix: string, fields: readonly string[]): Record<string, string>[] {
+  const out: Record<string, string>[] = [];
+  for (let i = 0; i < 20; i++) {
+    const row = Object.fromEntries(fields.map((f) => [f, formString(fd, `${prefix}.${i}.${f}`)]));
+    if (fields.some((f) => fd.has(`${prefix}.${i}.${f}`)) && fields.some((f) => row[f].trim() !== "")) out.push(row);
+  }
+  return out;
+}
+
+export async function saveTeacherProfileAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const version = formString(fd, "version");
+  const raw = {
+    employeeId: formString(fd, "employeeId"),
+    version: version === "" ? null : version,
+    qualifications: rows(fd, "q", ["degree", "subject", "institution", "year"]),
+    professionalQualifications: rows(fd, "pq", ["name", "year"]),
+    specializations: formString(fd, "specializations")
+      .split(/[,\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+    experienceYearsBefore: formString(fd, "experienceYearsBefore"),
+    teacherRegistrationNo: formString(fd, "teacherRegistrationNo"),
+  };
+  return run(teacherProfileSchema, raw, async (ctx, d) => (await saveTeacherProfile(ctx, d), "Teacher profile saved."));
+}
+
+export async function linkStaffAccountAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(linkAccountSchema, { employeeId: formString(fd, "employeeId"), userId: formString(fd, "userId") }, async (ctx, d) => `Linked to the account ${(await linkStaffAccount(ctx, d)).username}.`);
+}
+
+export async function unlinkStaffAccountAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(unlinkAccountSchema, { employeeId: formString(fd, "employeeId") }, async (ctx, d) => (await unlinkStaffAccount(ctx, d.employeeId), "Login account unlinked."));
 }
