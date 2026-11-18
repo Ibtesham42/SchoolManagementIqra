@@ -10,6 +10,12 @@
 
 ## Log
 
+### 2026-11-18 — Phase 3B M1 APPLIED to development and Test (owner-approved SQL); KI-059 still not effective
+- **Approval (owner):** 3B SQL approved; apply to development + Test. Merged locally (`e690079`).
+- **Development:** read-only pre-check (identity `br-morning-scene-aoxm8ctk` / `ep-quiet-river-aoywr8xg`); only `20261119000000` pending; live diff = the 37 offline statements; restore point **16:50:43Z**; `db:deploy` exit 0 (16:50:56Z); 8/8; drift exit 0; `db:check` ✓ (40 tables); read-only check: 20/20 Phase 3B CHECKs validated.
+- **Test:** same procedure (`DOTENV_PATH=.env.test` per command, verified unset); identity `br-purple-credit-aooeex9m` / `ep-quiet-brook-aoktw1hh`; restore point **16:52:10Z**; deploy exit 0; 8/8; drift exit 0; `db:check` ✓; 20/20 CHECKs validated.
+- **KI-059:** owner reported the `.env` lines fixed; the M6 run at 16:49Z was refused again by the S-05 guard (`TEST_TARGET_*` not set in `.env`) — nothing written. Owner to run the names-only check (`dotenv.parse` presence of the three names).
+
 ### 2026-11-18 — Phase 3B M1: schema + create-only migration for SQL review (NOT applied; branch `feat/phase3b-m1-schema`, not merged)
 - Prisma models per the approved decisions L1–L12: LeaveType, LeaveBalance, LeaveRequest, EmployeeAttendance, Holiday, AttendancePeriodLock, `SchoolSetting.weeklyOff`; 6 enums. `prisma validate` ✓.
 - Migration `prisma/migrations/20261119000000_phase3b_attendance_leave/migration.sql` generated offline (`migrate diff` between schema files; no database): 37 generated statements, all present unchanged; hand-added one transaction, `lock_timeout`, 20 CHECKs, rollback comment. Expand-only (only existing-table change: nullable `school_setting.weekly_off` + CHECK).

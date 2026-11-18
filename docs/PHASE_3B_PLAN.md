@@ -1,6 +1,6 @@
 # Phase 3B — Staff attendance and leave: assessment and implementation plan
 
-**Status: PROPOSAL 2026-11-18 — owner decisions L1–L12 needed before any schema or code.** Phase 3 split (PHASE_3_PLAN.md §1.3 B6): 3A HR core (done; M6 verification pending KI-059) · **3B attendance & leave (this plan)** · 3C payroll.
+**Status: decisions L1–L12 APPROVED (owner, 2026-11-18). 3B-M1 schema APPLIED to development and Test 2026-11-18 (migration `20261119000000`, drift 0). Next: 3B-M2.** Deviation recorded at M1: overlapping leave is prevented by the service under the employee row lock (no `btree_gist` exclusion constraint). Phase 3 split (PHASE_3_PLAN.md §1.3 B6): 3A HR core (done; M6 verification pending KI-059) · **3B attendance & leave (this plan)** · 3C payroll.
 
 ## 1. Starting point (verified from code)
 

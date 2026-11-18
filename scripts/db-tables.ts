@@ -37,7 +37,7 @@ export const APP_TABLES_IN_FK_ORDER = [
   "teacher_profile", // → employee
   "employee_document", // → employee, stored_file, user
   "employee_service_event", // → employee, user
-  // Phase 3B attendance & leave — migration 20261119000000 (SQL approved 2026-11-18).
+  // Phase 3B attendance & leave — migration 20261119000000 (applied to development and Test 2026-11-18).
   "leave_type",
   "leave_balance", // → employee, leave_type, academic_session
   "leave_request", // → employee, leave_type, academic_session, user
