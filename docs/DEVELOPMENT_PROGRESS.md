@@ -10,6 +10,11 @@
 
 ## Log
 
+### 2026-11-18 — Phase 3A M6 (part 1, offline): final security review + closure report draft; integration run still blocked (KI-059)
+- **Integration run attempted:** `npm run test:integration -- tests/integration/hr-core.test.ts --no-file-parallelism` → guard refused before connecting ("TEST_TARGET_BRANCH_ID is not set; TEST_TARGET_ENDPOINT_ID is not set. Nothing was written.").
+- **Final cross-cutting security review (security-auditor):** no Critical/High. Fixed: self-unlink refused for non–Super Admins (M1 part), personal/contact edits require the directory (L1), no self-verification of documents (L2), lock-order comment and API doc corrected; CHANGELOG wording corrected. Owner decision: KI-069 (unlinked administrators and approver ≠ subject). Logged: KI-070 (phone search in URL).
+- **Closure report draft:** docs/PHASE_3A_CLOSURE_REPORT.md (delivered milestones with commits, requirement → evidence table, reviews, pending Test verification, open items, sign-off).
+
 ### 2026-11-18 — Phase 3A M4b: staff documents and photo (owner: "continue with M4b"; code + unit tests; no database access)
 - **Purposes** `employee.document` (PDF/JPEG/PNG ≤ 10 MB; read `employee.personal.read`) and `employee.photo` (re-encoded 600×600 JPEG, metadata dropped; read `employee.read`), PRIVATE + encrypted, owned by the `EmployeeDocument` row. No identity-document types (H5).
 - **Service** `hr/employee-documents.service.ts`: upload (CPU and storage outside the transaction; one transaction with employee FOR UPDATE, previous photo retired, StoredFile + EmployeeDocument + audit; blob discarded on failure), list / download (record access ALL or SELF + personal tier, owner-bound file read, audited), photo (record access, directory tier), verify, remove (retire → S-15 purge after 30 days). Manage = `employee.document.manage` + directory + personal tier (HR Manager, School Admin, Super Admin). Documents remain manageable after leaving (relieving letters).

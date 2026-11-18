@@ -39,7 +39,9 @@ import { toCsv } from "@/lib/csv";
  * employee code is written only by registration (H3).
  *
  * Lock order: master data FOR SHARE (department, designation) → reports-to employee FOR SHARE → sequence
- * counter row (nextSequence). Edits lock only the edited employee row; nothing locks in the reverse order.
+ * counter row (nextSequence). Edits lock only the edited employee row. The lifecycle service takes employee
+ * FOR UPDATE → master data FOR SHARE (the reverse pair); that is safe ONLY because master-data writers never lock
+ * employee rows and two share locks don't conflict — keep that invariant (final review I1).
  */
 const actorOf = (ctx: AuthContext): AuditActor => ({ userId: ctx.userId, label: ctx.username, ipHash: ctx.ipHash, requestId: ctx.requestId });
 const parseDate = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
@@ -269,6 +271,7 @@ export async function employeeTimeZone(ctx: AuthContext): Promise<string | undef
  */
 function authorizeEdit(ctx: AuthContext) {
   authorize(ctx, "employee.manage");
+  employeeReadAccess(ctx); // directory (ALL) — no blind writes by id, no existence oracle (final review L1)
   if (!canReadPersonal(ctx)) throw new ForbiddenError("You need permission to view employees' personal details to edit them.");
 }
 

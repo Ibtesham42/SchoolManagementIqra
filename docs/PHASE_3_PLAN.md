@@ -158,7 +158,7 @@ Open matrix questions: should **School Admin** hold `employee.manage` (today onl
 ### 5.3 Policies (pure, unit-tested — `hr.policy.ts`)
 - `employeeScopeWhere(scope, ctx)`: ALL → all non-deleted; SELF → `{ id: ctx.employeeId }` (none if unlinked); ASSIGNED/CHILDREN refused.
 - Field tiers: directory select vs personal select chosen by the caller's `employee.personal.read` scope; SELF personal read only for the own record.
-- Delegation: account linking reuses `assertCanModifyUser` (no linking a more-privileged account); an HR user can't change their own employment status or reporting line (approver ≠ subject).
+- Delegation: account linking reuses `assertCanModifyUser` (no linking a more-privileged account); an HR user can't change their own employment status or reporting line (approver ≠ subject) — enforced via the account link (`AuthContext.employeeId`); unlinked administrators: KI-069.
 
 ---
 

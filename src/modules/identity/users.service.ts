@@ -337,6 +337,9 @@ export async function linkEmployeeAccountTx(tx: Tx, ctx: AuthContext, userId: st
 export async function unlinkEmployeeAccountTx(tx: Tx, ctx: AuthContext, employeeId: string): Promise<{ userId: string } | null> {
   const linked = await tx.user.findFirst({ where: { employeeId }, select: { id: true, deletedAt: true } });
   if (!linked) return null;
+  // Final review M1: unlinking your OWN account would switch off the "not your own record" checks (they rely on
+  // the link) — refused like self-linking; a Super Admin or another administrator does it.
+  if (linked.id === ctx.userId && !ctx.isSuperAdmin) throw new ForbiddenError("You can't unlink your own account. Ask another administrator.");
   if (linked.deletedAt) {
     // A soft-deleted account must not keep the employee from being relinked (review M3a L2). Removing a link
     // from an account nobody can use grants nothing, so the delegation check is not needed; still audited.

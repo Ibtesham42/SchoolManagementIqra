@@ -90,7 +90,7 @@ describe.skipIf(!enabled)("HR teacher profiles and account links (integration)",
     const dept = (await m.createDepartment(hr, { code: `${tag}-D`, name: `${run} Dept` }))!.id;
     const tgt = (await m.createDesignation(hr, { code: `${tag}-T`, name: `${run} TGT`, staffType: "TEACHING" }))!.id;
     const clk = (await m.createDesignation(hr, { code: `${tag}-C`, name: `${run} Clerk`, staffType: "NON_TEACHING" }))!.id;
-    for (const [i, desig] of [tgt, clk, tgt, tgt].entries()) employeeIds.push((await m.registerEmployee(hr, employee(desig, dept, i))).id);
+    for (const [i, desig] of [tgt, clk, tgt, tgt, clk].entries()) employeeIds.push((await m.registerEmployee(hr, employee(desig, dept, i))).id);
     [teacherEmpId, clerkEmpId, secondTeacherId] = employeeIds;
     // Review M3a L3: a custom (non–Super Admin) role holding both link permissions.
     const perms = await m.prisma.permission.findMany({ where: { key: { in: ["employee.read", "employee.personal.read", "employee.manage", "user.read", "user.manage"] } }, select: { id: true } });
@@ -167,6 +167,14 @@ describe.skipIf(!enabled)("HR teacher profiles and account links (integration)",
     // KI-065 (M3b): a non–Super Admin can't link their OWN account (it would gain SELF access to that record).
     await expect(m.linkStaffAccount(linker, { employeeId: fourth, userId: linkerUserId })).rejects.toThrow(/your own account/);
     expect(await m.prisma.user.count({ where: { employeeId: fourth } })).toBe(0);
+  });
+
+  it("final review M1: a non–Super Admin can't unlink their own account (it would switch off the own-record checks)", async () => {
+    const fifth = employeeIds[4];
+    await m.linkStaffAccount(root, { employeeId: fifth, userId: linkerUserId });
+    await expect(m.unlinkStaffAccount(linker, fifth)).rejects.toThrow(/your own account/);
+    expect(await m.prisma.user.count({ where: { id: linkerUserId, employeeId: fifth } })).toBe(1);
+    await m.unlinkStaffAccount(root, fifth);
   });
 
   it("review L2: a soft-deleted linked account doesn't block unlinking", async () => {
