@@ -93,7 +93,7 @@ Legend: **PK** primary key · **U** unique · **IX** index · **FK** foreign key
 | EmployeeServiceEvent | employeeId, eventType, effectiveDate, before JSON?, after JSON? (changed ids/codes/enum values only — never personal-tier values), remarks?, actedById? | IX(employeeId, effectiveDate). **Append-only at application level** (H12): no update/delete service path; a DB trigger is a separate S-07 decision |
 | User (change) | **employeeId → Employee** (FK `user_employee_id_fkey`, RESTRICT; existing unique index reused) | Optional 1:1 link (H2); linking needs `employee.manage` + `user.manage`, audited |
 
-*Phase 3B (attendance & leave, planned):*
+*Phase 3B (attendance & leave) — migration `20261119000000_phase3b_attendance_leave` **DRAFT, awaiting the owner's SQL approval, not applied** (PHASE_3B_PLAN.md, L1–L12 approved 2026-11-18). Final shape: LeaveType (code, Unicode name + nameKey, isPaid, annualQuota Decimal(4,1)?, allowHalfDay, carryForwardMax, appliesTo, isActive, version); LeaveBalance (employee × type × academic session; allotted / carriedForward / used Decimal(5,1) ≥ 0); LeaveRequest (from/to date, halfDay?, days Decimal(4,1) ≤ range, reason, status, decision fields; overlap prevented by the service under the employee row lock); EmployeeAttendance (U(employee, date), status, optional check-in/out times, source, leave link only on leave days, correction reason); Holiday (U(date, appliesTo)); AttendancePeriodLock (month = first day); SchoolSetting.weeklyOff JSON. 20 CHECKs, all FKs RESTRICT except actor columns. The rows below are the original Phase 0 sketch:*
 
 | Model | Key fields | Constraints |
 |---|---|---|

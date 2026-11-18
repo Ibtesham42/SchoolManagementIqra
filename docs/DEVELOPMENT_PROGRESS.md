@@ -10,6 +10,13 @@
 
 ## Log
 
+### 2026-11-18 — Phase 3B M1: schema + create-only migration for SQL review (NOT applied; branch `feat/phase3b-m1-schema`, not merged)
+- Prisma models per the approved decisions L1–L12: LeaveType, LeaveBalance, LeaveRequest, EmployeeAttendance, Holiday, AttendancePeriodLock, `SchoolSetting.weeklyOff`; 6 enums. `prisma validate` ✓.
+- Migration `prisma/migrations/20261119000000_phase3b_attendance_leave/migration.sql` generated offline (`migrate diff` between schema files; no database): 37 generated statements, all present unchanged; hand-added one transaction, `lock_timeout`, 20 CHECKs, rollback comment. Expand-only (only existing-table change: nullable `school_setting.weekly_off` + CHECK).
+- **Deviation from the plan, for review:** no database exclusion constraint for overlapping leave (would need `btree_gist`; can't express two half-days on one date) — the service prevents overlaps under the employee row lock.
+- `scripts/db-tables.ts` lists the 6 tables (FK order test ✓); static guard `tests/unit/migration-phase3b.test.ts` (5).
+- Next: owner reviews the SQL → apply to development, then Test (separate approvals) → 3B-M2.
+
 ### 2026-11-18 — Owner decisions: Phase 3B approved; KI-068 and KI-069 implemented; KI-059 still not effective
 - **Decisions (owner):** Phase 3B recommendations L1–L12 approved; KI-069 "require a linked login"; KI-068 "strip metadata"; KI-059 reported as done.
 - **KI-059:** `npm run test:integration -- --no-file-parallelism` (16:31Z) → the S-05 guard still reports `TEST_TARGET_BRANCH_ID` / `TEST_TARGET_ENDPOINT_ID` not set in `.env` — nothing written. Owner to check the lines are in `.env` itself (not `.env.test` / `.env.example`) and saved.

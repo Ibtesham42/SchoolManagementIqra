@@ -72,6 +72,12 @@ model User {
   employeeDocsUploaded EmployeeDocument[]     @relation("EmployeeDocumentUploadedBy")
   employeeDocsVerified EmployeeDocument[]     @relation("EmployeeDocumentVerifiedBy")
   serviceEventsActed   EmployeeServiceEvent[] @relation("EmployeeServiceEventActedBy")
+  // Phase 3B attendance & leave (actor references; SET NULL).
+  leaveRequested       LeaveRequest[]         @relation("LeaveRequestedBy")
+  leaveDecided         LeaveRequest[]         @relation("LeaveDecidedBy")
+  attendanceMarked     EmployeeAttendance[]   @relation("AttendanceMarkedBy")
+  holidaysCreated      Holiday[]              @relation("HolidayCreatedBy")
+  periodLocks          AttendancePeriodLock[] @relation("AttendancePeriodLockedBy")
 
   @@index([isActive])
   @@map("user")
@@ -187,6 +193,8 @@ model SchoolSetting {
   branding                   Json?
   idFormats                  Json?                 @map("id_formats")
   rollNumberRules            Json?                 @map("roll_number_rules")
+  /// Phase 3B (L3): staff weekly off, e.g. { "days": [0], "saturdays": [2, 4] } (0 = Sunday; nth Saturdays).
+  weeklyOff                  Json?                 @map("weekly_off")
   features                   Json? // toggles for optional external services (email, AI, payments)
   /// Capacity offered for a new section when neither the form nor its class gives one. A default,
   /// not a limit: every section stores its own capacity. CHECK 1–200 (migration 20261110000000).
@@ -225,6 +233,8 @@ model AcademicSession {
   applications     AdmissionApplication[]
   enrollments      StudentEnrollment[]
   admittedStudents Student[]              @relation("StudentAdmittedSession")
+  leaveBalances    LeaveBalance[]
+  leaveRequests    LeaveRequest[]
 
   @@map("academic_session")
 }
@@ -941,6 +951,9 @@ model Employee {
   teacherProfile TeacherProfile?
   documents      EmployeeDocument[]
   serviceEvents  EmployeeServiceEvent[]
+  leaveBalances  LeaveBalance[]
+  leaveRequests  LeaveRequest[]
+  attendance     EmployeeAttendance[]
 
   @@index([fullNameNormalized])
   @@index([staffType, employmentStatus])
@@ -1015,4 +1028,184 @@ model EmployeeServiceEvent {
 
   @@index([employeeId, effectiveDate])
   @@map("employee_service_event")
+}
+
+// ───────────────────────────── Phase 3B — staff attendance & leave (PHASE_3B_PLAN.md, L1–L12) ─────────────────────────────
+// Leave year = academic session (L1). Leave types are school-defined (L2, nothing seeded). Days are Decimal
+// (half-days, L10) — never floats. Every FK RESTRICT except actor columns (SET NULL). CHECKs hand-written.
+
+enum LeaveAppliesTo {
+  ALL
+  TEACHING
+  NON_TEACHING
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum HalfDay {
+  FIRST
+  SECOND
+}
+
+enum StaffAttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  ON_LEAVE
+  HOLIDAY
+  WEEKLY_OFF
+}
+
+enum AttendanceSource {
+  MANUAL
+  IMPORT
+}
+
+enum HolidayAppliesTo {
+  ALL
+  STAFF
+  STUDENTS
+}
+
+/// Master data (L2): school-defined; deactivated, never deleted once used. Case-insensitive unique name via nameKey.
+model LeaveType {
+  id              String         @id @default(cuid(2))
+  code            String         @unique @db.VarChar(20)
+  name            String         @db.VarChar(80)
+  nameKey         String         @unique @map("name_key") @db.VarChar(80)
+  isPaid          Boolean        @map("is_paid")
+  /// Days allotted per academic session; null = no quota (e.g. an unpaid LOP type).
+  annualQuota     Decimal?       @map("annual_quota") @db.Decimal(4, 1)
+  allowHalfDay    Boolean        @default(true) @map("allow_half_day")
+  /// Unused days that may move to the next session (0 = none).
+  carryForwardMax Decimal        @default(0) @map("carry_forward_max") @db.Decimal(4, 1)
+  appliesTo       LeaveAppliesTo @default(ALL) @map("applies_to")
+  isActive        Boolean        @default(true) @map("is_active")
+  version         Int            @default(1)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  balances LeaveBalance[]
+  requests LeaveRequest[]
+
+  @@map("leave_type")
+}
+
+/// One per employee × leave type × academic session (L1). `used` changes only with approvals/cancellations.
+model LeaveBalance {
+  id                String   @id @default(cuid(2))
+  employeeId        String   @map("employee_id")
+  leaveTypeId       String   @map("leave_type_id")
+  academicSessionId String   @map("academic_session_id")
+  allotted          Decimal  @default(0) @db.Decimal(5, 1)
+  carriedForward    Decimal  @default(0) @map("carried_forward") @db.Decimal(5, 1)
+  used              Decimal  @default(0) @db.Decimal(5, 1)
+  version           Int      @default(1)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  employee        Employee        @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  leaveType       LeaveType       @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+
+  @@unique([employeeId, leaveTypeId, academicSessionId])
+  @@index([academicSessionId])
+  @@map("leave_balance")
+}
+
+/// A leave application. No overlap with another PENDING/APPROVED request of the same employee — checked by the
+/// service under the employee row lock (two half-days on one date may combine; see the M1 proposal).
+model LeaveRequest {
+  id                String             @id @default(cuid(2))
+  employeeId        String             @map("employee_id")
+  leaveTypeId       String             @map("leave_type_id")
+  academicSessionId String             @map("academic_session_id")
+  fromDate          DateTime           @map("from_date") @db.Date
+  toDate            DateTime           @map("to_date") @db.Date
+  halfDay           HalfDay?           @map("half_day")
+  /// Working days in the range (weekly offs and staff holidays excluded), computed by the service.
+  days              Decimal            @db.Decimal(4, 1)
+  /// Personal tier — never written to audit rows.
+  reason            String             @db.VarChar(500)
+  status            LeaveRequestStatus @default(PENDING)
+  requestedById     String?            @map("requested_by_id")
+  decidedById       String?            @map("decided_by_id")
+  decidedAt         DateTime?          @map("decided_at") @db.Timestamptz(3)
+  decisionNote      String?            @map("decision_note") @db.VarChar(500)
+  version           Int                @default(1)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  employee        Employee             @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  leaveType       LeaveType            @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  academicSession AcademicSession      @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  requestedBy     User?                @relation("LeaveRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  decidedBy       User?                @relation("LeaveDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  attendance      EmployeeAttendance[]
+
+  @@index([employeeId, fromDate])
+  @@index([status, fromDate])
+  @@map("leave_request")
+}
+
+/// One row per employee per day (L7). Approved leave, holidays and weekly offs are pre-filled by the service.
+model EmployeeAttendance {
+  id               String                @id @default(cuid(2))
+  employeeId       String                @map("employee_id")
+  date             DateTime              @db.Date
+  status           StaffAttendanceStatus
+  /// School-local times of day (optional).
+  checkIn          DateTime?             @map("check_in") @db.Time(0)
+  checkOut         DateTime?             @map("check_out") @db.Time(0)
+  source           AttendanceSource      @default(MANUAL)
+  leaveRequestId   String?               @map("leave_request_id")
+  /// Required when a saved day is changed (L8) — personal tier, never in audit rows.
+  correctionReason String?               @map("correction_reason") @db.VarChar(500)
+  markedById       String?               @map("marked_by_id")
+  version          Int                   @default(1)
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  employee     Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  leaveRequest LeaveRequest? @relation(fields: [leaveRequestId], references: [id], onDelete: Restrict)
+  markedBy     User?         @relation("AttendanceMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, date])
+  @@index([date])
+  @@index([leaveRequestId])
+  @@map("employee_attendance")
+}
+
+/// School calendar (shared with the Phase 4 academic calendar). appliesTo STAFF/ALL affects staff working days.
+model Holiday {
+  id          String           @id @default(cuid(2))
+  date        DateTime         @db.Date
+  name        String           @db.VarChar(80)
+  appliesTo   HolidayAppliesTo @default(ALL) @map("applies_to")
+  createdById String?          @map("created_by_id")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy User? @relation("HolidayCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([date, appliesTo])
+  @@map("holiday")
+}
+
+/// L8: a locked month (first day of the month) can't have staff attendance changed. Recorded in 3B, set by payroll (3C).
+model AttendancePeriodLock {
+  id         String   @id @default(cuid(2))
+  month      DateTime @unique @db.Date
+  lockedById String?  @map("locked_by_id")
+  lockedAt   DateTime @default(now()) @map("locked_at") @db.Timestamptz(3)
+
+  lockedBy User? @relation("AttendancePeriodLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
+
+  @@map("attendance_period_lock")
 }
