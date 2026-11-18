@@ -7,7 +7,7 @@ import { processStudentPhoto } from "@/lib/images/photo";
 import { authorize, type AuthContext } from "@/lib/rbac/authorize";
 import { detectFileType } from "@/lib/storage/file-types";
 import { discardUpload, prepareUpload, readStoredFile, recordUpload, retireStoredFile, type PreparedUpload } from "@/modules/files/files.service";
-import { canReadPersonal, employeeReadAccess, employeeRecordAccess } from "./hr.policy";
+import { canReadPersonal, employeeReadAccess, employeeRecordAccess, isOwnRecord } from "./hr.policy";
 import type { EmployeeDocumentFields } from "./hr.schemas";
 
 /**
@@ -153,6 +153,8 @@ export async function removeEmployeeDocument(ctx: AuthContext, employeeId: strin
 /** Mark a document as checked against the original (who and when). */
 export async function verifyEmployeeDocument(ctx: AuthContext, employeeId: string, documentId: string) {
   authorizeManage(ctx);
+  // "Verified by" must be someone else for one's own documents (final review L2; Super Admin exempt).
+  if (isOwnRecord(ctx, employeeId) && !ctx.isSuperAdmin) throw new ForbiddenError("You can't verify your own documents. Ask another administrator.");
   try {
     await prisma.$transaction(async (tx) => {
       await lockEmployee(tx, employeeId);

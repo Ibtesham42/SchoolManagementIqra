@@ -181,6 +181,26 @@ describe("school-wide lists need the directory (ALL) — SELF is not enough (sec
   });
 });
 
+describe("edits need the directory (final review L1)", () => {
+  it("a custom role with employee.manage + personal ALL but employee.read only at SELF can't edit others (refused before any database access)", async () => {
+    const { updateEmployeePersonal, updateEmployeeContact } = await import("@/modules/hr/employees.service");
+    const ctx = ctxFor("TEACHER", [["employee.manage", "ALL"], ["employee.personal.read", "ALL"]]);
+    await expect(updateEmployeePersonal(ctx, { id: "e2", version: 1, firstName: "X", middleName: null, lastName: null, dob: "1990-01-01", gender: "MALE" })).rejects.toBeInstanceOf(NotFoundError);
+    await expect(
+      updateEmployeeContact(ctx, { id: "e2", version: 1, personalPhone: "9876543210", workPhone: null, personalEmail: null, workEmail: null, address: null, emergencyContact: null }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe("no self-verification of documents (final review L2)", () => {
+  it("HR Manager and School Admin can't verify documents on their own record; refused before any database access", async () => {
+    const { verifyEmployeeDocument } = await import("@/modules/hr/employee-documents.service");
+    for (const role of ["HR_MANAGER", "SCHOOL_ADMIN"]) {
+      await expect(verifyEmployeeDocument({ ...ctxFor(role), employeeId: "me" }, "me", "doc1"), role).rejects.toThrow(/your own documents/);
+    }
+  });
+});
+
 describe("registration gate (security review L2)", () => {
   it("a custom role with employee.manage but no personal read can't register (refused before any database access)", async () => {
     const { registerEmployee } = await import("@/modules/hr/employees.service");
