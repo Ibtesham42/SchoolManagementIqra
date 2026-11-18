@@ -31,7 +31,7 @@ Phase 2B closure remains a separate, required gate (M0).
 | # | Dependency / blocker | Impact on Phase 3 | Proposed handling |
 |---|---|---|---|
 | B1 | Phase 2B not formally closed | Phase 3 builds on the same files (identity, academic, files) | Close Phase 2B first (§8, M0) |
-| B2 | Nothing committed | A Phase 3 mistake can't be cleanly separated from Phase 2B work | **Commit Phase 2B on a branch before Phase 3 code** (owner approval) |
+| B2 | Nothing committed | A Phase 3 mistake can't be cleanly separated from Phase 2B work | **Resolved 2026-11-18:** Phase 2B + M1 committed on branch `phase-2b-and-3a-m1` (`0dbeb78`); M2 code starts on top of it |
 | B3 | KI-059 `.env` lines | Phase 3 integration tests can't run | Owner adds two lines |
 | B4 | Development catalog not synced | HR screens on development need new permissions too | One owner-approved seed sync for Phase 2B **and** Phase 3 permissions |
 | B5 | S-15 retention undecided | Employee documents need the same lifecycle | Decide S-15 before M4 (documents) |

@@ -10,6 +10,12 @@
 
 ## Log
 
+### 2026-11-18 — Phase 2a/2/2B and Phase 3A M1 committed on a branch (owner-approved)
+- Branch `phase-2b-and-3a-m1` from `main` (`270f8fe`); one commit `0dbeb78` (272 files) with all Phase 2a, 2, 2B work (incl. security fixes) and Phase 3A M1. Not merged, not pushed.
+- **Pre-commit checks:** every `.env` variant ignored (only the names-only `.env.example` tracked); nothing generated, built or local staged; secret scan of all 272 files → only synthetic fixtures (`SYNTHETIC-PASSWORD-MARKER`, `u:p@`, `.invalid` hosts) and a skills-lock content hash; no personal data. Gates re-run: lint ✓, typecheck ✓, check:deps ✓, unit 46 / 2,258 ✓.
+- **New `.gitattributes`** pins `prisma/migrations/**` to LF: `core.autocrlf=true` would otherwise rewrite applied migrations to CRLF on checkout and change their Prisma checksums. Staged blobs hash to the checksums recorded on development and Test for all five migrations.
+- Follow-up docs commit records this entry.
+
 ### 2026-11-18 — Phase 3A M1 step 3: migration 20261112000000 APPLIED to Test (owner-approved); M1 complete
 - **Pre-checks (read-only, 08:22:00Z; scratchpad script loading `.env.test` and `.env` into private objects, never into the shell; every query in `BEGIN READ ONLY`):** shell clean; `.env.test` holds exactly DATABASE_URL + DIRECT_URL, both → `ep-quiet-brook-aoktw1hh` (direct not pooled), same endpoint as `TEST_DATABASE_URL`, ≠ development, not forbidden (1 branch, 1 endpoint forbidden); live identity `br-purple-credit-aooeex9m` / `ep-quiet-brook-aoktw1hh` on both URLs. `env:check` PASSED. `DOTENV_PATH=.env.test` (per command only; verified unset afterwards) `migrate status` → Test host, only `20261112000000` pending. `user.employee_id` set = 0; no Phase 3A object present. Live diff → 37 statements, identical to the offline diff (no drift on existing tables).
 - **Baseline:** catalog 82 / 13 / 271, stored_file 7, school_setting 1, audit_log 1552, rate_limit_bucket 24, usage_counter 1; every other table 0 (Test clean since the KI-058 run).
