@@ -240,3 +240,7 @@ export const changeStatusSchema = z
 export type ChangeEmploymentInput = z.infer<typeof changeEmploymentSchema>;
 export type ChangeReportingInput = z.infer<typeof changeReportingSchema>;
 export type ChangeStatusInput = z.infer<typeof changeStatusSchema>;
+
+/** Directory export (M5) uses the directory filters, no paging; the service refuses more than the row limit. */
+export const exportEmployeesSchema = listEmployeesSchema.omit({ page: true, pageSize: true });
+export type ExportEmployeesInput = z.infer<typeof exportEmployeesSchema>;

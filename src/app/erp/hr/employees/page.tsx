@@ -1,6 +1,9 @@
 import Link from "next/link";
-import { UserPlus } from "lucide-react";
+import { Download, UserPlus } from "lucide-react";
 import { requireAuth } from "@/lib/auth/context";
+import { hasPermission } from "@/lib/rbac/authorize";
+import { isExportCode, STAFF_EXPORT_MESSAGES } from "@/lib/http/export-errors";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { canBrowseEmployees, canManageEmployees, canReadPersonal } from "@/modules/hr/hr.policy";
 import { APPOINTMENT_TYPE_LABEL, APPOINTMENT_TYPES, EMPLOYMENT_STATUS_LABEL, EMPLOYMENT_STATUSES, STAFF_TYPE_LABEL, STAFF_TYPES } from "@/modules/hr/hr.rules";
 import { listEmployeesSchema } from "@/modules/hr/hr.schemas";
@@ -42,6 +45,8 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   ]);
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const canManage = canManageEmployees(ctx);
+  const canExport = hasPermission(ctx, "export.run");
+  const exportCode = one(sp.export);
 
   const qs = (over: Record<string, string | undefined>) => {
     const u = new URLSearchParams();
@@ -67,6 +72,11 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
         }
       />
       <HrTabs current="employees" />
+      {isExportCode(exportCode) && (
+        <Alert variant="destructive" role="alert">
+          <AlertDescription>{STAFF_EXPORT_MESSAGES[exportCode]}</AlertDescription>
+        </Alert>
+      )}
 
       <ul className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="Staff by status">
         {EMPLOYMENT_STATUSES.map((s) => (
@@ -95,6 +105,17 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
           </Button>
         </div>
       </form>
+
+      {canExport && total > 0 && (
+        <form method="post" action="/api/v1/employees/export" className="flex justify-end">
+          {Object.entries({ q: filters.q, type: filters.staffType, department: filters.departmentId, designation: filters.designationId, status: filters.status, appointment: filters.appointmentType }).map(([k, v]) =>
+            v ? <input key={k} type="hidden" name={k} value={v} /> : null,
+          )}
+          <Button type="submit" variant="outline" className="w-full sm:w-fit">
+            <Download aria-hidden="true" /> Download CSV ({total})
+          </Button>
+        </form>
+      )}
 
       <Card>
         <CardHeader>

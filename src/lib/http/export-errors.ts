@@ -29,3 +29,10 @@ export function exportErrorCode(e: unknown): ExportCode {
   if (e instanceof ValidationError || e instanceof PayloadTooLargeError || e instanceof RequestTimeoutError) return "invalid";
   return "failed";
 }
+
+/** Same fixed codes for the staff directory export (Phase 3A M5) — staff wording, never text from the URL. */
+export const STAFF_EXPORT_MESSAGES: Record<ExportCode, string> = {
+  ...EXPORT_MESSAGES,
+  too_many: "Too many staff match for one export (limit 5,000). Narrow the filters and try again.",
+  forbidden: "You don't have permission to export the staff directory, or the request didn't come from this site.",
+};
