@@ -14,9 +14,16 @@ export default async function DepartmentsPage() {
   const rows = await listDepartments(ctx, { includeInactive: true });
   return (
     <div className="mx-auto grid max-w-4xl gap-4">
-      <PageHeader title="Departments" description="The school's departments. Never deleted — deactivate one that is no longer used." />
+      <PageHeader
+        title="Departments"
+        description="The school's departments. Never deleted — deactivate one that is no longer used."
+      />
       <HrTabs current="departments" />
-      <MasterList kind="department" rows={rows} canManage={canManageEmployees(ctx)} />
+      <MasterList
+        kind="department"
+        rows={rows}
+        canManage={canManageEmployees(ctx)}
+      />
     </div>
   );
 }

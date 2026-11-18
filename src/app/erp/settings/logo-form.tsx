@@ -1,6 +1,11 @@
 "use client";
 
-import { useActionState, useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  useActionState,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 import { Upload } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,10 +24,14 @@ export function LogoForm() {
   const [tooLarge, setTooLarge] = useState<string | null>(null);
   const error = tooLarge ?? state.fieldErrors?.file;
 
-  const onChange = (e: ChangeEvent<HTMLInputElement>) => setTooLarge(checkFileSize(e.currentTarget.files?.[0], LOGO_MAX_BYTES));
+  const onChange = (e: ChangeEvent<HTMLInputElement>) =>
+    setTooLarge(checkFileSize(e.currentTarget.files?.[0], LOGO_MAX_BYTES));
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     const input = e.currentTarget.elements.namedItem("logo");
-    const problem = input instanceof HTMLInputElement ? checkFileSize(input.files?.[0], LOGO_MAX_BYTES) : null;
+    const problem =
+      input instanceof HTMLInputElement
+        ? checkFileSize(input.files?.[0], LOGO_MAX_BYTES)
+        : null;
     setTooLarge(problem);
     if (problem) e.preventDefault(); // never send an oversized body
   };
@@ -51,7 +60,11 @@ export function LogoForm() {
           </p>
         )}
       </div>
-      <SubmitButton variant="outline" className="w-full sm:w-fit" pendingLabel="Uploading…">
+      <SubmitButton
+        variant="outline"
+        className="w-full sm:w-fit"
+        pendingLabel="Uploading…"
+      >
         <Upload aria-hidden="true" /> Upload logo
       </SubmitButton>
     </form>

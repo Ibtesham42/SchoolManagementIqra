@@ -14,9 +14,16 @@ export default async function DesignationsPage() {
   const rows = await listDesignations(ctx, { includeInactive: true });
   return (
     <div className="mx-auto grid max-w-4xl gap-4">
-      <PageHeader title="Designations" description="Job titles for staff, teaching or non-teaching. Never deleted — deactivate one that is no longer used." />
+      <PageHeader
+        title="Designations"
+        description="Job titles for staff, teaching or non-teaching. Never deleted — deactivate one that is no longer used."
+      />
       <HrTabs current="designations" />
-      <MasterList kind="designation" rows={rows} canManage={canManageEmployees(ctx)} />
+      <MasterList
+        kind="designation"
+        rows={rows}
+        canManage={canManageEmployees(ctx)}
+      />
     </div>
   );
 }

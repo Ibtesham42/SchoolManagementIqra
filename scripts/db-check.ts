@@ -53,6 +53,9 @@ const CLASS_SECTION_FKS = [
 const CLASS_TEACHER_INDEX = "section_session_class_teacher_key";
 
 /** Phase 3A HR core (migration 20261112000000): 21 CHECKs, 12 foreign keys with their ON DELETE rule, photo index. */
+/** Phase 3B migration 20261119000000 (tests/unit/migration-phase3b.test.ts pins the same number). */
+const PHASE_3B_CHECK_COUNT = 20;
+
 const HR_CHECKS = [
   ...["department", "designation"].flatMap((t) => [`${t}_code_format_check`, `${t}_name_shape_check`, `${t}_name_key_shape_check`, `${t}_version_check`]),
   ...["version", "code", "name", "phone", "dob", "dates", "leaving", "reports_to"].map((c) => `employee_${c}_check`),
@@ -224,6 +227,17 @@ async function main() {
       const c = await client.query<{ convalidated: boolean }>("select convalidated from pg_constraint where conname = 'stored_file_purged_check'");
       const ok = c.rows[0]?.convalidated === true;
       console.log(ok ? "✓ stored_file.purged_at CHECK validated (S-15)" : "✗ stored_file_purged_check missing or NOT VALID (S-15)");
+      if (!ok) constraintProblems++;
+    }
+
+    // Phase 3B M1 (applied 2026-11-18): 20 CHECK constraints on the attendance & leave tables + school_setting.weekly_off.
+    if (applied.has("20261119000000_phase3b_attendance_leave")) {
+      const c = await client.query<{ n: string; v: string }>(
+        "select count(*)::text n, count(*) filter (where convalidated)::text v from pg_constraint where contype = 'c' and (conrelid::regclass::text = any($1) or conname = 'school_setting_weekly_off_check')",
+        [["leave_type", "leave_balance", "leave_request", "employee_attendance", "holiday", "attendance_period_lock"]],
+      );
+      const ok = c.rows[0]?.n === String(PHASE_3B_CHECK_COUNT) && c.rows[0]?.v === String(PHASE_3B_CHECK_COUNT);
+      console.log(ok ? `✓ ${PHASE_3B_CHECK_COUNT} Phase 3B attendance & leave CHECK constraints validated` : `✗ Phase 3B CHECK constraints: ${c.rows[0]?.n} present, ${c.rows[0]?.v} validated (expected ${PHASE_3B_CHECK_COUNT})`);
       if (!ok) constraintProblems++;
     }
 
