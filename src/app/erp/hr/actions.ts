@@ -7,6 +7,9 @@ import { requireAuth } from "@/lib/auth/context";
 import { formString, fromError, fromZod, type ActionState } from "@/lib/action-state";
 import type { AuthContext } from "@/lib/rbac/authorize";
 import {
+  changeEmploymentSchema,
+  changeReportingSchema,
+  changeStatusSchema,
   createDepartmentSchema,
   createDesignationSchema,
   createEmployeeSchema,
@@ -21,6 +24,7 @@ import {
 } from "@/modules/hr/hr.schemas";
 import { createDepartment, createDesignation, setDepartmentActive, setDesignationActive, updateDepartment, updateDesignation } from "@/modules/hr/master-data.service";
 import { registerEmployee, updateEmployeeContact, updateEmployeePersonal } from "@/modules/hr/employees.service";
+import { changeEmployment, changeReporting, changeStatus } from "@/modules/hr/employee-lifecycle.service";
 import { linkStaffAccount, unlinkStaffAccount } from "@/modules/hr/staff-accounts.service";
 import { saveTeacherProfile } from "@/modules/hr/teacher-profiles.service";
 
@@ -154,4 +158,40 @@ export async function linkStaffAccountAction(_prev: ActionState, fd: FormData): 
 
 export async function unlinkStaffAccountAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return run(unlinkAccountSchema, { employeeId: formString(fd, "employeeId") }, async (ctx, d) => (await unlinkStaffAccount(ctx, d.employeeId), "Login account unlinked."));
+}
+
+// ───────────────────────────── Lifecycle (M4a) ─────────────────────────────
+
+export async function changeEmploymentAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = {
+    ...ref(fd),
+    effectiveDate: formString(fd, "effectiveDate"),
+    departmentId: formString(fd, "departmentId"),
+    designationId: formString(fd, "designationId"),
+    appointmentType: formString(fd, "appointmentType"),
+    confirmationDate: formString(fd, "confirmationDate"),
+    remarks: formString(fd, "remarks"),
+  };
+  return run(changeEmploymentSchema, raw, async (ctx, d) => {
+    const { events } = await changeEmployment(ctx, d);
+    return events === 0 ? "Nothing changed." : `Saved — ${events} change${events === 1 ? "" : "s"} recorded in the service history.`;
+  });
+}
+
+export async function changeReportingAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { ...ref(fd), reportsToId: formString(fd, "reportsToId"), effectiveDate: formString(fd, "effectiveDate"), remarks: formString(fd, "remarks") };
+  return run(changeReportingSchema, raw, async (ctx, d) => ((await changeReporting(ctx, d)).changed ? "Reporting line changed." : "Nothing changed."));
+}
+
+export async function changeStatusAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { ...ref(fd), action: formString(fd, "action"), effectiveDate: formString(fd, "effectiveDate"), reason: formString(fd, "reason"), deactivateAccount: formString(fd, "deactivateAccount") === "on" };
+  return run(changeStatusSchema, raw, async (ctx, d) => {
+    const r = await changeStatus(ctx, d);
+    const parts = ["Status saved."];
+    if (r.sectionsReleased) parts.push(`${r.sectionsReleased} class-teacher section${r.sectionsReleased === 1 ? "" : "s"} released.`);
+    if (r.accountDeactivated) parts.push("The login account was deactivated.");
+    // H13: never a silent skip — say plainly that the login still works.
+    if (r.accountStillActive) parts.push("The linked login account is still active: an administrator who manages users must deactivate it.");
+    return parts.join(" ");
+  });
 }

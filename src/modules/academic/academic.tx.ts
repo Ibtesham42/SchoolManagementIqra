@@ -69,11 +69,11 @@ export async function lockSectionForUpdate(tx: Tx, sectionId: string) {
  * the section's students. Runs INSIDE the caller's transaction (identity has authorized the role change);
  * sections are row-locked, their version bumped and each removal audited.
  */
-export async function releaseClassTeacherAssignments(tx: Tx, actor: AuditActor, userId: string): Promise<number> {
+export async function releaseClassTeacherAssignments(tx: Tx, actor: AuditActor, userId: string, reason: "role_change" | "employee_left" = "role_change"): Promise<number> {
   const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM section WHERE class_teacher_id = ${userId} ORDER BY id FOR UPDATE`;
   for (const { id } of rows) {
     await tx.section.update({ where: { id }, data: { classTeacherId: null, version: { increment: 1 } } });
-    await audit(tx, actor, { action: "section.class_teacher_unassign", entityType: "Section", entityId: id, before: { classTeacherId: userId }, after: { classTeacherId: null, reason: "role_change" } });
+    await audit(tx, actor, { action: "section.class_teacher_unassign", entityType: "Section", entityId: id, before: { classTeacherId: userId }, after: { classTeacherId: null, reason } });
   }
   return rows.length;
 }

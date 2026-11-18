@@ -11,7 +11,7 @@ import {
   versionField,
   GENDERS,
 } from "@/modules/students/person.schemas";
-import { APPOINTMENT_TYPES, cleanMasterName, EARLIEST_DOB, EMPLOYMENT_STATUSES, MASTER_CODE_MAX, MASTER_CODE_RE, masterNameProblem, STAFF_TYPES } from "./hr.rules";
+import { APPOINTMENT_TYPES, cleanMasterName, EARLIEST_DOB, EMPLOYMENT_STATUSES, STATUS_ACTIONS, MASTER_CODE_MAX, MASTER_CODE_RE, masterNameProblem, STAFF_TYPES } from "./hr.rules";
 
 /**
  * Phase 3A HR input (PHASE_3_PLAN.md §9). Every object is `.strict()`: the permanent employee code, the
@@ -193,3 +193,50 @@ export type TeacherProfileInput = z.infer<typeof teacherProfileSchema>;
 export const linkAccountSchema = z.object({ employeeId: idField, userId: idField }).strict();
 export const unlinkAccountSchema = z.object({ employeeId: idField }).strict();
 export type LinkAccountInput = z.infer<typeof linkAccountSchema>;
+
+// ───────────────────────────── Lifecycle (M4a — H10–H13) ─────────────────────────────
+
+const remarksField = z
+  .string()
+  .transform((v) => v.normalize("NFC").trim().replace(/\s+/g, " "))
+  .pipe(z.string().max(500, "Use at most 500 characters."))
+  .refine((v) => !/[\p{Cc}​﻿]/u.test(v), "Remove control characters.")
+  .transform((v) => (v === "" ? null : v));
+const reasonField = z
+  .string()
+  .transform((v) => v.normalize("NFC").trim().replace(/\s+/g, " "))
+  .pipe(z.string().min(3, "Enter the reason (at least 3 characters).").max(500, "Use at most 500 characters."))
+  .refine((v) => !/[\p{Cc}​﻿]/u.test(v), "Remove control characters.");
+
+/** Department / designation / appointment type / confirmation — each change is one service event (H12). */
+export const changeEmploymentSchema = z
+  .object({
+    id: idField,
+    version: versionField,
+    effectiveDate: isoDateSchema,
+    departmentId: idField,
+    designationId: idField,
+    appointmentType: z.enum(APPOINTMENT_TYPES, "Choose the appointment type."),
+    confirmationDate: optionalDate,
+    remarks: remarksField,
+  })
+  .strict();
+
+/** H10: reporting line (null = reports to nobody); cycles refused by the service under a lock. */
+export const changeReportingSchema = z.object({ id: idField, version: versionField, reportsToId: optionalId, effectiveDate: isoDateSchema, remarks: remarksField }).strict();
+
+/** H11/H13: leaving, long-term leave, rejoining; optional account deactivation for leavers. */
+export const changeStatusSchema = z
+  .object({
+    id: idField,
+    version: versionField,
+    action: z.enum(STATUS_ACTIONS, "Choose what happened."),
+    effectiveDate: isoDateSchema,
+    reason: reasonField,
+    deactivateAccount: z.boolean(),
+  })
+  .strict();
+
+export type ChangeEmploymentInput = z.infer<typeof changeEmploymentSchema>;
+export type ChangeReportingInput = z.infer<typeof changeReportingSchema>;
+export type ChangeStatusInput = z.infer<typeof changeStatusSchema>;

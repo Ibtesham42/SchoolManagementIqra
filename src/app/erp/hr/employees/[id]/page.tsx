@@ -5,9 +5,10 @@ import { requireAuth } from "@/lib/auth/context";
 import { NotFoundError } from "@/lib/errors";
 import { formatDateOnly } from "@/lib/format";
 import { canBrowseEmployees, canManageEmployees, canViewOwnProfile, isOwnRecord } from "@/modules/hr/hr.policy";
-import { APPOINTMENT_TYPE_LABEL, STAFF_TYPE_LABEL } from "@/modules/hr/hr.rules";
+import { APPOINTMENT_TYPE_LABEL, EMPLOYMENT_STATUS_LABEL, SERVICE_EVENT_LABEL, STAFF_TYPE_LABEL, type EmploymentStatus } from "@/modules/hr/hr.rules";
 import { getEmployee } from "@/modules/hr/employees.service";
 import { staffAccountPanel } from "@/modules/hr/staff-accounts.service";
+import { listServiceHistory } from "@/modules/hr/employee-lifecycle.service";
 import { getTeacherProfile } from "@/modules/hr/teacher-profiles.service";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -65,7 +66,11 @@ export default async function EmployeePage({ params, searchParams }: { params: P
   });
   const canEdit = canManageEmployees(ctx) && e.tier === "personal";
   const isTeaching = e.staffType === "TEACHING";
-  const [teacher, account] = await Promise.all([isTeaching ? getTeacherProfile(ctx, e.id) : Promise.resolve(null), browse ? staffAccountPanel(ctx, e.id) : Promise.resolve(null)]);
+  const [teacher, account, history] = await Promise.all([
+    isTeaching ? getTeacherProfile(ctx, e.id) : Promise.resolve(null),
+    browse ? staffAccountPanel(ctx, e.id) : Promise.resolve(null),
+    listServiceHistory(ctx, e.id),
+  ]);
   const qualifications = (Array.isArray(teacher?.qualifications) ? teacher.qualifications : []) as unknown as Qualification[];
   const professional = (Array.isArray(teacher?.professionalQualifications) ? teacher.professionalQualifications : []) as unknown as ProfessionalQualification[];
 
@@ -79,11 +84,18 @@ export default async function EmployeePage({ params, searchParams }: { params: P
         description={`${e.employeeCode} · ${e.designation.name} · ${e.department.name}`}
         actions={
           canEdit ? (
-            <Button asChild variant="outline" className="w-full sm:w-fit">
-              <Link href={`/erp/hr/employees/${e.id}/edit`}>
-                <Pencil aria-hidden="true" /> Edit details
-              </Link>
-            </Button>
+            <div className="flex w-full flex-col gap-2 sm:w-fit sm:flex-row">
+              <Button asChild variant="outline">
+                <Link href={`/erp/hr/employees/${e.id}/edit`}>
+                  <Pencil aria-hidden="true" /> Edit details
+                </Link>
+              </Button>
+              {!(isOwnRecord(ctx, e.id) && !ctx.isSuperAdmin) && (
+                <Button asChild variant="outline">
+                  <Link href={`/erp/hr/employees/${e.id}/status`}>Change status</Link>
+                </Button>
+              )}
+            </div>
           ) : undefined
         }
       />
@@ -218,6 +230,34 @@ export default async function EmployeePage({ params, searchParams }: { params: P
         </Card>
       )}
 
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>Service history</h2>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {history.restricted ? (
+            <p className="text-sm text-muted-foreground">The service history is visible only to staff with permission to view personal details.</p>
+          ) : history.events.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No history yet.</p>
+          ) : (
+            <ol className="grid gap-3">
+              {history.events.map((ev) => (
+                <li key={ev.id} className="grid gap-1 border-l-2 pl-3">
+                  <p className="text-sm">
+                    <span className="font-medium">{SERVICE_EVENT_LABEL[ev.eventType]}</span> · {formatDateOnly(ev.effectiveDate)}
+                  </p>
+                  <p className="text-sm text-muted-foreground">{describeChange(ev.before, ev.after, history.names)}</p>
+                  {"remarks" in ev && typeof ev.remarks === "string" && <p className="text-sm break-words">“{ev.remarks}”</p>}
+                  {"actedBy" in ev && ev.actedBy && typeof ev.actedBy === "object" && "displayName" in ev.actedBy && <p className="text-xs text-muted-foreground">Recorded by {String(ev.actedBy.displayName)}</p>}
+                </li>
+              ))}
+            </ol>
+          )}
+        </CardContent>
+      </Card>
+
       {account && (
         <Card>
           <CardHeader>
@@ -248,4 +288,27 @@ export default async function EmployeePage({ params, searchParams }: { params: P
       )}
     </div>
   );
+}
+
+type Names = { department: Record<string, string>; designation: Record<string, string>; manager: Record<string, string> };
+const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+
+/** "Science → Mathematics" style summary of one service event (ids resolved to names; enums to labels). */
+function describeChange(before: unknown, after: unknown, names: Names): string {
+  const b = asRecord(before);
+  const a = asRecord(after);
+  const show = (key: string, v: unknown): string => {
+    if (v === null || v === undefined || v === "") return key === "reportsToId" ? "nobody" : "—";
+    const s = String(v);
+    if (key === "departmentId") return names.department[s] ?? "a department";
+    if (key === "designationId") return names.designation[s] ?? "a designation";
+    if (key === "reportsToId") return names.manager[s] ?? "an employee";
+    if (key === "employmentStatus") return EMPLOYMENT_STATUS_LABEL[s as EmploymentStatus] ?? s;
+    if (key === "appointmentType") return APPOINTMENT_TYPE_LABEL[s as keyof typeof APPOINTMENT_TYPE_LABEL] ?? s;
+    if (key === "staffType") return STAFF_TYPE_LABEL[s as keyof typeof STAFF_TYPE_LABEL] ?? s;
+    return s;
+  };
+  const keys = [...new Set([...Object.keys(b), ...Object.keys(a)])].filter((k) => k !== "leavingDate");
+  const parts = keys.map((k) => (k in b ? `${show(k, b[k])} → ${show(k, a[k])}` : show(k, a[k])));
+  return parts.join(" · ");
 }
