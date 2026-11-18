@@ -211,6 +211,22 @@ async function main() {
       constraintProblems += problems;
     }
 
+    // S-07 / S-15 (created 2026-11-18): verified once their migration is recorded as applied.
+    const applied = new Set(mig.rows.filter((r) => r.finished_at).map((r) => r.migration_name));
+    if (applied.has("20261118000000_audit_log_append_only")) {
+      const t = await client.query<{ tgname: string }>("select tgname from pg_trigger where tgrelid = 'audit_log'::regclass and not tgisinternal and tgenabled <> 'D'");
+      const names = new Set(t.rows.map((r) => r.tgname));
+      const ok = names.has("audit_log_no_update_delete") && names.has("audit_log_no_truncate");
+      console.log(ok ? "✓ audit_log append-only triggers present and enabled (S-07)" : "✗ audit_log append-only triggers missing or disabled (S-07)");
+      if (!ok) constraintProblems++;
+    }
+    if (applied.has("20261118000100_stored_file_purged_at")) {
+      const c = await client.query<{ convalidated: boolean }>("select convalidated from pg_constraint where conname = 'stored_file_purged_check'");
+      const ok = c.rows[0]?.convalidated === true;
+      console.log(ok ? "✓ stored_file.purged_at CHECK validated (S-15)" : "✗ stored_file_purged_check missing or NOT VALID (S-15)");
+      if (!ok) constraintProblems++;
+    }
+
     const size = await client.query<{ bytes: string }>("select pg_database_size(current_database())::text as bytes");
     const bytes = Number(size.rows[0].bytes);
     const pct = ((bytes / FREE_STORAGE_BYTES) * 100).toFixed(1);

@@ -103,7 +103,7 @@ describe.skipIf(!enabled)("school settings, files and sessions (integration)", (
     await m.setSchoolLogo(superCtx!, PNG, "logo2.png");
     const second = (await m.getSchoolSettings(superCtx!))!.logoFileId!;
     expect(second).not.toBe(first);
-    expect((await m.prisma.storedFile.findUniqueOrThrow({ where: { id: first } })).deletedAt).not.toBeNull();
+    expect((await m.prisma.storedFile.findUniqueOrThrow({ where: { id: first }, select: { deletedAt: true } })).deletedAt).not.toBeNull();
     await expect(m.readStoredFile(null, first)).rejects.toBeInstanceOf(m.NotFoundError); // retire evicted the cache entry
 
     await m.removeSchoolLogo(superCtx!);
@@ -124,6 +124,7 @@ describe.skipIf(!enabled)("school settings, files and sessions (integration)", (
     await driver.put(storageKey, enc.data);
     const legacy = await m.prisma.storedFile.create({
       data: { visibility: "PRIVATE", provider: "memory", storageKey, originalName: "old.pdf", mimeType: "application/pdf", sizeBytes: plain.length, sha256: m.sha256Hex(plain), encrypted: true, keyVersion: enc.keyVersion, purpose: "unclassified", ownerType: "LegacyFile", ownerId: "placeholder" },
+      select: { id: true }, // explicit select: independent of columns added later (e.g. purged_at, S-15)
     });
     await m.prisma.storedFile.update({ where: { id: legacy.id }, data: { ownerId: legacy.id } }); // as the backfill does
     await expect(m.readStoredFile(teacherCtx!, legacy.id, { purpose: "document.pdf", owner: { type: "LegacyFile", id: legacy.id } })).rejects.toBeInstanceOf(m.NotFoundError);
@@ -133,17 +134,18 @@ describe.skipIf(!enabled)("school settings, files and sessions (integration)", (
     expect(Buffer.from(asSuper.bytes).equals(plain)).toBe(true); // decrypted from the stored blob
     // Updating a legacy row (soft delete) satisfies every CHECK — the KI-039 regression.
     await m.prisma.$transaction((tx) => m.retireStoredFile(tx, superCtx!, legacy.id));
-    expect((await m.prisma.storedFile.findUniqueOrThrow({ where: { id: legacy.id } })).deletedAt).not.toBeNull();
+    expect((await m.prisma.storedFile.findUniqueOrThrow({ where: { id: legacy.id }, select: { deletedAt: true } })).deletedAt).not.toBeNull();
     await m.prisma.storedFile.delete({ where: { id: legacy.id } });
   });
 
+  // Explicit selects below: the only possible failure is the CHECK under test, not an unrelated column (S-15).
   it("the database refuses PRIVATE files that are unencrypted, unversioned or ownerless", async () => {
     const base = { visibility: "PRIVATE" as const, provider: "memory", originalName: "x.pdf", mimeType: "application/pdf", sizeBytes: 1, sha256: "0".repeat(64), purpose: "document.pdf" };
     const key = (n: string) => `private/2026/01/${run}${n}AAAAAAAAAAAA`;
-    await expect(m.prisma.storedFile.create({ data: { ...base, storageKey: key("a"), encrypted: false, keyVersion: null, ownerType: "GeneratedDocument", ownerId: "d1" } })).rejects.toThrow();
-    await expect(m.prisma.storedFile.create({ data: { ...base, storageKey: key("b"), encrypted: true, keyVersion: null, ownerType: "GeneratedDocument", ownerId: "d1" } })).rejects.toThrow();
-    await expect(m.prisma.storedFile.create({ data: { ...base, storageKey: key("c"), encrypted: true, keyVersion: 1 } })).rejects.toThrow();
-    await expect(m.prisma.storedFile.create({ data: { ...base, storageKey: key("d"), encrypted: true, keyVersion: 1, ownerType: "GeneratedDocument" } })).rejects.toThrow();
+    await expect(m.prisma.storedFile.create({ data: { ...base, storageKey: key("a"), encrypted: false, keyVersion: null, ownerType: "GeneratedDocument", ownerId: "d1" }, select: { id: true } })).rejects.toThrow();
+    await expect(m.prisma.storedFile.create({ data: { ...base, storageKey: key("b"), encrypted: true, keyVersion: null, ownerType: "GeneratedDocument", ownerId: "d1" }, select: { id: true } })).rejects.toThrow();
+    await expect(m.prisma.storedFile.create({ data: { ...base, storageKey: key("c"), encrypted: true, keyVersion: 1 }, select: { id: true } })).rejects.toThrow();
+    await expect(m.prisma.storedFile.create({ data: { ...base, storageKey: key("d"), encrypted: true, keyVersion: 1, ownerType: "GeneratedDocument" }, select: { id: true } })).rejects.toThrow();
   });
 
   it("runs the session lifecycle: create → edit → activate → current → close guard", async () => {

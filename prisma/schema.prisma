@@ -340,6 +340,9 @@ model StoredFile {
   ownerId      String?        @map("owner_id") @db.VarChar(64)
   createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   deletedAt    DateTime?      @map("deleted_at") @db.Timestamptz(3)
+  /// S-15 (owner decision 2026-11-18): when the purge job deleted the blob of a retired file (deletedAt + 30-day
+  /// grace). The metadata row is kept (no content) so audit trails stay resolvable. CHECK: purged ⇒ retired.
+  purgedAt     DateTime?      @map("purged_at") @db.Timestamptz(3)
 
   uploadedBy        User?              @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   logoFor           SchoolSetting[]    @relation("SchoolLogo")
