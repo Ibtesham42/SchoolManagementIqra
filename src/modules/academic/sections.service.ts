@@ -1,7 +1,7 @@
 import { prisma, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { isUniqueViolationOf, type UniqueIndex } from "@/lib/db-errors";
-import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { authorize, type AuthContext } from "@/lib/rbac/authorize";
 import type { Prisma } from "@/generated/prisma/client";
 import { canReadSection, CLASS_TEACHER_ROLE_KEYS, sectionScopeWhere } from "./academic.policy";
@@ -379,4 +379,17 @@ export async function copySectionsFromSession(ctx: AuthContext, input: CopySecti
     });
     return result;
   });
+}
+
+/**
+ * Class-teacher user ids in the school's CURRENT session (Phase 3A M5 HR dashboard). School-wide data:
+ * `academic.read` at ALL only. Returns null when no current session is set.
+ */
+export async function classTeachersOfCurrentSession(ctx: AuthContext): Promise<{ sessionName: string; userIds: string[] } | null> {
+  if (authorize(ctx, "academic.read") !== "ALL") throw new ForbiddenError();
+  const setting = await prisma.schoolSetting.findUnique({ where: { id: SETTINGS_ID }, select: { currentAcademicSession: { select: { id: true, name: true } } } });
+  const session = setting?.currentAcademicSession;
+  if (!session) return null;
+  const rows = await prisma.section.findMany({ where: { academicSessionId: session.id, classTeacherId: { not: null } }, select: { classTeacherId: true }, take: 10_000 }); // one session's sections — far below this bound
+  return { sessionName: session.name, userIds: rows.map((r) => r.classTeacherId!).filter(Boolean) };
 }

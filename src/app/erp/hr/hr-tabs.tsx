@@ -2,8 +2,9 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /** Server-rendered sub-navigation for the staff area (links, no client state). */
-export function HrTabs({ current }: { current: "employees" | "departments" | "designations" }) {
+export function HrTabs({ current }: { current: "overview" | "employees" | "departments" | "designations" }) {
   const tabs = [
+    { key: "overview", href: "/erp/hr", label: "Overview" },
     { key: "employees", href: "/erp/hr/employees", label: "Staff" },
     { key: "departments", href: "/erp/hr/departments", label: "Departments" },
     { key: "designations", href: "/erp/hr/designations", label: "Designations" },

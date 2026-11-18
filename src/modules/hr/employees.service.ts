@@ -8,7 +8,7 @@ import { nextSequence } from "@/lib/sequence";
 import { Prisma } from "@/generated/prisma/client";
 import { readEmployeeSettings } from "@/modules/settings/settings.service";
 import { fullNameOf, normalizeName, normalizePhone } from "@/modules/students/person-fields";
-import { canReadPersonal, employeeReadAccess, employeeRecordAccess, type EmployeeTier } from "./hr.policy";
+import { canBrowseEmployees, canReadPersonal, employeeReadAccess, employeeRecordAccess, type EmployeeTier } from "./hr.policy";
 import {
   assertEmployeeDates,
   changedFields,
@@ -17,10 +17,16 @@ import {
   redactForAudit,
   renderEmployeeCode,
   REPORTABLE_STATUSES,
+  assertStaffExportSize,
+  EMPLOYMENT_STATUS_LABEL,
+  STAFF_EXPORT_HEADER,
+  STAFF_EXPORT_MAX_ROWS,
+  STAFF_TYPE_LABEL,
   type EmploymentStatus,
   type StaffType,
 } from "./hr.rules";
-import type { CreateEmployeeInput, ListEmployeesInput, UpdateEmployeeContactInput, UpdateEmployeePersonalInput } from "./hr.schemas";
+import type { CreateEmployeeInput, ExportEmployeesInput, ListEmployeesInput, UpdateEmployeeContactInput, UpdateEmployeePersonalInput } from "./hr.schemas";
+import { toCsv } from "@/lib/csv";
 
 /**
  * Staff records, Phase 3A M2 (PHASE_3_PLAN.md §6, ADR-036): registration, directory, profile, field-level
@@ -375,4 +381,36 @@ export async function updateEmployeeContact(ctx: AuthContext, input: UpdateEmplo
     }),
     "employee.update_contact",
   );
+}
+
+// ───────────────────────────── Directory export (M5) ─────────────────────────────
+
+/**
+ * CSV of the staff directory with the current filters: `export.run` + directory (ALL). Directory fields only,
+ * whatever the caller's tier (data minimisation, H6); personal-tier filters apply only for personal-tier callers
+ * (same rule as the list). One snapshot, at most STAFF_EXPORT_MAX_ROWS (refused, never truncated),
+ * spreadsheet-safe cells (lib/csv, S-11), audited with filter NAMES and the row count only.
+ */
+export async function exportEmployeeRows(ctx: AuthContext, input: ExportEmployeesInput): Promise<{ csv: string; rows: number }> {
+  authorize(ctx, "export.run");
+  // A school-wide export needs the directory; SELF-only readers get a clean 403, not a not-found (review M5 L1).
+  if (!canBrowseEmployees(ctx)) throw new ForbiddenError("You don't have permission to export the staff directory.");
+  const { tier } = employeeReadAccess(ctx);
+  const rows = await prisma.employee.findMany({
+    where: directoryWhere({ ...input, page: 1, pageSize: 1 }, tier),
+    orderBy: [{ fullNameNormalized: "asc" }, { id: "asc" }],
+    take: STAFF_EXPORT_MAX_ROWS + 1,
+    select: DIRECTORY_SELECT,
+  });
+  assertStaffExportSize(rows.length);
+  const csv = toCsv(
+    STAFF_EXPORT_HEADER,
+    rows.map((e) => [e.employeeCode, e.fullName, STAFF_TYPE_LABEL[e.staffType], e.designation.name, e.department.name, EMPLOYMENT_STATUS_LABEL[e.employmentStatus], e.workPhone, e.workEmail]),
+  );
+  // Names of the filters actually applied (appointment type only counts for the personal tier — review M5 Info).
+  const filters = Object.entries(input)
+    .filter(([k, v]) => v !== undefined && v !== "" && (k !== "appointmentType" || tier === "personal"))
+    .map(([k]) => k);
+  await prisma.$transaction((tx) => audit(tx, actorOf(ctx), { action: "employee.export", entityType: "Employee", entityId: "export", after: { filters, rows: rows.length, format: "csv" } }));
+  return { csv, rows: rows.length };
 }

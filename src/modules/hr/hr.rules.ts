@@ -256,3 +256,12 @@ export function createsReportingCycle(employeeId: string, managerId: string, rep
   }
   return false;
 }
+
+// ───────────────────────────── Directory export (M5) ─────────────────────────────
+
+export const STAFF_EXPORT_MAX_ROWS = 5000;
+/** Directory fields only — the export never contains personal-tier data (data minimisation, H6). */
+export const STAFF_EXPORT_HEADER = ["Employee ID", "Name", "Staff type", "Designation", "Department", "Status", "Work phone", "Work email"] as const;
+export function assertStaffExportSize(count: number): void {
+  if (count > STAFF_EXPORT_MAX_ROWS) throw new ConflictError(`Too many staff match for one export (limit ${STAFF_EXPORT_MAX_ROWS}). Narrow the filters.`);
+}
