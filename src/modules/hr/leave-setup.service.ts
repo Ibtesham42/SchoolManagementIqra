@@ -25,6 +25,7 @@ import {
 } from "./hr.policy";
 import { masterNameKeyOf } from "./hr.rules";
 import { STAFF_HOLIDAY_SCOPES } from "./leave.rules";
+import { lockLeaveCalendar } from "./leave.tx";
 import type {
   CreateHolidayInput,
   CreateLeaveTypeInput,
@@ -39,7 +40,7 @@ import type {
  * transaction with row locks, lock_timeout 5 s and audit in the same transaction. Leave reasons and remarks are never
  * involved here; audit rows carry codes, ids, dates and day counts.
  *
- * Lock order (shared with M3 requests/approvals): employee FOR UPDATE → leave_type / balance rows → holiday rows.
+ * Lock order: see leave.tx.ts (calendar advisory lock → employee → leave_request → leave_type → session → balance).
  */
 const actorOf = (ctx: AuthContext): AuditActor => ({
   userId: ctx.userId,
@@ -304,6 +305,7 @@ export async function createHoliday(
   try {
     return await prisma.$transaction(async (tx) => {
       await lockTimeout(tx);
+      await lockLeaveCalendar(tx); // KI-071: serialized with leave apply/approve/cancel
       const date = parseDate(input.date);
       if (STAFF_HOLIDAY_SCOPES.includes(input.appliesTo))
         await assertNoLeaveOn(tx, date);
@@ -343,6 +345,7 @@ export async function removeHoliday(ctx: AuthContext, id: string) {
   try {
     await prisma.$transaction(async (tx) => {
       await lockTimeout(tx);
+      await lockLeaveCalendar(tx); // KI-071: serialized with leave apply/approve/cancel
       const rows = await tx.$queryRaw<
         { id: string }[]
       >`SELECT id FROM holiday WHERE id = ${id} FOR UPDATE`;

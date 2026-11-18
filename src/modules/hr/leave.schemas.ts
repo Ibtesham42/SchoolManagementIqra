@@ -126,3 +126,87 @@ export type UpdateLeaveTypeInput = z.infer<typeof updateLeaveTypeSchema>;
 export type SetLeaveTypeActiveInput = z.infer<typeof setLeaveTypeActiveSchema>;
 export type CreateHolidayInput = z.infer<typeof createHolidaySchema>;
 export type OpeningBalanceInput = z.infer<typeof openingBalanceSchema>;
+
+// ───────────────────────────── 3B-M3: requests and decisions ─────────────────────────────
+
+const longText = (label: string, min: number) =>
+  z
+    .string()
+    .transform((v) =>
+      v
+        .normalize("NFC")
+        .trim()
+        .replace(/[ \t]+/g, " "),
+    )
+    .pipe(
+      z
+        .string()
+        .min(min, `Enter ${label}.`)
+        .max(500, "Use at most 500 characters."),
+    )
+    .refine(
+      (v) => !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F​﻿]/.test(v),
+      "Remove control characters.",
+    );
+
+/** Own leave only (L9): the employee comes from the session's linked staff record, never from the form. */
+export const applyLeaveSchema = z
+  .object({
+    leaveTypeId: idField,
+    fromDate: isoDateSchema,
+    toDate: isoDateSchema,
+    halfDay: z.enum(["FIRST", "SECOND"]).nullable(),
+    reason: longText("the reason", 3),
+  })
+  .strict()
+  .refine((v) => v.toDate >= v.fromDate, {
+    message: "The last day can't be before the first day.",
+    path: ["toDate"],
+  })
+  .refine((v) => v.halfDay === null || v.fromDate === v.toDate, {
+    message: "A half day is a single date.",
+    path: ["halfDay"],
+  });
+
+export const decideLeaveSchema = z
+  .object({
+    id: idField,
+    version: versionField,
+    decision: z.enum(["APPROVE", "REJECT"]),
+    /** Optional on approval, required on rejection (the requester sees it). Personal tier — never audited. */
+    note: z
+      .string()
+      .transform((v) => v.normalize("NFC").trim())
+      .pipe(z.string().max(500, "Use at most 500 characters.")),
+  })
+  .strict()
+  .refine((v) => v.decision === "APPROVE" || v.note.length >= 3, {
+    message: "Say why the request is rejected.",
+    path: ["note"],
+  })
+  .refine(
+    (v) => !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F​﻿]/.test(v.note),
+    { message: "Remove control characters.", path: ["note"] },
+  );
+
+export const cancelLeaveSchema = z
+  .object({ id: idField, version: versionField })
+  .strict();
+
+export const LEAVE_QUEUE_STATUSES = [
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+  "CANCELLED",
+] as const;
+export const leaveQueueSchema = z
+  .object({
+    status: z.enum(LEAVE_QUEUE_STATUSES).default("PENDING"),
+    page: z.coerce.number().int().min(1).max(1000).default(1),
+  })
+  .strict();
+
+export type ApplyLeaveInput = z.infer<typeof applyLeaveSchema>;
+export type DecideLeaveInput = z.infer<typeof decideLeaveSchema>;
+export type CancelLeaveInput = z.infer<typeof cancelLeaveSchema>;
+export type LeaveQueueInput = z.infer<typeof leaveQueueSchema>;

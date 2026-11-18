@@ -271,6 +271,6 @@ describe("menu: Students only for scopes the directory serves (S7 browser review
     for (const r of ["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "ADMISSION_OFFICER", "ACCOUNTANT", "LIBRARIAN", "CLASS_TEACHER", "TEACHER"]) expect(labels(r)).toContain("Students");
   });
   it("Accountant: Students (read, D8) but no Admissions, Roll numbers, Users, Roles or Settings", () => {
-    expect(labels("ACCOUNTANT")).toEqual(["Dashboard", "Students", "My account"]);
+    expect(labels("ACCOUNTANT")).toEqual(["Dashboard", "Students", "Leave", "My account"]);
   });
 });
