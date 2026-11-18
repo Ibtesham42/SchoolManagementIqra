@@ -18,7 +18,7 @@ describe("migration 20261119000000 (static review)", () => {
     expect(code.trimEnd().endsWith("COMMIT;")).toBe(true);
     expect(code).toContain("SET LOCAL lock_timeout = '5s';");
     expect(code).not.toMatch(/\bDROP\b|\bRENAME\b|\bTRUNCATE\b|\bDELETE\s+FROM\b|\bUPDATE\s+"|NOT VALID|ALTER COLUMN|CONCURRENTLY/i);
-    expect(sql).toContain("Review status: DRAFT — AWAITING OWNER APPROVAL OF THE SQL — do not apply.");
+    expect(sql).toContain("Review status: SQL approved by the owner 2026-11-18.");
   });
 
   it("creates exactly the six tables; the only existing-table change is the nullable weekly_off column + its CHECK", () => {

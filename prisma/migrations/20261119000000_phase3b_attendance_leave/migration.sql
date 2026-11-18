@@ -8,7 +8,8 @@
 -- Deviation from the plan, for review: overlapping leave is prevented by the SERVICE under the employee row lock,
 -- not by a database exclusion constraint (that needs the btree_gist extension and can't express two half-days on
 -- one date). Single-school installation (ADR-030): no school_id.
--- Review status: DRAFT — AWAITING OWNER APPROVAL OF THE SQL — do not apply.
+-- Review status: SQL approved by the owner 2026-11-18. Apply to DEVELOPMENT, then Test, with the owner-approved
+-- procedure; never production without explicit approval.
 --
 -- Rollback (comment only — owner-approved, development/Test only, and only while the new tables are empty):
 --   DROP TABLE "attendance_period_lock"; DROP TABLE "holiday"; DROP TABLE "employee_attendance";
