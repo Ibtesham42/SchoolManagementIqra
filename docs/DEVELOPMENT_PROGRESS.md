@@ -10,11 +10,14 @@
 
 ## Log
 
-### 2026-11-19 — Phase 3C-M6: payroll register CSV and component totals (uncommitted)
+### 2026-11-19 — Phase 4B-M1: examinations schema draft (NOT applied)
+- Owner: "continue … till the last phase" (2026-11-19). Migration `prisma/migrations/20261122000000_phase4b_examinations/migration.sql` generated offline: 3 enums, 7 tables (grade_scale, grade_band, examination, exam_subject, marks_sheet, examination_marks, report_card), composite session FKs, 26 CHECKs (half marks, AB / EX without marks, maxima, status ⇔ timestamps, published ⇔ PUBLISHED), `school_setting.show_rank`. Expand-only. **Awaiting the owner's SQL review and an explicit apply approval** (development, then Test). DATABASE_SCHEMA §10, DATABASE_RELATIONSHIPS, `db:check`, table list updated; guard test `tests/unit/migration-phase4b.test.ts` (5).
+
+### 2026-11-19 — Phase 3C-M6: payroll register CSV and component totals (commit 61adf7e)
 - `src/modules/payroll/reports.service.ts`: `getRunComponentTotals` (`payroll.read`; earnings / deductions by component across the run, adjustments by kind) and `exportRunRegister` (`payroll.read` + `export.run`; one row per slip — slip no, employee, department, designation, month days, not on rolls, LOP, paid days, gross, deductions, net, paid, due; ≤ 5,000 rows; every cell through `lib/csv`; **no PAN / bank / personal columns**; audited `payroll_run.export` with month, status, row count, format). Route `POST /api/v1/payroll/runs/{id}/export` (existing export pattern: same-origin, session, rate limit, fixed redirect codes; `PAYROLL_EXPORT_MESSAGES`). Run page: "Totals by component" card and "Download register (CSV)".
 - Tests: unit `tests/unit/payroll-export.test.ts` (5: CSV headers, CSRF / 401 / 429, fixed redirect codes, Principal / Teacher / Parent / Student refused, no PAN / bank columns); integration `payroll-runs.test.ts` +1 (CSV rows and slip numbers, totals reconcile with gross, export audit without names / slip numbers) — **not run: KI-059**.
 
-### 2026-11-19 — Phase 3C (P12): salary slip PDF (uncommitted)
+### 2026-11-19 — Phase 3C (P12): salary slip PDF (commit 61adf7e)
 - Template `src/modules/documents/templates/salary-slip.tsx` (school letterhead; employee, month, slip number, days, earnings and deductions incl. adjustments, net pay, payment status; "Rs." — Helvetica can't print ₹, KI-051; no PAN / bank, KI-088). `slips.service.renderSlipPdf` renders on demand from the snapshot with `getSlip`'s access (payroll readers; own slip for staff) and only for APPROVED / PAID runs. Route `GET /api/v1/payroll/slips/{id}/pdf` (`private, no-store`, 401 / 404 / 409). "Download PDF" on the slip page. Verification code / stored copy → **KI-089**.
 - Tests: unit `tests/unit/salary-slip-pdf.test.ts` (2: real render with synthetic data — slip number, net, WinAnsi-only text, no bank details; Parent / Student refused; service order).
 

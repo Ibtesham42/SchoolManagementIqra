@@ -161,13 +161,18 @@ Legend: **PK** primary key · **U** unique · **IX** index · **FK** foreign key
 
 ## 10. Examinations
 
+**Phase 4B — migration `20261122000000_phase4b_examinations` (DRAFT: awaiting the owner's SQL approval; not applied).** Design: PHASE_4_PLAN.md AC8–AC15. Offline diff + hand edits: one transaction, `lock_timeout`, 26 CHECKs. Expand-only; the only existing-table change is `school_setting.show_rank` (NOT NULL DEFAULT false — metadata-only). Every academic link carries the session in a composite FK.
+
 | Model | Key fields | Constraints |
 |---|---|---|
-| GradeScale | name, isDefault; GradeBand(scaleId, minPercent, maxPercent, grade, gradePoint, remark) | U(scaleId, grade) |
-| Examination | academicSessionId, name, term, type (UNIT_TEST/HALF_YEARLY/ANNUAL/PRACTICAL/INTERNAL), startDate, endDate, weightage, status (DRAFT/SCHEDULED/MARKS_ENTRY/LOCKED/PUBLISHED), gradeScaleId | U(session, name) |
-| ExamSubject | examinationId, classId, subjectId, date?, maxTheory, maxPractical, maxInternal, passMarks | U(exam, class, subject) |
-| ExaminationMarks | examSubjectId, enrollmentId, theory?, practical?, internal?, isAbsent, enteredById, approvedById? | U(examSubjectId, enrollmentId) |
-| ReportCard | examinationId (or term aggregate), enrollmentId, totals JSON, percentage, grade, rank?, attendancePct, remarks, fileId?, publishedAt? | U(examinationId, enrollmentId) |
+| GradeScale | name, nameKey, isActive, version | U(nameKey); name shape CHECKs (AC8 — school-defined; CBSE-style template offered, never created automatically) |
+| GradeBand | scaleId, minPercent (0–100), grade, gradePoint? (0–10), remark? | U(scale, minPercent), U(scale, grade); bands are gap-free by construction (grade-calc.ts) |
+| Examination | academicSessionId, name, nameKey, gradeScaleId, status (DRAFT/SCHEDULED/MARKS_ENTRY/LOCKED/PUBLISHED), startDate?, endDate?, publishedAt?, publishedById? | U(session, nameKey); U(id, session); dates in order; published fields iff PUBLISHED (AC9) |
+| ExamSubject | examinationId + session, classSubjectId + session, examDate?, maxTheory / maxPractical / maxInternal (0–1000, sum > 0), passPercent? | U(exam, classSubject); U(id, session) |
+| MarksSheet | examSubjectId + session, sectionId + session, status (OPEN/SUBMITTED/APPROVED), submitted / approved by + at | U(examSubject, section); submitted / approved fields iff status (AC13) |
+| ExaminationMarks | marksSheetId + session, enrollmentId + session, status (PRESENT/ABSENT/EXEMPT), theory? / practical? / internal? (Decimal(5,1), whole or half marks), correctionReason?, enteredById? | U(sheet, enrollment); AB / EX carry no marks (AC10) |
+| ReportCard | examinationId + session, enrollmentId + session, snapshot JSON, remark?, documentId? → GeneratedDocument, publishedAt | U(exam, enrollment); U(documentId); snapshot is an object (AC15) |
+| SchoolSetting (+) | showRank (default false) | AC14 |
 
 ## 11. Library & inventory
 

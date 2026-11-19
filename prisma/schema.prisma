@@ -85,6 +85,10 @@ model User {
   payrollAdjustments      PayrollAdjustment[]    @relation("PayrollAdjustmentCreatedBy")
   salaryPayments          SalaryPayment[]        @relation("SalaryPaidBy")
   studentAttendanceMarked StudentAttendance[]    @relation("StudentAttendanceMarkedBy")
+  examinationsPublished   Examination[]          @relation("ExaminationPublishedBy")
+  marksSheetsSubmitted    MarksSheet[]           @relation("MarksSheetSubmittedBy")
+  marksSheetsApproved     MarksSheet[]           @relation("MarksSheetApprovedBy")
+  marksEntered            ExaminationMarks[]     @relation("MarksEnteredBy")
 
   @@index([isActive])
   @@map("user")
@@ -206,6 +210,8 @@ model SchoolSetting {
   payrollDayBasis            PayrollDayBasis?      @map("payroll_day_basis")
   /// Phase 4A (AC6): student weekly off, same shape as weeklyOff; often different from staff. Not set = none.
   studentWeeklyOff           Json?                 @map("student_weekly_off")
+  /// Phase 4B (AC14): show the rank in class on report cards. Off by default.
+  showRank                   Boolean               @default(false) @map("show_rank")
   features                   Json? // toggles for optional external services (email, AI, payments)
   /// Capacity offered for a new section when neither the form nor its class gives one. A default,
   /// not a limit: every section stores its own capacity. CHECK 1–200 (migration 20261110000000).
@@ -252,6 +258,11 @@ model AcademicSession {
   periods            Period[]
   timetableSlots     TimetableSlot[]
   studentAttendance  StudentAttendance[]
+  examinations       Examination[]
+  examSubjects       ExamSubject[]
+  marksSheets        MarksSheet[]
+  examinationMarks   ExaminationMarks[]
+  reportCards        ReportCard[]
 
   @@map("academic_session")
 }
@@ -322,6 +333,7 @@ model Section {
   rollNumberBatch    RollNumberBatch?
   teacherAllocations TeacherAllocation[]
   timetableSlots     TimetableSlot[]
+  marksSheets        MarksSheet[]
 
   @@unique([academicSessionId, classId, nameKey])
   @@unique([academicSessionId, code])
@@ -398,7 +410,8 @@ enum GeneratedDocumentType {
 /// Registry of issued PDFs (ID cards, certificates, receipts…) for public verification.
 /// The verification code is shown on the document only; the database keeps an HMAC of it.
 model GeneratedDocument {
-  id                     String                @id @default(cuid(2))
+  id String @id @default(cuid(2))
+
   type                   GeneratedDocumentType
   /// HMAC-SHA256 of the normalized code with DOCUMENT_VERIFICATION_KEY (version below), hex.
   /// The raw code is never stored.
@@ -423,6 +436,7 @@ model GeneratedDocument {
   file        StoredFile? @relation("GeneratedDocumentFile", fields: [fileId], references: [id], onDelete: Restrict)
   generatedBy User?       @relation("DocumentGeneratedBy", fields: [generatedById], references: [id], onDelete: SetNull)
   revokedBy   User?       @relation("DocumentRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+  reportCard  ReportCard?
 
   @@index([subjectType, subjectId])
   @@index([type, generatedAt])
@@ -779,6 +793,8 @@ model StudentEnrollment {
   rollNumber      StudentRollNumber?
   subjects        StudentSubject[]
   attendance      StudentAttendance[]
+  marks           ExaminationMarks[]
+  reportCards     ReportCard[]
 
   @@unique([studentId, academicSessionId])
   /// Phase 4A: target of composite FKs (student subjects and attendance stay in the enrollment's session).
@@ -1539,6 +1555,7 @@ model ClassSubject {
   studentChoices  StudentSubject[]
   allocations     TeacherAllocation[]
   timetableSlots  TimetableSlot[]
+  examSubjects    ExamSubject[]
 
   @@unique([academicSessionId, classId, subjectId])
   /// Target of composite FKs: rows that point at a class subject must be in its session (DB-enforced).
@@ -1661,4 +1678,192 @@ model StudentAttendance {
   @@unique([enrollmentId, date])
   @@index([academicSessionId, date])
   @@map("student_attendance")
+}
+
+// ───────────────────────────── Phase 4B — examinations, marks, report cards (PHASE_4_PLAN.md AC8–AC15) ─────────────────────────────
+
+enum ExaminationStatus {
+  DRAFT
+  SCHEDULED
+  MARKS_ENTRY
+  LOCKED
+  PUBLISHED
+}
+
+enum MarksSheetStatus {
+  OPEN
+  SUBMITTED
+  APPROVED
+}
+
+enum MarkStatus {
+  PRESENT
+  ABSENT
+  EXEMPT
+}
+
+/// AC8: a school-defined grading scale (a "CBSE-style" template is offered, never created automatically).
+model GradeScale {
+  id        String   @id @default(cuid(2))
+  name      String   @db.VarChar(80)
+  nameKey   String   @unique @map("name_key") @db.VarChar(80)
+  isActive  Boolean  @default(true) @map("is_active")
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  bands        GradeBand[]
+  examinations Examination[]
+
+  @@map("grade_scale")
+}
+
+/// A band runs from its minimum percent to the next band's minimum (gap-free by construction; grade-calc.ts).
+model GradeBand {
+  id         String   @id @default(cuid(2))
+  scaleId    String   @map("scale_id")
+  minPercent Decimal  @map("min_percent") @db.Decimal(5, 2)
+  grade      String   @db.VarChar(5)
+  gradePoint Decimal? @map("grade_point") @db.Decimal(4, 1)
+  remark     String?  @db.VarChar(60)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  scale GradeScale @relation(fields: [scaleId], references: [id], onDelete: Restrict)
+
+  @@unique([scaleId, minPercent])
+  @@unique([scaleId, grade])
+  @@map("grade_band")
+}
+
+/// AC9: each exam stands alone. DRAFT → SCHEDULED → MARKS_ENTRY → LOCKED → PUBLISHED (result.publish).
+model Examination {
+  id                String            @id @default(cuid(2))
+  academicSessionId String            @map("academic_session_id")
+  name              String            @db.VarChar(80)
+  nameKey           String            @map("name_key") @db.VarChar(80)
+  gradeScaleId      String            @map("grade_scale_id")
+  status            ExaminationStatus @default(DRAFT)
+  startDate         DateTime?         @map("start_date") @db.Date
+  endDate           DateTime?         @map("end_date") @db.Date
+  publishedAt       DateTime?         @map("published_at") @db.Timestamptz(3)
+  publishedById     String?           @map("published_by_id")
+  version           Int               @default(1)
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  gradeScale      GradeScale      @relation(fields: [gradeScaleId], references: [id], onDelete: Restrict)
+  publishedBy     User?           @relation("ExaminationPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+  subjects        ExamSubject[]
+  reportCards     ReportCard[]
+
+  @@unique([academicSessionId, nameKey])
+  @@unique([id, academicSessionId], map: "examination_id_academic_session_id_key")
+  @@map("examination")
+}
+
+/// One class subject in an exam: date and maximum marks per part (0 = not examined); optional pass percent.
+model ExamSubject {
+  id                String    @id @default(cuid(2))
+  academicSessionId String    @map("academic_session_id")
+  examinationId     String    @map("examination_id")
+  classSubjectId    String    @map("class_subject_id")
+  examDate          DateTime? @map("exam_date") @db.Date
+  maxTheory         Int       @default(0) @map("max_theory") @db.SmallInt
+  maxPractical      Int       @default(0) @map("max_practical") @db.SmallInt
+  maxInternal       Int       @default(0) @map("max_internal") @db.SmallInt
+  passPercent       Decimal?  @map("pass_percent") @db.Decimal(5, 2)
+  version           Int       @default(1)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  examination     Examination     @relation(fields: [examinationId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  classSubject    ClassSubject    @relation(fields: [classSubjectId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  sheets          MarksSheet[]
+
+  @@unique([examinationId, classSubjectId])
+  @@unique([id, academicSessionId], map: "exam_subject_id_academic_session_id_key")
+  @@index([classSubjectId])
+  @@map("exam_subject")
+}
+
+/// AC13: marks of one exam subject for one section — the teacher enters and submits; marks.approve approves (locks).
+model MarksSheet {
+  id                String           @id @default(cuid(2))
+  academicSessionId String           @map("academic_session_id")
+  examSubjectId     String           @map("exam_subject_id")
+  sectionId         String           @map("section_id")
+  status            MarksSheetStatus @default(OPEN)
+  submittedById     String?          @map("submitted_by_id")
+  submittedAt       DateTime?        @map("submitted_at") @db.Timestamptz(3)
+  approvedById      String?          @map("approved_by_id")
+  approvedAt        DateTime?        @map("approved_at") @db.Timestamptz(3)
+  version           Int              @default(1)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession    @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  examSubject     ExamSubject        @relation(fields: [examSubjectId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  section         Section            @relation(fields: [sectionId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  submittedBy     User?              @relation("MarksSheetSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+  approvedBy      User?              @relation("MarksSheetApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  marks           ExaminationMarks[]
+
+  @@unique([examSubjectId, sectionId])
+  @@unique([id, academicSessionId], map: "marks_sheet_id_academic_session_id_key")
+  @@index([sectionId])
+  @@map("marks_sheet")
+}
+
+/// One student's marks on a sheet. AB counts 0; EX leaves the subject out (AC10). Whole or half marks.
+model ExaminationMarks {
+  id                String     @id @default(cuid(2))
+  academicSessionId String     @map("academic_session_id")
+  marksSheetId      String     @map("marks_sheet_id")
+  enrollmentId      String     @map("enrollment_id")
+  status            MarkStatus @default(PRESENT)
+  theory            Decimal?   @db.Decimal(5, 1)
+  practical         Decimal?   @db.Decimal(5, 1)
+  internal          Decimal?   @db.Decimal(5, 1)
+  /// Required when an APPROVED sheet is corrected (marks.approve) — personal tier, never in audit rows.
+  correctionReason  String?    @map("correction_reason") @db.VarChar(500)
+  enteredById       String?    @map("entered_by_id")
+  version           Int        @default(1)
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession   @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  sheet           MarksSheet        @relation(fields: [marksSheetId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  enrollment      StudentEnrollment @relation(fields: [enrollmentId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  enteredBy       User?             @relation("MarksEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+
+  @@unique([marksSheetId, enrollmentId])
+  @@index([enrollmentId])
+  @@map("examination_marks")
+}
+
+/// AC15: a published report card is a SNAPSHOT of marks, grades and attendance; a later scale edit never changes it.
+model ReportCard {
+  id                String   @id @default(cuid(2))
+  academicSessionId String   @map("academic_session_id")
+  examinationId     String   @map("examination_id")
+  enrollmentId      String   @map("enrollment_id")
+  snapshot          Json
+  remark            String?  @db.VarChar(300)
+  documentId        String?  @unique @map("document_id")
+  publishedAt       DateTime @default(now()) @map("published_at") @db.Timestamptz(3)
+  version           Int      @default(1)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession    @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  examination     Examination        @relation(fields: [examinationId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  enrollment      StudentEnrollment  @relation(fields: [enrollmentId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  document        GeneratedDocument? @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  @@unique([examinationId, enrollmentId])
+  @@index([enrollmentId])
+  @@map("report_card")
 }

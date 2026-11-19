@@ -61,6 +61,14 @@ export const APP_TABLES_IN_FK_ORDER = [
   "period", // → academic_session
   "timetable_slot", // → academic_session, section, period, class_subject, employee
   "student_attendance", // → academic_session, student_enrollment, user
+  // Phase 4B examinations — migration 20261122000000 (DRAFT: awaiting SQL approval).
+  "grade_scale",
+  "grade_band", // → grade_scale
+  "examination", // → academic_session, grade_scale, user
+  "exam_subject", // → academic_session, examination, class_subject
+  "marks_sheet", // → academic_session, exam_subject, section, user
+  "examination_marks", // → academic_session, marks_sheet, student_enrollment, user
+  "report_card", // → academic_session, examination, student_enrollment, generated_document
   "audit_log",
   "notification",
   "sequence_counter",
