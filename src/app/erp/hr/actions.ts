@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { z } from "zod";
+import { updateBankDetailsSchema } from "@/modules/hr/bank-details.schemas";
+import { updateBankDetails } from "@/modules/hr/bank-details.service";
 import { requireAuth } from "@/lib/auth/context";
 import {
   formString,
@@ -554,4 +556,19 @@ export async function updateWeeklyOffAction(
 export async function updateStudentWeeklyOffAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const raw = { days: fd.getAll("days").map(String), saturdays: fd.getAll("saturdays").map(String) };
   return run(weeklyOffFormSchema, raw, async (ctx, d) => (await updateStudentWeeklyOff(ctx, d), "Student weekly off saved."));
+}
+
+/** Phase 3C (P8): PAN / bank details — values never echoed back. */
+export async function updateBankDetailsAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = {
+    employeeId: formString(fd, "employeeId"),
+    version: formString(fd, "version"),
+    pan: formString(fd, "pan"),
+    bankAccount: formString(fd, "bankAccount"),
+    bankIfsc: formString(fd, "bankIfsc"),
+    bankAccountName: formString(fd, "bankAccountName"),
+    removePan: formString(fd, "removePan"),
+    removeBank: formString(fd, "removeBank"),
+  };
+  return run(updateBankDetailsSchema, raw, async (ctx, d) => (await updateBankDetails(ctx, d), "PAN / bank details saved."));
 }

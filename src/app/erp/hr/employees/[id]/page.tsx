@@ -1,3 +1,4 @@
+import { BankDetailsForm } from "./bank-details-form";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
@@ -19,6 +20,7 @@ import {
 } from "@/modules/hr/hr.rules";
 import { getEmployee } from "@/modules/hr/employees.service";
 import { staffAccountPanel } from "@/modules/hr/staff-accounts.service";
+import { getBankDetails } from "@/modules/hr/bank-details.service";
 import { listServiceHistory } from "@/modules/hr/employee-lifecycle.service";
 import {
   hasEmployeePhoto,
@@ -28,7 +30,7 @@ import { hasPermission } from "@/lib/rbac/authorize";
 import { getTeacherProfile } from "@/modules/hr/teacher-profiles.service";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { StatusBadge } from "../parts";
@@ -126,6 +128,9 @@ export default async function EmployeePage({
   const balances = leaveSession
     ? await listLeaveBalances(ctx, e.id, leaveSession.id)
     : null;
+  // Phase 3C (P8): PAN / bank — masked, employee.sensitive.read only.
+  const bank = hasPermission(ctx, "employee.sensitive.read") ? await getBankDetails(ctx, e.id) : null;
+  const canEditBank = bank !== null && hasPermission(ctx, "employee.manage") && !bank.own && ((typeof ctx.employeeId === "string" && ctx.employeeId !== "") || ctx.isSuperAdmin);
   const canSetBalances =
     browse &&
     canManageEmployees(ctx) &&
@@ -470,6 +475,49 @@ export default async function EmployeePage({
                       />
                     );
                   })}
+                </div>
+              </details>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {bank && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2>PAN and bank details</h2>
+            </CardTitle>
+            <CardDescription>Stored encrypted and shown masked. Used for salary payments.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <dl className="grid gap-2 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-muted-foreground">PAN</dt>
+                <dd className="font-mono">{bank.pan ?? "Not recorded"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Account</dt>
+                <dd className="font-mono">
+                  {bank.bankAccount ?? "Not recorded"}
+                  {bank.sharedWith > 0 && <span className="ml-2 font-sans text-xs font-medium text-destructive">Same account as {bank.sharedWith} other staff — check</span>}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">IFSC</dt>
+                <dd className="font-mono">{bank.bankIfsc ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Name on account</dt>
+                <dd>{bank.bankAccountName ?? "—"}</dd>
+              </div>
+            </dl>
+            {bank.own && <p className="text-xs text-muted-foreground">Your own record: someone else must change these details.</p>}
+            {canEditBank && (
+              <details className="rounded-lg border p-3">
+                <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium pointer-fine:min-h-9">Change</summary>
+                <div className="mt-3">
+                  <BankDetailsForm employeeId={e.id} version={bank.version} hasPan={bank.pan !== null} hasBank={bank.bankAccount !== null} />
                 </div>
               </details>
             )}
