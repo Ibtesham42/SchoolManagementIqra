@@ -113,6 +113,8 @@ Note: a user may hold several roles (e.g. Teacher + Class Teacher); grants union
 
 **Own salary slips (Phase 3C decision Q, 2026-11-19):** `salary.self.read` (SELF only) is also granted to School Admin, Principal and Vice Principal, so every staff role can see its own slips (catalog 84 / 13 / 300).
 
+**Exams and report cards (Phase 4 decisions AC11, AC12, 2026-11-19):** `exam.manage` and `reportcard.generate` for School Admin and Principal; `reportcard.generate` at ASSIGNED (own section) for Class Teacher. Catalog 84 / 13 / 305. ASSIGNED for `reportcard.generate` is honoured by the 4B report-card service (academic policy); until then nothing uses the permission.
+
 `ALLOWED_SCOPES` in `src/lib/rbac/catalog.ts`: every permission can be granted for **all records**; a narrower scope only where the catalog's default roles use it (the owning module implements it or, for portal scopes not built yet, refuses it) — today `student.read`, `student.update`, `academic.read`, `discipline.manage`, `attendance.student.*`, `attendance.employee.read` (SELF = own linked staff record, 3B-M4), `marks.enter`, `result.read`, `fee.read`, `fee.pay.online`, `timetable.read`, `library.read`; `salary.self.read` is **SELF only**. The editor shows only these; `setRolePermissions` refuses a new or changed grant outside them (an unchanged older grant is left alone). A module that starts honouring a new scope must be added there with its policy and tests. Class-teacher (ASSIGNED) access ends when the section's session is CLOSED (S-02) and when the user loses the TEACHER / CLASS_TEACHER role (S-09).
 
 

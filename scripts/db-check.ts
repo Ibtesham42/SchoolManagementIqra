@@ -58,6 +58,9 @@ const PHASE_3B_CHECK_COUNT = 20;
 /** Phase 3C migration 20261120000000 (tests/unit/migration-phase3c.test.ts pins the same numbers). */
 const PHASE_3C_CHECK_COUNT = 28;
 const PHASE_3C_TABLES = ["salary_component", "salary_structure", "salary_structure_item", "employee_salary", "payroll_run", "payroll_slip", "payroll_adjustment", "salary_payment"];
+/** Phase 4A migration 20261121000000 (tests/unit/migration-phase4a.test.ts pins the same numbers). */
+const PHASE_4A_CHECK_COUNT = 16;
+const PHASE_4A_TABLES = ["subject", "class_subject", "student_subject", "teacher_allocation", "period", "timetable_slot", "student_attendance"];
 const PHASE_3C_PARTIAL_INDEXES = ["employee_salary_one_pending_key", "employee_salary_one_approved_per_month_key", "salary_payment_method_reference_key"];
 
 const HR_CHECKS = [
@@ -257,6 +260,22 @@ async function main() {
         ok
           ? `✓ ${PHASE_3C_CHECK_COUNT} Phase 3C payroll CHECK constraints validated; ${PHASE_3C_PARTIAL_INDEXES.length} partial unique indexes present`
           : `✗ Phase 3C: ${c.rows[0]?.n} CHECKs present, ${c.rows[0]?.v} validated (expected ${PHASE_3C_CHECK_COUNT}); ${idx.rows[0]?.n} partial indexes (expected ${PHASE_3C_PARTIAL_INDEXES.length})`,
+      );
+      if (!ok) constraintProblems++;
+    }
+
+    // Phase 4A M1 (draft): 16 CHECKs + the teacher double-booking partial unique index.
+    if (applied.has("20261121000000_phase4a_teaching_attendance")) {
+      const c = await client.query<{ n: string; v: string }>(
+        "select count(*)::text n, count(*) filter (where convalidated)::text v from pg_constraint where contype = 'c' and (conrelid::regclass::text = any($1) or conname = 'school_setting_student_weekly_off_check')",
+        [PHASE_4A_TABLES],
+      );
+      const idx = await client.query<{ n: string }>("select count(*)::text n from pg_indexes where indexname = 'timetable_slot_teacher_period_key' and indexdef like '% WHERE %'");
+      const ok = c.rows[0]?.n === String(PHASE_4A_CHECK_COUNT) && c.rows[0]?.v === String(PHASE_4A_CHECK_COUNT) && idx.rows[0]?.n === "1";
+      console.log(
+        ok
+          ? `✓ ${PHASE_4A_CHECK_COUNT} Phase 4A CHECK constraints validated; teacher double-booking index present`
+          : `✗ Phase 4A: ${c.rows[0]?.n} CHECKs present, ${c.rows[0]?.v} validated (expected ${PHASE_4A_CHECK_COUNT}); double-booking index ${idx.rows[0]?.n === "1" ? "present" : "missing"}`,
       );
       if (!ok) constraintProblems++;
     }

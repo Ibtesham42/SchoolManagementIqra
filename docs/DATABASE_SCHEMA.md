@@ -48,15 +48,18 @@ Legend: **PK** primary key · **U** unique · **IX** index · **FK** foreign key
 
 ## 3. Academics
 
+**Phase 4A: migration `20261121000000_phase4a_teaching_attendance` (DRAFT, awaiting the owner's SQL approval; not applied).** Design: PHASE_4_PLAN.md (AC1–AC20 approved 2026-11-19), ADR-038. Offline diff + hand edits: one transaction, `lock_timeout`, 16 CHECKs. Expand-only; existing tables gain `school_setting.student_weekly_off` (nullable JSONB + CHECK) and a unique index `student_enrollment(id, academic_session_id)` (composite-FK target). StudentAttendance is listed in §6.
+
 | Model | Key fields | Constraints |
 |---|---|---|
 | SchoolClass | master data (not session-scoped, never deleted — deactivate): **code** (VarChar 10, e.g. `C06`, `C11-SCI`; immutable once a section uses it), name (VarChar 60, e.g. "Class 11 Science" — streams are separate classes), **nameKey** (= lower(name)), numericLevel (SmallInt −3…12; not unique), displayOrder, defaultSectionCapacity? (1–200), isActive, **version** (optimistic concurrency) | U(code), U(nameKey), IX(isActive, displayOrder); CHECKs: code `^[A-Z0-9]+(-[A-Z0-9]+)*$`, name printable ASCII trimmed/collapsed, name_key = lower(name), level −3…12, display_order ≥ 0, capacity null or 1–200, version ≥ 1. *(Migration `20261110000000`, applied to **development** 2026-11-10 05:20Z; test pending.)* |
 | Section | academicSessionId → AcademicSession (RESTRICT), classId → SchoolClass (RESTRICT), name (VarChar 20, e.g. "A"), **nameKey** (= lower(name)), **code** (`<class code>-<NAME>`, e.g. `C06-A`), capacity (SmallInt 1–200, required; form → class default → setting default 40), **classTeacherId? → User** (RESTRICT; interim, ADR-034 — Phase 3 reaches Employee via User.employeeId), isActive, **version** | U(academicSessionId, classId, nameKey), U(academicSessionId, code), **partial U(academicSessionId, classTeacherId) WHERE classTeacherId IS NOT NULL**, IX(classId); CHECKs: name letters/digits with single spaces, name_key = lower(name), code format, capacity 1–200, version ≥ 1. Editable only in PLANNED/ACTIVE sessions (service). *(Migration `20261110000000`, applied to **development** 2026-11-10 05:20Z; test pending.)* |
-| Subject | code, name, type (THEORY/PRACTICAL/BOTH), isElective | U(code) |
-| ClassSubject | academicSessionId, classId, subjectId, maxTheory, maxPractical, maxInternal | U(session, class, subject) |
-| TeacherAllocation | academicSessionId, employeeId, sectionId, subjectId | U(session, section, subject, employee) |
-| Period | name, startTime, endTime, order, isBreak | — |
-| TimetableSlot | academicSessionId, sectionId, dayOfWeek, periodId, subjectId, employeeId, room? | U(session, section, day, period); U(session, employee, day, period) — no teacher double-booking |
+| Subject | code, name (any script), nameKey, kind (SCHOLASTIC/CO_SCHOLASTIC), isActive, version | U(code), U(nameKey); code/name shape CHECKs. School-defined (AC2). *Phase 4A draft* |
+| ClassSubject | academicSessionId, classId, subjectId, isOptional, sortOrder, version | U(session, class, subject); U(id, session) as composite-FK target. Maximum marks live on ExamSubject (4B). *Phase 4A draft* |
+| StudentSubject | academicSessionId, enrollmentId, classSubjectId | U(enrollment, classSubject); composite FKs keep enrollment and class subject in one session (AC3). *Phase 4A draft* |
+| TeacherAllocation | academicSessionId, sectionId, classSubjectId, employeeId → Employee | U(section, classSubject): one teacher per subject per section; composite FKs (section, class subject) with the session; IX(employee, session). Teacher = ACTIVE TEACHING employee with a linked login (service, AC4). *Phase 4A draft* |
+| Period | academicSessionId, dayOfWeek (0–6), number (1–15), label?, kind (TEACHING/BREAK), startTime, endTime (time), version | U(session, day, number); CHECK end > start (AC5). *Phase 4A draft* |
+| TimetableSlot | academicSessionId, sectionId, periodId (the day is on the period), classSubjectId, employeeId? | U(section, period); **partial unique** (employee, period) where employee not null: no teacher double-booking; composite FKs with the session. *Phase 4A draft* |
 
 ## 4. Students & admissions
 
@@ -105,7 +108,7 @@ Legend: **PK** primary key · **U** unique · **IX** index · **FK** foreign key
 
 | Model | Key fields | Constraints |
 |---|---|---|
-| StudentAttendance | academicSessionId, enrollmentId, date, status (PRESENT/ABSENT/LATE/HALF_DAY/EXCUSED), markedById, remarks? | U(enrollmentId, date), IX(academicSessionId, date) |
+| StudentAttendance | academicSessionId, enrollmentId (composite FK with the session), date, status (PRESENT/ABSENT/LATE/HALF_DAY/EXCUSED), correctionReason? (personal tier), markedById?, version | U(enrollmentId, date), IX(academicSessionId, date) (AC6, AC7). *Phase 4A draft* |
 | EmployeeAttendance | employeeId, date, status (PRESENT/ABSENT/LATE/HALF_DAY/ON_LEAVE/HOLIDAY), checkIn?, checkOut?, source (MANUAL/BIOMETRIC/IMPORT), leaveRequestId? | U(employeeId, date) |
 | Holiday | date, name, appliesTo (ALL/STUDENTS/STAFF) | U(date, appliesTo) |
 

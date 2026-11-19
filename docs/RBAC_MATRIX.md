@@ -73,12 +73,12 @@ Roles: 13 · Permissions: 84
 | `academic.manage` — Manage classes, sections, subjects and allocations | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |
 | `timetable.read` — View timetables | ✓ | ✓ | ✓ | ✓ |  |  |  | ✓ | ✓ |  |  | C | S |
 | `timetable.manage` — Manage timetables | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |
-| `exam.manage` — Manage examinations | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |
+| `exam.manage` — Manage examinations | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |
 | `marks.enter` — Enter marks | ✓ |  |  |  |  |  |  | A | A |  |  |  |  |
 | `marks.approve` — Approve marks | ✓ |  | ✓ | ✓ |  |  |  |  |  |  |  |  |  |
 | `result.read` — View results | ✓ |  | ✓ | ✓ |  |  |  | A | A |  |  | C | S |
 | `result.publish` — Publish results | ✓ |  | ✓ | ✓ |  |  |  |  |  |  |  |  |  |
-| `reportcard.generate` — Generate report cards | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |
+| `reportcard.generate` — Generate report cards | ✓ | ✓ | ✓ |  |  |  |  |  | A |  |  |  |  |
 | `library.read` — View library | ✓ | ✓ | ✓ | ✓ |  |  |  | ✓ | ✓ |  | ✓ |  | S |
 | `library.manage` — Manage library catalogue | ✓ |  |  |  |  |  |  |  |  |  | ✓ |  |  |
 | `library.issue` — Issue and return books | ✓ |  |  |  |  |  |  |  |  |  | ✓ |  |  |
@@ -100,14 +100,14 @@ Roles: 13 · Permissions: 84
 | Role | Permissions granted |
 |---|--:|
 | Super Admin (`SUPER_ADMIN`) | 84 |
-| School Admin (`SCHOOL_ADMIN`) | 42 |
-| Principal (`PRINCIPAL`) | 33 |
+| School Admin (`SCHOOL_ADMIN`) | 44 |
+| Principal (`PRINCIPAL`) | 35 |
 | Vice Principal (`VICE_PRINCIPAL`) | 25 |
 | Accountant (`ACCOUNTANT`) | 18 |
 | HR Manager (`HR_MANAGER`) | 15 |
 | Admission Officer (`ADMISSION_OFFICER`) | 19 |
 | Teacher (`TEACHER`) | 14 |
-| Class Teacher (`CLASS_TEACHER`) | 16 |
+| Class Teacher (`CLASS_TEACHER`) | 17 |
 | Transport Manager (`TRANSPORT_MANAGER`) | 10 |
 | Librarian (`LIBRARIAN`) | 10 |
 | Parent (`PARENT`) | 7 |

@@ -13,10 +13,10 @@ import { decideSuperAdmin, newPermissionGrants, PLACEHOLDER_SETTINGS, planSeed, 
  */
 describe("seed plan", () => {
   const plan = planSeed();
-  it("is exactly the catalog: 84 permissions, 13 roles, 300 grants", () => {
+  it("is exactly the catalog: 84 permissions, 13 roles, 305 grants", () => {
     expect(plan.permissions).toHaveLength(84);
     expect(plan.roles).toHaveLength(13);
-    expect(plan.totalGrants).toBe(300);
+    expect(plan.totalGrants).toBe(305);
     expect(plan.permissions.map((p) => p.key)).toEqual([...ALL_PERMISSION_KEYS]);
     expect(plan.roles.map((r) => r.key)).toEqual(ROLES.map((r) => r.key));
   });
@@ -172,7 +172,7 @@ describe("runGuardedSeed — nothing reaches the transaction unless every guard 
     const r = runner();
     await runGuardedSeed(r.deps);
     const opts = r.tx()!;
-    expect(opts.plan.totalGrants).toBe(300);
+    expect(opts.plan.totalGrants).toBe(305);
     expect(typeof opts.verifyIdentity).toBe("function");
   });
 });

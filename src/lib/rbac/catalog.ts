@@ -200,6 +200,8 @@ export const ROLES: RoleDefinition[] = [
       // Phase 3A (owner decisions Q1, H6, H8 — 2026-11-10): School Admin manages staff records and documents.
       "employee.manage", "employee.personal.read", "employee.document.manage",
       ...MY_SLIPS,
+      // Phase 4 (owner decisions AC11, AC12 — 2026-11-19): exams and report cards.
+      "exam.manage", "reportcard.generate",
       "academic.read", "academic.manage", "timetable.read", "timetable.manage", "library.read", "inventory.read",
       "import.run", "export.run", "notice.read", "notification.send",
     ],
@@ -216,6 +218,8 @@ export const ROLES: RoleDefinition[] = [
       // Phase 3A (H6): staff personal details (read only).
       "employee.personal.read",
       ...MY_SLIPS,
+      // Phase 4 (AC11, AC12): exams and report cards.
+      "exam.manage", "reportcard.generate",
     ],
   },
   {
@@ -270,7 +274,8 @@ export const ROLES: RoleDefinition[] = [
     key: "CLASS_TEACHER",
     name: "Class Teacher",
     description: "Teacher with responsibility for a section.",
-    grants: [...TEACHER, ["discipline.manage", "ASSIGNED"], ["student.update", "ASSIGNED"]],
+    // Phase 4 (AC12): report cards for the own section only (ASSIGNED — academic policy).
+    grants: [...TEACHER, ["discipline.manage", "ASSIGNED"], ["student.update", "ASSIGNED"], ["reportcard.generate", "ASSIGNED"]],
   },
   {
     key: "TRANSPORT_MANAGER",

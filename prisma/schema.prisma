@@ -49,41 +49,42 @@ model User {
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  roles                UserRole[]
-  sessions             Session[]
-  resetTokens          PasswordResetToken[]
-  notifications        Notification[]
-  uploadedFiles        StoredFile[]
-  generatedDocuments   GeneratedDocument[]    @relation("DocumentGeneratedBy")
-  revokedDocuments     GeneratedDocument[]    @relation("DocumentRevokedBy")
+  roles                   UserRole[]
+  sessions                Session[]
+  resetTokens             PasswordResetToken[]
+  notifications           Notification[]
+  uploadedFiles           StoredFile[]
+  generatedDocuments      GeneratedDocument[]    @relation("DocumentGeneratedBy")
+  revokedDocuments        GeneratedDocument[]    @relation("DocumentRevokedBy")
   /// Sections this user is class teacher of (interim User reference until Phase 3 Employee — ADR-034).
-  classTeacherOf       Section[]              @relation("SectionClassTeacher")
+  classTeacherOf          Section[]              @relation("SectionClassTeacher")
   // Phase 2b admissions & students (actor references; SET NULL on the child side).
-  applicationsCreated  AdmissionApplication[] @relation("ApplicationCreatedBy")
-  applicationsDecided  AdmissionApplication[] @relation("ApplicationDecidedBy")
-  documentsUploaded    StudentDocument[]      @relation("StudentDocumentUploadedBy")
-  documentsVerified    StudentDocument[]      @relation("StudentDocumentVerifiedBy")
-  rollBatchesGenerated RollNumberBatch[]      @relation("RollBatchGeneratedBy")
-  rollBatchesFinalized RollNumberBatch[]      @relation("RollBatchFinalizedBy")
-  studentStatusChanges StudentStatusChange[]  @relation("StudentStatusChangedBy")
+  applicationsCreated     AdmissionApplication[] @relation("ApplicationCreatedBy")
+  applicationsDecided     AdmissionApplication[] @relation("ApplicationDecidedBy")
+  documentsUploaded       StudentDocument[]      @relation("StudentDocumentUploadedBy")
+  documentsVerified       StudentDocument[]      @relation("StudentDocumentVerifiedBy")
+  rollBatchesGenerated    RollNumberBatch[]      @relation("RollBatchGeneratedBy")
+  rollBatchesFinalized    RollNumberBatch[]      @relation("RollBatchFinalizedBy")
+  studentStatusChanges    StudentStatusChange[]  @relation("StudentStatusChangedBy")
   // Phase 3A HR (ADR-036). The FK for the optional employee link lives on this side (user.employee_id).
-  employee             Employee?              @relation("UserEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
-  employeesCreated     Employee[]             @relation("EmployeeCreatedBy")
-  employeeDocsUploaded EmployeeDocument[]     @relation("EmployeeDocumentUploadedBy")
-  employeeDocsVerified EmployeeDocument[]     @relation("EmployeeDocumentVerifiedBy")
-  serviceEventsActed   EmployeeServiceEvent[] @relation("EmployeeServiceEventActedBy")
+  employee                Employee?              @relation("UserEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+  employeesCreated        Employee[]             @relation("EmployeeCreatedBy")
+  employeeDocsUploaded    EmployeeDocument[]     @relation("EmployeeDocumentUploadedBy")
+  employeeDocsVerified    EmployeeDocument[]     @relation("EmployeeDocumentVerifiedBy")
+  serviceEventsActed      EmployeeServiceEvent[] @relation("EmployeeServiceEventActedBy")
   // Phase 3B attendance & leave (actor references; SET NULL).
-  leaveRequested       LeaveRequest[]         @relation("LeaveRequestedBy")
-  leaveDecided         LeaveRequest[]         @relation("LeaveDecidedBy")
-  attendanceMarked     EmployeeAttendance[]   @relation("AttendanceMarkedBy")
-  holidaysCreated      Holiday[]              @relation("HolidayCreatedBy")
-  periodLocks          AttendancePeriodLock[] @relation("AttendancePeriodLockedBy")
-  salariesProposed     EmployeeSalary[]       @relation("SalaryProposedBy")
-  salariesDecided      EmployeeSalary[]       @relation("SalaryDecidedBy")
-  payrollsPrepared     PayrollRun[]           @relation("PayrollPreparedBy")
-  payrollsApproved     PayrollRun[]           @relation("PayrollApprovedBy")
-  payrollAdjustments   PayrollAdjustment[]    @relation("PayrollAdjustmentCreatedBy")
-  salaryPayments       SalaryPayment[]        @relation("SalaryPaidBy")
+  leaveRequested          LeaveRequest[]         @relation("LeaveRequestedBy")
+  leaveDecided            LeaveRequest[]         @relation("LeaveDecidedBy")
+  attendanceMarked        EmployeeAttendance[]   @relation("AttendanceMarkedBy")
+  holidaysCreated         Holiday[]              @relation("HolidayCreatedBy")
+  periodLocks             AttendancePeriodLock[] @relation("AttendancePeriodLockedBy")
+  salariesProposed        EmployeeSalary[]       @relation("SalaryProposedBy")
+  salariesDecided         EmployeeSalary[]       @relation("SalaryDecidedBy")
+  payrollsPrepared        PayrollRun[]           @relation("PayrollPreparedBy")
+  payrollsApproved        PayrollRun[]           @relation("PayrollApprovedBy")
+  payrollAdjustments      PayrollAdjustment[]    @relation("PayrollAdjustmentCreatedBy")
+  salaryPayments          SalaryPayment[]        @relation("SalaryPaidBy")
+  studentAttendanceMarked StudentAttendance[]    @relation("StudentAttendanceMarkedBy")
 
   @@index([isActive])
   @@map("user")
@@ -203,6 +204,8 @@ model SchoolSetting {
   weeklyOff                  Json?                 @map("weekly_off")
   /// Phase 3C (P3): proration basis. No default: payroll refuses to prepare until the school chooses.
   payrollDayBasis            PayrollDayBasis?      @map("payroll_day_basis")
+  /// Phase 4A (AC6): student weekly off, same shape as weeklyOff; often different from staff. Not set = none.
+  studentWeeklyOff           Json?                 @map("student_weekly_off")
   features                   Json? // toggles for optional external services (email, AI, payments)
   /// Capacity offered for a new section when neither the form nor its class gives one. A default,
   /// not a limit: every section stores its own capacity. CHECK 1–200 (migration 20261110000000).
@@ -236,13 +239,19 @@ model AcademicSession {
   createdAt DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  currentFor       SchoolSetting?
-  sections         Section[]
-  applications     AdmissionApplication[]
-  enrollments      StudentEnrollment[]
-  admittedStudents Student[]              @relation("StudentAdmittedSession")
-  leaveBalances    LeaveBalance[]
-  leaveRequests    LeaveRequest[]
+  currentFor         SchoolSetting?
+  sections           Section[]
+  applications       AdmissionApplication[]
+  enrollments        StudentEnrollment[]
+  admittedStudents   Student[]              @relation("StudentAdmittedSession")
+  leaveBalances      LeaveBalance[]
+  leaveRequests      LeaveRequest[]
+  classSubjects      ClassSubject[]
+  studentSubjects    StudentSubject[]
+  teacherAllocations TeacherAllocation[]
+  periods            Period[]
+  timetableSlots     TimetableSlot[]
+  studentAttendance  StudentAttendance[]
 
   @@map("academic_session")
 }
@@ -273,8 +282,9 @@ model SchoolClass {
   createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  sections     Section[]
-  applications AdmissionApplication[]
+  sections      Section[]
+  applications  AdmissionApplication[]
+  classSubjects ClassSubject[]
 
   @@index([isActive, displayOrder])
   @@map("school_class")
@@ -304,12 +314,14 @@ model Section {
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  academicSession AcademicSession        @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
-  class           SchoolClass            @relation(fields: [classId], references: [id], onDelete: Restrict)
-  classTeacher    User?                  @relation("SectionClassTeacher", fields: [classTeacherId], references: [id], onDelete: Restrict)
-  applications    AdmissionApplication[]
-  enrollments     StudentEnrollment[]
-  rollNumberBatch RollNumberBatch?
+  academicSession    AcademicSession        @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  class              SchoolClass            @relation(fields: [classId], references: [id], onDelete: Restrict)
+  classTeacher       User?                  @relation("SectionClassTeacher", fields: [classTeacherId], references: [id], onDelete: Restrict)
+  applications       AdmissionApplication[]
+  enrollments        StudentEnrollment[]
+  rollNumberBatch    RollNumberBatch?
+  teacherAllocations TeacherAllocation[]
+  timetableSlots     TimetableSlot[]
 
   @@unique([academicSessionId, classId, nameKey])
   @@unique([academicSessionId, code])
@@ -760,13 +772,17 @@ model StudentEnrollment {
   createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  student         Student            @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  academicSession AcademicSession    @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  student         Student             @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  academicSession AcademicSession     @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
   /// Composite FK: the section must belong to the enrollment's own session (DB-enforced).
-  section         Section            @relation(fields: [sectionId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  section         Section             @relation(fields: [sectionId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
   rollNumber      StudentRollNumber?
+  subjects        StudentSubject[]
+  attendance      StudentAttendance[]
 
   @@unique([studentId, academicSessionId])
+  /// Phase 4A: target of composite FKs (student subjects and attendance stay in the enrollment's session).
+  @@unique([id, academicSessionId], map: "student_enrollment_id_academic_session_id_key")
   @@index([sectionId, status])
   @@index([academicSessionId, status])
   @@map("student_enrollment")
@@ -956,22 +972,24 @@ model Employee {
   updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt          DateTime?        @map("deleted_at") @db.Timestamptz(3)
 
-  department     Department             @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  designation    Designation            @relation(fields: [designationId], references: [id], onDelete: Restrict)
+  department         Department             @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  designation        Designation            @relation(fields: [designationId], references: [id], onDelete: Restrict)
   /// Reporting line (H10): self-reference; no self-reporting (CHECK) and no cycles (service, under locks).
-  reportsTo      Employee?              @relation("EmployeeReportsTo", fields: [reportsToId], references: [id], onDelete: Restrict)
-  directReports  Employee[]             @relation("EmployeeReportsTo")
-  createdBy      User?                  @relation("EmployeeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  reportsTo          Employee?              @relation("EmployeeReportsTo", fields: [reportsToId], references: [id], onDelete: Restrict)
+  directReports      Employee[]             @relation("EmployeeReportsTo")
+  createdBy          User?                  @relation("EmployeeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   /// Optional login account (H2): the FK lives on User.employeeId.
-  user           User?                  @relation("UserEmployee")
-  teacherProfile TeacherProfile?
-  documents      EmployeeDocument[]
-  serviceEvents  EmployeeServiceEvent[]
-  leaveBalances  LeaveBalance[]
-  leaveRequests  LeaveRequest[]
-  attendance     EmployeeAttendance[]
-  salaries       EmployeeSalary[]
-  payrollSlips   PayrollSlip[]
+  user               User?                  @relation("UserEmployee")
+  teacherProfile     TeacherProfile?
+  documents          EmployeeDocument[]
+  serviceEvents      EmployeeServiceEvent[]
+  leaveBalances      LeaveBalance[]
+  leaveRequests      LeaveRequest[]
+  attendance         EmployeeAttendance[]
+  salaries           EmployeeSalary[]
+  payrollSlips       PayrollSlip[]
+  teacherAllocations TeacherAllocation[]
+  timetableSlots     TimetableSlot[]
 
   @@index([fullNameNormalized])
   @@index([staffType, employmentStatus])
@@ -1460,4 +1478,183 @@ model SalaryPayment {
 
   @@index([slipId])
   @@map("salary_payment")
+}
+
+// ───────────────────────────── Phase 4A — teaching structure & student attendance (PHASE_4_PLAN.md, AC1–AC20 approved 2026-11-19) ─────────────────────────────
+
+enum SubjectKind {
+  SCHOLASTIC
+  CO_SCHOLASTIC
+}
+
+enum PeriodKind {
+  TEACHING
+  BREAK
+}
+
+enum StudentAttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  EXCUSED
+}
+
+/// AC2: school-defined subjects (names in any script). Deactivated, never deleted once used.
+model Subject {
+  id        String      @id @default(cuid(2))
+  code      String      @unique @db.VarChar(20)
+  name      String      @db.VarChar(80)
+  nameKey   String      @unique @map("name_key") @db.VarChar(80)
+  kind      SubjectKind @default(SCHOLASTIC)
+  isActive  Boolean     @default(true) @map("is_active")
+  version   Int         @default(1)
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  classSubjects ClassSubject[]
+
+  @@map("subject")
+}
+
+/// AC3: what a class studies in one academic session. Optional subjects are chosen per student (StudentSubject).
+model ClassSubject {
+  id                String   @id @default(cuid(2))
+  academicSessionId String   @map("academic_session_id")
+  classId           String   @map("class_id")
+  subjectId         String   @map("subject_id")
+  isOptional        Boolean  @default(false) @map("is_optional")
+  sortOrder         Int      @default(0) @map("sort_order")
+  version           Int      @default(1)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession     @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  class           SchoolClass         @relation(fields: [classId], references: [id], onDelete: Restrict)
+  subject         Subject             @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  studentChoices  StudentSubject[]
+  allocations     TeacherAllocation[]
+  timetableSlots  TimetableSlot[]
+
+  @@unique([academicSessionId, classId, subjectId])
+  /// Target of composite FKs: rows that point at a class subject must be in its session (DB-enforced).
+  @@unique([id, academicSessionId], map: "class_subject_id_academic_session_id_key")
+  @@index([classId])
+  @@index([subjectId])
+  @@map("class_subject")
+}
+
+/// AC3: a student's optional subjects. Same session as the enrollment and the class subject (composite FKs); the
+/// class subject belongs to the enrollment's class (service, under the enrollment row lock).
+model StudentSubject {
+  id                String   @id @default(cuid(2))
+  academicSessionId String   @map("academic_session_id")
+  enrollmentId      String   @map("enrollment_id")
+  classSubjectId    String   @map("class_subject_id")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession   @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  enrollment      StudentEnrollment @relation(fields: [enrollmentId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  classSubject    ClassSubject      @relation(fields: [classSubjectId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+
+  @@unique([enrollmentId, classSubjectId])
+  @@index([classSubjectId])
+  @@map("student_subject")
+}
+
+/// AC4: who teaches a class subject in a section — an ACTIVE, TEACHING employee with a linked login (service). One
+/// teacher per subject per section. The source of subject-level ASSIGNED scope (marks entry in 4B).
+model TeacherAllocation {
+  id                String   @id @default(cuid(2))
+  academicSessionId String   @map("academic_session_id")
+  sectionId         String   @map("section_id")
+  classSubjectId    String   @map("class_subject_id")
+  employeeId        String   @map("employee_id")
+  version           Int      @default(1)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  section         Section         @relation(fields: [sectionId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  classSubject    ClassSubject    @relation(fields: [classSubjectId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  employee        Employee        @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([sectionId, classSubjectId])
+  @@index([employeeId, academicSessionId])
+  @@index([classSubjectId])
+  @@map("teacher_allocation")
+}
+
+/// AC5: the school's bell schedule per weekday for one session (0 = Sunday … 6 = Saturday).
+model Period {
+  id                String     @id @default(cuid(2))
+  academicSessionId String     @map("academic_session_id")
+  dayOfWeek         Int        @map("day_of_week") @db.SmallInt
+  number            Int        @db.SmallInt
+  label             String?    @db.VarChar(40)
+  kind              PeriodKind @default(TEACHING)
+  /// School-local times of day.
+  startTime         DateTime   @map("start_time") @db.Time(0)
+  endTime           DateTime   @map("end_time") @db.Time(0)
+  version           Int        @default(1)
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  slots           TimetableSlot[]
+
+  @@unique([academicSessionId, dayOfWeek, number])
+  @@unique([id, academicSessionId], map: "period_id_academic_session_id_key")
+  @@map("period")
+}
+
+/// AC5: one subject per section per period; one section per teacher per period (both DB-enforced). The teacher must
+/// hold the allocation and the period must be a TEACHING period (service).
+model TimetableSlot {
+  id                String   @id @default(cuid(2))
+  academicSessionId String   @map("academic_session_id")
+  sectionId         String   @map("section_id")
+  periodId          String   @map("period_id")
+  classSubjectId    String   @map("class_subject_id")
+  employeeId        String?  @map("employee_id")
+  version           Int      @default(1)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  section         Section         @relation(fields: [sectionId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  period          Period          @relation(fields: [periodId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  classSubject    ClassSubject    @relation(fields: [classSubjectId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  employee        Employee?       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([sectionId, periodId])
+  /// No double-booking: a teacher is in one section per period (partial: slots without a teacher are ignored).
+  @@unique([employeeId, periodId], map: "timetable_slot_teacher_period_key", where: raw("employee_id IS NOT NULL"))
+  @@index([periodId])
+  @@index([classSubjectId])
+  @@map("timetable_slot")
+}
+
+/// AC6/AC7: daily student attendance by the class teacher. Session-scoped through the enrollment (composite FK).
+/// Changing a saved day later needs academic.manage and a reason (personal tier — never in audit rows).
+model StudentAttendance {
+  id                String                  @id @default(cuid(2))
+  academicSessionId String                  @map("academic_session_id")
+  enrollmentId      String                  @map("enrollment_id")
+  date              DateTime                @db.Date
+  status            StudentAttendanceStatus
+  correctionReason  String?                 @map("correction_reason") @db.VarChar(500)
+  markedById        String?                 @map("marked_by_id")
+  version           Int                     @default(1)
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession   @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  enrollment      StudentEnrollment @relation(fields: [enrollmentId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  markedBy        User?             @relation("StudentAttendanceMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+
+  @@unique([enrollmentId, date])
+  @@index([academicSessionId, date])
+  @@map("student_attendance")
 }

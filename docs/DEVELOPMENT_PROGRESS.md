@@ -10,6 +10,22 @@
 
 ## Log
 
+### 2026-11-19 — Phase 4 pure rules: student attendance (4A) and promotion (4C) (no database)
+- `src/modules/academic/student-attendance.rules.ts`: `summarizeStudentDays` (school days = student weekly off and student holidays excluded, within the enrollment, to today; % = (present + late + ½ half day) ÷ marked days, half-up 2 dp; EXCUSED counted as not attended but shown separately (new open decision **AC21**); unmarked reported, not in the denominator) and `correctionRule` (AC7: class teacher same day; academic.manage any past day with a reason; no future marks).
+- `src/modules/academic/promotion.rules.ts`: `nextClassFor` / `targetClass` (AC16: next numeric level; streams must be chosen, never guessed; class 12 completes; a missing next level is reported; detain keeps an active class; leave has none).
+- Tests: `tests/unit/student-attendance-promotion.test.ts` (8).
+
+### 2026-11-19 — Phase 4 pure rules: grading calculator (4B) and timetable rules (4A) (no database)
+- `src/modules/academic/grade-calc.ts`: scales as bands by minimum percent (gap-free by construction; `validateScale`), grade on the unrounded percentage, shown percentage half-up 2 dp; whole / half marks per part ≤ maximum; AB = 0 of the full maximum, EX excluded (AC10); only scholastic subjects count; PASS when no subject is below its pass mark; `rankByPercent` competition ranking (1, 1, 3) on the unrounded value (AC14); `CBSE_STYLE_8_POINT` template offered for the school to review and save, never created automatically (AC8).
+- `src/modules/academic/timetable.rules.ts`: `checkPeriodPlan` (days 0–6, numbers 1–15 unique per day, HH:MM, end after start, no overlap; touching allowed) and `findClashes` (section × period and teacher × period, against saved slots and within a proposal; an edit of the same section period is not a clash).
+- Tests: `tests/unit/grade-calc.test.ts` (12), `tests/unit/timetable-rules.test.ts` (7).
+
+### 2026-11-19 — Phase 4 M0 decisions + 4A-M1 schema draft (NOT applied; branch `feat/phase3b-m4-staff-attendance`)
+- **Decisions:** owner approved AC1–AC20 as recommended (PHASE_4_PLAN.md).
+- **Catalog (AC11, AC12):** `exam.manage` + `reportcard.generate` for School Admin and Principal; `reportcard.generate` ASSIGNED for Class Teacher → **84 / 13 / 305** (code only; database sync with KI-073).
+- **Schema + migration `prisma/migrations/20261121000000_phase4a_teaching_attendance/migration.sql`:** offline diff; 3 enums, 7 tables (subject, class_subject, student_subject, teacher_allocation → employee, period, timetable_slot, student_attendance), composite session FKs on every academic link, teacher double-booking partial unique index, `school_setting.student_weekly_off`, unique index `student_enrollment(id, academic_session_id)`; hand-added transaction, `lock_timeout`, 16 CHECKs, rollback comment. Expand-only. **Awaiting the owner's SQL review** (after 3C's, which it follows). ADR-038; DATABASE_SCHEMA §3 / §6, DATABASE_RELATIONSHIPS; `db:check` and the backup table list updated.
+- **Tests:** `tests/unit/migration-phase4a.test.ts` (6, static review guard).
+
 ### 2026-11-19 — Phase 4 academic management: assessment and plan (docs only)
 - New `docs/PHASE_4_PLAN.md`: starting point verified from code (classes, sessions, sections with a User class teacher — ADR-034 interim, enrollments, holidays, academic policy ASSIGNED = class-teacher sections; `exam.manage` and `reportcard.generate` held by no role except Super Admin), split 4A (subjects, allocations, timetable, student attendance) / 4B (grading, exams, marks, report cards, publication) / 4C (promotion, homework, calendar, import), owner decisions **AC1–AC20**, RBAC (+5 grants proposed → 305), milestones, risks. No code, schema or database change.
 

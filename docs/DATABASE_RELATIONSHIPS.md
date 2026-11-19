@@ -49,3 +49,5 @@ AcademicSession 1─< Section >─1 SchoolClass
 | Employee.createdById; EmployeeDocument.uploadedById / verifiedById; EmployeeServiceEvent.actedById → User | SetNull (actor references; the audit log keeps the actor label) |
 | SalaryStructureItem → SalaryStructure / SalaryComponent; EmployeeSalary → Employee / SalaryStructure; PayrollSlip → PayrollRun / Employee / EmployeeSalary; PayrollAdjustment, SalaryPayment → PayrollSlip | Restrict (Phase 3C draft: payroll history is never hard-deleted) |
 | EmployeeSalary.proposedById / decidedById; PayrollRun.preparedById / approvedById; PayrollAdjustment.createdById; SalaryPayment.paidById → User | SetNull (actor references; the audit log keeps the actor label) |
+| ClassSubject → AcademicSession / SchoolClass / Subject; StudentSubject, StudentAttendance → StudentEnrollment (composite with session); TeacherAllocation, TimetableSlot → Section / ClassSubject / Period (composite with session) and → Employee | Restrict (Phase 4A draft: teaching history is never hard-deleted; the session travels with every link) |
+| StudentAttendance.markedById → User | SetNull (actor reference) |

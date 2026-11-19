@@ -53,6 +53,14 @@ export const APP_TABLES_IN_FK_ORDER = [
   "payroll_slip", // → payroll_run, employee, employee_salary
   "payroll_adjustment", // → payroll_slip, user
   "salary_payment", // → payroll_slip, user
+  // Phase 4A teaching structure & student attendance — migration 20261121000000 (DRAFT: awaiting SQL approval).
+  "subject",
+  "class_subject", // → academic_session, school_class, subject
+  "student_subject", // → academic_session, student_enrollment, class_subject
+  "teacher_allocation", // → academic_session, section, class_subject, employee
+  "period", // → academic_session
+  "timetable_slot", // → academic_session, section, period, class_subject, employee
+  "student_attendance", // → academic_session, student_enrollment, user
   "audit_log",
   "notification",
   "sequence_counter",
