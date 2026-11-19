@@ -38,7 +38,7 @@ describe("H — scope partial order", () => {
 });
 
 describe("B — delegated admins can't take over more-privileged accounts", () => {
-  const delegated = ctx([["user.manage", "ALL"], ["user.read", "ALL"], ["student.read", "ALL"], ["library.read", "ALL"], ["library.manage", "ALL"], ["library.issue", "ALL"], ["employee.read", "ALL"], ["leave.request", "ALL"], ["salary.self.read", "SELF"], ["notice.read", "ALL"], ["employee.personal.read", "SELF"]]); // = Librarian's grants (Phase 3A M3b adds "My profile")
+  const delegated = ctx([["user.manage", "ALL"], ["user.read", "ALL"], ["student.read", "ALL"], ["library.read", "ALL"], ["library.manage", "ALL"], ["library.issue", "ALL"], ["employee.read", "ALL"], ["leave.request", "ALL"], ["salary.self.read", "SELF"], ["notice.read", "ALL"], ["employee.personal.read", "SELF"], ["attendance.employee.read", "SELF"]]); // = Librarian's grants (Phase 3A M3b adds "My profile", 3B M4 "My attendance")
   it("denies modifying a Principal (holds payroll.approve) — e.g. password reset → sign in as them", () => {
     expect(() => assertCanModifyUser(delegated, { id: "p", roleKeys: ["PRINCIPAL"], isActive: true, permissions: grantsOf("PRINCIPAL") })).toThrow(
       /permissions you also hold/,

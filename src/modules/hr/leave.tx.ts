@@ -10,7 +10,9 @@ import { STAFF_HOLIDAY_SCOPES } from "./leave.rules";
  *
  * Lock order (all Phase 3B writers): leave calendar (advisory) → employee → leave_request → leave_type →
  * academic_session → leave_balance → employee_attendance / holiday. Opening balances skip the calendar lock (they
- * don't depend on it) but follow the same order from employee on, so the orders never invert.
+ * don't depend on it) but follow the same order from employee on, so the orders never invert. Staff-attendance
+ * marking (3B-M4) follows it too: calendar → employee (FOR SHARE, sorted ids) → academic_session (FOR SHARE) →
+ * employee_attendance. A payroll month-lock writer (3C) must take the calendar lock first.
  */
 export async function lockLeaveCalendar(tx: Tx): Promise<void> {
   await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext('school_erp.leave_calendar'))) AS l`;

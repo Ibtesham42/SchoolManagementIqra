@@ -152,6 +152,13 @@ const READ_ACADEMIC: Grant[] = [
  */
 const MY_PROFILE: Grant[] = [["employee.read", "SELF"], ["employee.personal.read", "SELF"]];
 const MY_PERSONAL: Grant[] = [["employee.personal.read", "SELF"]];
+/**
+ * Phase 3B M4 — "My attendance" (owner decision L9, approved 2026-11-18): staff roles without the ALL grant read
+ * their OWN attendance at SELF scope = AuthContext.employeeId (staff-attendance.service). Never Parent or Student.
+ */
+const MY_ATTENDANCE: Grant[] = [["attendance.employee.read", "SELF"]];
+/** Phase 3C (owner decision Q, approved 2026-11-19): senior staff see their OWN salary slips too. */
+const MY_SLIPS: Grant[] = [["salary.self.read", "SELF"]];
 
 const TEACHER: Grant[] = [
   ["student.read", "ASSIGNED"],
@@ -167,6 +174,7 @@ const TEACHER: Grant[] = [
   // ASSIGNED = the section(s) the teacher is class teacher of (academic.policy; TeacherAllocation in Phase 4).
   ["academic.read", "ASSIGNED"],
   ...MY_PROFILE,
+  ...MY_ATTENDANCE,
 ];
 
 export const ROLES: RoleDefinition[] = [
@@ -191,6 +199,7 @@ export const ROLES: RoleDefinition[] = [
       "employee.read", "attendance.student.read", "attendance.employee.read", "fee.read", "transport.read",
       // Phase 3A (owner decisions Q1, H6, H8 — 2026-11-10): School Admin manages staff records and documents.
       "employee.manage", "employee.personal.read", "employee.document.manage",
+      ...MY_SLIPS,
       "academic.read", "academic.manage", "timetable.read", "timetable.manage", "library.read", "inventory.read",
       "import.run", "export.run", "notice.read", "notification.send",
     ],
@@ -206,6 +215,7 @@ export const ROLES: RoleDefinition[] = [
       "payroll.approve", "fee.report", "cms.read", "cms.publish", "audit.read", "enquiry.read", "notification.send",
       // Phase 3A (H6): staff personal details (read only).
       "employee.personal.read",
+      ...MY_SLIPS,
     ],
   },
   {
@@ -215,7 +225,7 @@ export const ROLES: RoleDefinition[] = [
     grants: [
       ...READ_ACADEMIC, "student.sensitive.read", "student.document.read", "leave.approve", "marks.approve",
       "result.publish", "rollnumber.finalize", "certificate.issue", "fee.report", "cms.read", "enquiry.read",
-      ...MY_PERSONAL,
+      ...MY_PERSONAL, ...MY_SLIPS,
     ],
   },
   {
@@ -225,7 +235,7 @@ export const ROLES: RoleDefinition[] = [
     grants: [
       "fee.structure.manage", "fee.read", "fee.collect", "fee.concession.manage", "fee.refund", "fee.report",
       "payroll.read", "payroll.prepare", "payroll.pay", "student.read", "transport.read", "export.run",
-      "leave.request", ["salary.self.read", "SELF"], "notice.read", ...MY_PROFILE,
+      "leave.request", ["salary.self.read", "SELF"], "notice.read", ...MY_PROFILE, ...MY_ATTENDANCE,
     ],
   },
   {
@@ -252,6 +262,7 @@ export const ROLES: RoleDefinition[] = [
       // Prepares and submits applications with their documents; never approves them (D2, maker-checker).
       "student.document.manage",
       ...MY_PROFILE,
+      ...MY_ATTENDANCE,
     ],
   },
   { key: "TEACHER", name: "Teacher", description: "Access limited to assigned classes and subjects.", grants: TEACHER },
@@ -267,7 +278,7 @@ export const ROLES: RoleDefinition[] = [
     description: "Vehicles, routes, stops and student allocation.",
     grants: [
       "transport.read", "transport.manage", "transport.assign", ["student.read", "ASSIGNED"],
-      "leave.request", ["salary.self.read", "SELF"], "notice.read", ...MY_PROFILE,
+      "leave.request", ["salary.self.read", "SELF"], "notice.read", ...MY_PROFILE, ...MY_ATTENDANCE,
     ],
   },
   {
@@ -276,7 +287,7 @@ export const ROLES: RoleDefinition[] = [
     description: "Library catalogue, issues and returns.",
     grants: [
       "library.read", "library.manage", "library.issue", "student.read", "employee.read",
-      "leave.request", ["salary.self.read", "SELF"], "notice.read", ...MY_PERSONAL,
+      "leave.request", ["salary.self.read", "SELF"], "notice.read", ...MY_PERSONAL, ...MY_ATTENDANCE,
     ],
   },
   {

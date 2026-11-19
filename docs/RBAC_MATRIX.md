@@ -52,13 +52,13 @@ Roles: 13 · Permissions: 84
 | `attendance.student.mark` — Mark student attendance | ✓ |  |  |  |  |  |  | A | A |  |  |  |  |
 | `attendance.student.read` — View student attendance | ✓ | ✓ | ✓ | ✓ |  |  |  | A | A |  |  | C | S |
 | `attendance.employee.mark` — Mark employee attendance | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |
-| `attendance.employee.read` — View employee attendance | ✓ | ✓ | ✓ | ✓ |  | ✓ |  |  |  |  |  |  |  |
+| `attendance.employee.read` — View employee attendance | ✓ | ✓ | ✓ | ✓ | S | ✓ | S | S | S | S | S |  |  |
 | `payroll.read` — View payroll and salaries | ✓ |  | ✓ |  | ✓ | ✓ |  |  |  |  |  |  |  |
 | `payroll.prepare` — Prepare payroll runs | ✓ |  |  |  | ✓ | ✓ |  |  |  |  |  |  |  |
 | `payroll.approve` — Approve payroll runs | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |
 | `payroll.pay` — Record salary payments | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |  |
 | `salary.structure.manage` — Manage salary structures | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |
-| `salary.self.read` — View own salary slips | ✓ |  |  |  | S | S | S | S | S | S | S |  |  |
+| `salary.self.read` — View own salary slips | ✓ | S | S | S | S | S | S | S | S | S | S |  |  |
 | `fee.structure.manage` — Manage fee structures and generate invoices | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |  |
 | `fee.read` — View fees and invoices | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |  | C | S |
 | `fee.collect` — Collect fee payments | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |  |
@@ -100,15 +100,15 @@ Roles: 13 · Permissions: 84
 | Role | Permissions granted |
 |---|--:|
 | Super Admin (`SUPER_ADMIN`) | 84 |
-| School Admin (`SCHOOL_ADMIN`) | 41 |
-| Principal (`PRINCIPAL`) | 32 |
-| Vice Principal (`VICE_PRINCIPAL`) | 24 |
-| Accountant (`ACCOUNTANT`) | 17 |
+| School Admin (`SCHOOL_ADMIN`) | 42 |
+| Principal (`PRINCIPAL`) | 33 |
+| Vice Principal (`VICE_PRINCIPAL`) | 25 |
+| Accountant (`ACCOUNTANT`) | 18 |
 | HR Manager (`HR_MANAGER`) | 15 |
-| Admission Officer (`ADMISSION_OFFICER`) | 18 |
-| Teacher (`TEACHER`) | 13 |
-| Class Teacher (`CLASS_TEACHER`) | 15 |
-| Transport Manager (`TRANSPORT_MANAGER`) | 9 |
-| Librarian (`LIBRARIAN`) | 9 |
+| Admission Officer (`ADMISSION_OFFICER`) | 19 |
+| Teacher (`TEACHER`) | 14 |
+| Class Teacher (`CLASS_TEACHER`) | 16 |
+| Transport Manager (`TRANSPORT_MANAGER`) | 10 |
+| Librarian (`LIBRARIAN`) | 10 |
 | Parent (`PARENT`) | 7 |
 | Student (`STUDENT`) | 7 |

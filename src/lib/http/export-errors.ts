@@ -36,3 +36,10 @@ export const STAFF_EXPORT_MESSAGES: Record<ExportCode, string> = {
   too_many: "Too many staff match for one export (limit 5,000). Narrow the filters and try again.",
   forbidden: "You don't have permission to export the staff directory, or the request didn't come from this site.",
 };
+
+/** Phase 3B M5: the monthly attendance summary export — same fixed codes, attendance wording. */
+export const ATTENDANCE_EXPORT_MESSAGES: Record<ExportCode, string> = {
+  ...EXPORT_MESSAGES,
+  too_many: "Too many staff for one export (limit 5,000). Choose a department and try again.",
+  forbidden: "You don't have permission to export the attendance summary, or the request didn't come from this site.",
+};

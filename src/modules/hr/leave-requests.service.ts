@@ -194,6 +194,13 @@ export async function applyForLeave(ctx: AuthContext, input: ApplyLeaveInput) {
       );
       if (lockedSession.status === "CLOSED")
         throw new ConflictError(`${session.name} is closed.`);
+      if (
+        input.fromDate < iso(lockedSession.startDate) ||
+        input.toDate > iso(lockedSession.endDate)
+      )
+        throw new ConflictError(
+          "The academic session's dates changed. Reload the page and try again.",
+        );
       await assertMonthsOpen(tx, input.fromDate, input.toDate);
 
       const { weeklyOff } = await readLeaveCalendarTx(tx, session.id);
@@ -428,6 +435,8 @@ export async function decideLeave(ctx: AuthContext, input: DecideLeaveInput) {
           data: {
             status,
             leaveRequestId: req.id,
+            // The ABSENT mark's correction reason no longer describes the row (audit M4 info).
+            correctionReason: null,
             markedById: ctx.userId,
             version: { increment: 1 },
           },

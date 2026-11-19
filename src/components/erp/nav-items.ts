@@ -11,7 +11,8 @@ export type NavIcon =
   | "settings"
   | "account"
   | "staff"
-  | "leave";
+  | "leave"
+  | "staffAttendance";
 
 export interface NavItem {
   href: string;
@@ -62,6 +63,13 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Leave",
     icon: "leave",
     anyOf: ["leave.request", "leave.approve"],
+  },
+  // Phase 3B M4/M5: own attendance (SELF, L9), the register (ALL), marking (HR) and the payroll summary (preparers).
+  {
+    href: "/erp/staff-attendance",
+    label: "Staff attendance",
+    icon: "staffAttendance",
+    anyOf: ["attendance.employee.read", "attendance.employee.mark", "payroll.prepare"],
   },
   {
     href: "/erp/academic",

@@ -60,3 +60,14 @@ export function canBrowseEmployees(ctx: AuthContext): boolean {
 export function canManageEmployees(ctx: AuthContext): boolean {
   return hasPermission(ctx, "employee.manage");
 }
+
+/**
+ * 3B-M5: the monthly attendance summary for payroll (counts only — no reasons, no leave types). All-staff attendance
+ * readers (ALL) and payroll preparers (Accountant, HR Manager), who need it to run payroll in 3C.
+ */
+export function canViewAttendanceSummary(ctx: AuthContext): boolean {
+  return (
+    (hasPermission(ctx, "attendance.employee.read") && scopeFor(ctx, "attendance.employee.read") === "ALL") ||
+    hasPermission(ctx, "payroll.prepare")
+  );
+}

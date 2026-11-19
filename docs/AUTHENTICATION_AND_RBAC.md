@@ -82,7 +82,7 @@ Scope shown in brackets; no bracket = ALL.
 | Accountant | fee.*, payroll.read, payroll.prepare, payroll.pay, transport.read, export.run (fee/payroll) |
 | HR Manager | employee.*, leave.approve, attendance.employee.*, salary.structure.manage, payroll.prepare, payroll.read |
 | Admission Officer | admission.read, admission.create (**prepares and submits — never approves**, D2), student.read/create/update, student.document.read, **student.document.manage**, enquiry.*, rollnumber.generate, idcard.generate, document.generate, academic.read (class/section list for admissions) |
-| Teacher | student.read [ASSIGNED], attendance.student.mark [ASSIGNED], marks.enter [ASSIGNED], timetable read, leave.request, salary.self.read [SELF], library.read, academic.read [ASSIGNED] |
+| Teacher | student.read [ASSIGNED], attendance.student.mark [ASSIGNED], marks.enter [ASSIGNED], timetable read, leave.request, salary.self.read [SELF], library.read, academic.read [ASSIGNED], attendance.employee.read [SELF] (own attendance, L9; also Accountant, Admission Officer, Transport Manager, Librarian) |
 | Class Teacher | Teacher + attendance.student.mark/read for own section, discipline.manage [ASSIGNED], student.update (contact fields) [ASSIGNED] |
 | Transport Manager | transport.*, student.read (name/class/stop only) [ASSIGNED via route] |
 | Librarian | library.*, student.read (basic), employee.read (directory fields only — Q3), employee.personal.read **SELF** (own record — H7) |
@@ -109,7 +109,11 @@ Note: a user may hold several roles (e.g. Teacher + Class Teacher); grants union
 
 ## Scopes the role editor offers (S-08, 2026-11-10)
 
-`ALLOWED_SCOPES` in `src/lib/rbac/catalog.ts`: every permission can be granted for **all records**; a narrower scope only where the catalog's default roles use it (the owning module implements it or, for portal scopes not built yet, refuses it) — today `student.read`, `student.update`, `academic.read`, `discipline.manage`, `attendance.student.*`, `marks.enter`, `result.read`, `fee.read`, `fee.pay.online`, `timetable.read`, `library.read`; `salary.self.read` is **SELF only**. The editor shows only these; `setRolePermissions` refuses a new or changed grant outside them (an unchanged older grant is left alone). A module that starts honouring a new scope must be added there with its policy and tests. Class-teacher (ASSIGNED) access ends when the section's session is CLOSED (S-02) and when the user loses the TEACHER / CLASS_TEACHER role (S-09).
+**Staff attendance (Phase 3B M4/M5):** marking needs `attendance.employee.mark` (HR Manager, Super Admin) and never covers the marker's own record; the monthly register and any employee's month need `attendance.employee.read` at ALL; staff roles see only their own month (SELF, L9). The **payroll summary** (counts only — no reasons, leave types or personal data) is open to ALL attendance readers **and to `payroll.prepare` holders** (Accountant, HR Manager) — decision M5-1, PHASE_3B_PLAN.md; it does not extend to the day-by-day view. Its CSV export additionally needs `export.run`.
+
+**Own salary slips (Phase 3C decision Q, 2026-11-19):** `salary.self.read` (SELF only) is also granted to School Admin, Principal and Vice Principal, so every staff role can see its own slips (catalog 84 / 13 / 300).
+
+`ALLOWED_SCOPES` in `src/lib/rbac/catalog.ts`: every permission can be granted for **all records**; a narrower scope only where the catalog's default roles use it (the owning module implements it or, for portal scopes not built yet, refuses it) — today `student.read`, `student.update`, `academic.read`, `discipline.manage`, `attendance.student.*`, `attendance.employee.read` (SELF = own linked staff record, 3B-M4), `marks.enter`, `result.read`, `fee.read`, `fee.pay.online`, `timetable.read`, `library.read`; `salary.self.read` is **SELF only**. The editor shows only these; `setRolePermissions` refuses a new or changed grant outside them (an unchanged older grant is left alone). A module that starts honouring a new scope must be added there with its policy and tests. Class-teacher (ASSIGNED) access ends when the section's session is CLOSED (S-02) and when the user loses the TEACHER / CLASS_TEACHER role (S-09).
 
 
 

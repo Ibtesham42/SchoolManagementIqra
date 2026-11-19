@@ -38,10 +38,10 @@ describe("integration-only timeouts", () => {
 });
 
 describe("catalog setup via the transactional seed core", () => {
-  it("expects exactly the catalog the seed core plans: 84 permissions, 13 roles, 291 grants", () => {
+  it("expects exactly the catalog the seed core plans: 84 permissions, 13 roles, 300 grants", () => {
     const plan = planSeed();
-    expect(CATALOG_COUNTS).toEqual({ permissions: 84, roles: 13, grants: 291 });
-    expect([plan.permissions.length, plan.roles.length, plan.totalGrants]).toEqual([84, 13, 291]);
+    expect(CATALOG_COUNTS).toEqual({ permissions: 84, roles: 13, grants: 300 });
+    expect([plan.permissions.length, plan.roles.length, plan.totalGrants]).toEqual([84, 13, 300]);
   });
   it("is catalog-only: no Super Admin, no user, and every catalog role verified exactly", () => {
     const src = read("../integration/catalog-setup.ts");
