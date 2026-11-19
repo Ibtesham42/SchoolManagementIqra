@@ -34,6 +34,8 @@ import { markStudentDaySchema } from "@/modules/students/student-attendance.sche
 import { markStudentDay } from "@/modules/students/student-attendance.service";
 import { setSubjectChoices } from "@/modules/students/subject-choices.service";
 import { createSubject, setSubjectActive, updateSubject } from "@/modules/academic/subjects.service";
+import { createScaleSchema, setScaleActiveSchema, updateScaleSchema } from "@/modules/academic/grading.schemas";
+import { createCbseStyleScale, createScale, setScaleActive, updateScale } from "@/modules/academic/grading.service";
 import {
   assignClassTeacher,
   copySectionsFromSession,
@@ -265,4 +267,44 @@ export async function markStudentDayAction(_prev: ActionState, fd: FormData): Pr
   } catch (e) {
     return fromError(e);
   }
+}
+
+// ───────────────────────────── Phase 4B-M2: grading scales ─────────────────────────────
+
+/** Band rows arrive as band-<i>-{min,grade,point,remark}; fully blank rows are skipped (the form shows spare rows). */
+const MAX_BAND_ROWS = 20;
+function bandRows(fd: FormData) {
+  const rows = [];
+  for (let i = 0; i < MAX_BAND_ROWS; i++) {
+    const row = { minPercent: formString(fd, `band-${i}-min`), grade: formString(fd, `band-${i}-grade`), gradePoint: formString(fd, `band-${i}-point`), remark: formString(fd, `band-${i}-remark`) };
+    if (Object.values(row).some((v) => v.trim() !== "")) rows.push(row);
+  }
+  return rows;
+}
+
+export async function createScaleAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(createScaleSchema, { name: formString(fd, "name"), bands: bandRows(fd) }, async (ctx, d) => `Grading scale ${(await createScale(ctx, d)).name} created.`);
+}
+
+export async function createCbseStyleScaleAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  void fd;
+  const ctx = await requireAuth();
+  try {
+    const s = await createCbseStyleScale(ctx);
+    refresh();
+    return { ok: true, message: `Grading scale ${s.name} created. Check the bands before using it.` };
+  } catch (e) {
+    return fromError(e);
+  }
+}
+
+export async function updateScaleAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(updateScaleSchema, { ...ref(fd), name: formString(fd, "name"), bands: bandRows(fd) }, async (ctx, d) => (await updateScale(ctx, d), "Grading scale saved."));
+}
+
+export async function setScaleActiveAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(setScaleActiveSchema, { ...ref(fd), active: formString(fd, "active") === "true" }, async (ctx, d) => {
+    await setScaleActive(ctx, d);
+    return d.active ? "Grading scale activated." : "Grading scale deactivated. New exams can't use it; existing exams keep it.";
+  });
 }

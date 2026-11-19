@@ -10,7 +10,11 @@
 
 ## Log
 
-### 2026-11-19 — Phase 4B-M1: examinations schema draft (NOT applied)
+### 2026-11-19 — Phase 4B-M2: grading scales (uncommitted)
+- `src/modules/academic/grading.{schemas,service}.ts`: list (exam.manage or academic.read ALL), create, create from the CBSE-style 8-point template (on request only, AC8), update (bands re-validated by `grade-calc.validateScale`; **bands frozen once any exam beyond DRAFT uses the scale** — name still editable), activate / deactivate. Row lock + version, lock_timeout, audited (name and band minimum:grade pairs only). Screen `/erp/academic/grading` (Grading tab): band list per scale, add form with blank band rows, template button, edit, deactivate.
+- **Depends on migration 20261122000000, which is NOT applied**: until the owner approves and it is applied, the Grading screen errors on development (the tables don't exist). Tests: unit `tests/unit/grading-scales.test.ts` (5: parsing, structural band errors before the database, manage / read gates across roles). Integration tests to be written with the exam services.
+
+### 2026-11-19 — Phase 4B-M1: examinations schema draft (commit 569501d; NOT applied)
 - Owner: "continue … till the last phase" (2026-11-19). Migration `prisma/migrations/20261122000000_phase4b_examinations/migration.sql` generated offline: 3 enums, 7 tables (grade_scale, grade_band, examination, exam_subject, marks_sheet, examination_marks, report_card), composite session FKs, 26 CHECKs (half marks, AB / EX without marks, maxima, status ⇔ timestamps, published ⇔ PUBLISHED), `school_setting.show_rank`. Expand-only. **Awaiting the owner's SQL review and an explicit apply approval** (development, then Test). DATABASE_SCHEMA §10, DATABASE_RELATIONSHIPS, `db:check`, table list updated; guard test `tests/unit/migration-phase4b.test.ts` (5).
 
 ### 2026-11-19 — Phase 3C-M6: payroll register CSV and component totals (commit 61adf7e)
