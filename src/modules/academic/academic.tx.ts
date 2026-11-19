@@ -77,3 +77,16 @@ export async function releaseClassTeacherAssignments(tx: Tx, actor: AuditActor, 
   }
   return rows.length;
 }
+
+/**
+ * Phase 4A-M2: a class subject locked FOR UPDATE (serializes student-choice edits of one subject with each other and
+ * with optional ↔ compulsory changes). Call after the session (FOR SHARE) and the section, per the lock order.
+ */
+export async function lockClassSubjectForChoices(tx: Tx, classSubjectId: string) {
+  const rows = await tx.$queryRaw<{ id: string; academic_session_id: string; class_id: string; is_optional: boolean }[]>`
+    SELECT id, academic_session_id, class_id, is_optional FROM class_subject WHERE id = ${classSubjectId} FOR UPDATE`;
+  if (rows.length === 0) throw new NotFoundError("Class subject not found.");
+  const r = rows[0];
+  const subject = await tx.classSubject.findUniqueOrThrow({ where: { id: classSubjectId }, select: { subject: { select: { code: true } } } });
+  return { id: r.id, academicSessionId: r.academic_session_id, classId: r.class_id, isOptional: r.is_optional, subjectCode: subject.subject.code };
+}

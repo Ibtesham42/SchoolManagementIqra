@@ -24,7 +24,11 @@ import {
   updateClassSubjectSchema,
 } from "@/modules/academic/class-subjects.schemas";
 import { addClassSubjects, copyClassSubjects, removeClassSubject, updateClassSubject } from "@/modules/academic/class-subjects.service";
+import { allocationRefSchema, assignTeacherSchema } from "@/modules/academic/allocations.schemas";
+import { assignTeacher, removeAllocation } from "@/modules/academic/allocations.service";
 import { createSubjectSchema, setSubjectActiveSchema, updateSubjectSchema } from "@/modules/academic/subjects.schemas";
+import { setSubjectChoicesSchema } from "@/modules/students/subject-choices.schemas";
+import { setSubjectChoices } from "@/modules/students/subject-choices.service";
 import { createSubject, setSubjectActive, updateSubject } from "@/modules/academic/subjects.service";
 import {
   assignClassTeacher,
@@ -160,5 +164,32 @@ export async function copyClassSubjectsAction(_prev: ActionState, fd: FormData):
   return run(copyClassSubjectsSchema, { fromSessionId: formString(fd, "fromSessionId"), toSessionId: formString(fd, "toSessionId") }, async (ctx, d) => {
     const r = await copyClassSubjects(ctx, d);
     return `${r.created} class subject${r.created === 1 ? "" : "s"} copied${r.skipped ? `, ${r.skipped} already existed` : ""}.`;
+  });
+}
+
+// ───────────────────────────── Phase 4A-M2: teacher allocation ─────────────────────────────
+
+export async function assignTeacherAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const version = formString(fd, "version");
+  const raw = { sectionId: formString(fd, "sectionId"), classSubjectId: formString(fd, "classSubjectId"), employeeId: formString(fd, "employeeId"), version: version === "" ? null : version };
+  return run(assignTeacherSchema, raw, async (ctx, d) => (await assignTeacher(ctx, d), "Teacher allocated."));
+}
+
+export async function removeAllocationAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(allocationRefSchema, ref(fd), async (ctx, d) => (await removeAllocation(ctx, d), "Allocation removed."));
+}
+
+// ───────────────────────────── Phase 4A-M2: optional subjects per student ─────────────────────────────
+
+export async function setSubjectChoicesAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = {
+    sectionId: formString(fd, "sectionId"),
+    classSubjectId: formString(fd, "classSubjectId"),
+    enrollmentIds: fd.getAll("enrollmentIds").filter((v): v is string => typeof v === "string").slice(0, 201),
+    expectedIds: fd.getAll("expectedIds").filter((v): v is string => typeof v === "string").slice(0, 201),
+  };
+  return run(setSubjectChoicesSchema, raw, async (ctx, d) => {
+    const r = await setSubjectChoices(ctx, d);
+    return r.added + r.removed === 0 ? "Nothing changed." : `Saved: ${r.added} added, ${r.removed} removed.`;
   });
 }

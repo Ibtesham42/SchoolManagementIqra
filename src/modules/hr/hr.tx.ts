@@ -24,3 +24,24 @@ export async function lockEligibleClassTeacherEmployee(tx: Tx, employeeId: strin
     throw refuse("Choose a teacher whose staff record is active and teaching.");
   }
 }
+
+/** Phase 4A (AC4): a subject teacher is an ACTIVE, TEACHING employee with an active linked login (for SELF / scope). */
+export const ALLOCATABLE_TEACHER_EMPLOYEE = {
+  ...ELIGIBLE_CLASS_TEACHER_EMPLOYEE,
+  user: { is: { isActive: true, deletedAt: null } },
+};
+
+/**
+ * Locks the employee FOR SHARE, then its linked login FOR SHARE, and checks AC4. Same first lock as an employee's
+ * leaving or unlink (employee FOR UPDATE → user), so the two serialize and can't deadlock. Call BEFORE academic locks.
+ */
+export async function lockAllocatableTeacher(tx: Tx, employeeId: string): Promise<void> {
+  const refuse = (message: string) => new ValidationError(message, [{ path: "employeeId", message }]);
+  const [row] = await tx.$queryRaw<{ staff_type: string; employment_status: string }[]>`
+    SELECT staff_type::text AS staff_type, employment_status::text AS employment_status
+    FROM employee WHERE id = ${employeeId} AND deleted_at IS NULL FOR SHARE`;
+  if (!row || row.staff_type !== "TEACHING" || row.employment_status !== "ACTIVE") throw refuse("Choose a teacher whose staff record is active and teaching.");
+  const users = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "user" WHERE employee_id = ${employeeId} AND is_active AND deleted_at IS NULL FOR SHARE`;
+  if (users.length !== 1) throw refuse("This teacher has no active login linked to their staff record. Link one on the Staff page first.");
+}

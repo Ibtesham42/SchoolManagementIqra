@@ -2,12 +2,14 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /** Server-rendered sub-navigation between Sections, Classes and Subjects (links, no client state). */
-export function AcademicTabs({ current, showClasses, showSubjects = false }: { current: "sections" | "classes" | "subjects" | "class-subjects"; showClasses: boolean; showSubjects?: boolean }) {
+export function AcademicTabs({ current, showClasses, showSubjects = false }: { current: "sections" | "classes" | "subjects" | "class-subjects" | "allocations" | "optional-subjects"; showClasses: boolean; showSubjects?: boolean }) {
   const tabs = [
     { key: "sections", href: "/erp/academic/sections", label: "Sections" },
     ...(showClasses ? [{ key: "classes", href: "/erp/academic/classes", label: "Classes" }] : []),
     ...(showSubjects ? [{ key: "subjects", href: "/erp/academic/subjects", label: "Subjects" }] : []),
     ...(showSubjects ? [{ key: "class-subjects", href: "/erp/academic/class-subjects", label: "Class subjects" }] : []),
+    ...(showSubjects ? [{ key: "allocations", href: "/erp/academic/allocations", label: "Teachers" }] : []),
+    ...(showSubjects ? [{ key: "optional-subjects", href: "/erp/academic/optional-subjects", label: "Optional subjects" }] : []),
   ];
   if (tabs.length < 2) return null;
   return (
