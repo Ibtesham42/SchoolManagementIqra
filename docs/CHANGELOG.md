@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Added (Phase 4 — academic management, in progress)
 - **Subjects** (Classes → Subjects; School Admin and Super Admin edit, school-wide academic readers view): the subjects the school teaches, in any language, scholastic or co-scholastic. Nothing is pre-filled. Code and type are fixed once a class studies the subject; subjects are never deleted, only deactivated.
+- **Class subjects** (Classes → Class subjects): for each session and class, the subjects it studies — compulsory or optional — in report-card order. Copy last session's plan in one step. Closed sessions are read-only; a subject in use can't be removed.
 
 ### Added (Phase 3B — attendance & leave, in progress)
 - Leave types (Staff → Leave types; School Admin and HR Manager): the school's own leave types with a quota per academic session, paid or unpaid, half days, carry-forward limit and who can use it (all, teaching or non-teaching staff). Deactivate instead of delete; once a type is in use its code, paid setting and staff group are fixed.

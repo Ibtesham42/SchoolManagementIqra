@@ -10,7 +10,13 @@
 
 ## Log
 
-### 2026-11-19 — Phase 4A-M2 (part 1): subjects (uncommitted)
+### 2026-11-19 — Phase 4A-M2 (part 2): class subjects per session (uncommitted)
+- `src/modules/academic/class-subjects.schemas.ts` + `class-subjects.service.ts`: list (`academic.read` ALL), add 1–30 active subjects to an active class (compulsory or optional; session FOR SHARE → class FOR SHARE → subjects FOR SHARE; never in a CLOSED session), edit optional / order with version (an optional subject with student choices can't become compulsory), remove only while unused (no choices, allocations or timetable slots), copy a session's whole plan into another (active classes and subjects; existing kept; sessions locked in id order). All audited.
+- Page `/erp/academic/class-subjects` ("Class subjects" tab): session + class picker (GET form), list with compulsory / optional / co-scholastic badges and choice counts, edit in place, remove with confirmation, add (checkbox list of active unmapped subjects), copy from another session.
+- Tests: unit `tests/unit/academic-class-subjects.test.ts` (3: schemas, gates over every role); integration `tests/integration/academic-class-subjects.test.ts` (4: add / refusals / audit, concurrent adds, choices block compulsory + removal with a synthetic student, versions, composite session FK, copy) — **not run: KI-059**.
+- Gates: lint ✓, typecheck ✓, check:deps ✓, unit 69 files / 2,550 ✓, `next build` ✓.
+
+### 2026-11-19 — Phase 4A-M2 (part 1): subjects (commit 3895da6)
 - `src/modules/academic/subjects.schemas.ts` + `subjects.service.ts`: list (`academic.read`), create / update / activate (`academic.manage`); same Unicode-safe code and name rules as departments (reused from hr.rules / hr.schemas); row lock + version on edits; code and type fixed once a class studies the subject; never deleted; audited `subject.create` / `subject.update` / `subject.status_change`.
 - Page `/erp/academic/subjects` ("Subjects" tab for school-wide academic readers): add form (placeholders only, nothing pre-filled — AC2), table ≥ md / cards below, edit in place, deactivate / activate with confirmation.
 - Tests: unit `tests/unit/academic-subjects.test.ts` (4: schemas, permission gates over every role); integration `tests/integration/academic-subjects.test.ts` (5: Unicode names, duplicates, versions, code / type lock, deactivate, RBAC, database CHECKs) — **not run: KI-059**.

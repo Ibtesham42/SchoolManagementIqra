@@ -17,6 +17,13 @@ import {
   updateSectionSchema,
 } from "@/modules/academic/academic.schemas";
 import { createClass, setClassActive, updateClass } from "@/modules/academic/classes.service";
+import {
+  addClassSubjectsSchema,
+  classSubjectRefSchema,
+  copyClassSubjectsSchema,
+  updateClassSubjectSchema,
+} from "@/modules/academic/class-subjects.schemas";
+import { addClassSubjects, copyClassSubjects, removeClassSubject, updateClassSubject } from "@/modules/academic/class-subjects.service";
 import { createSubjectSchema, setSubjectActiveSchema, updateSubjectSchema } from "@/modules/academic/subjects.schemas";
 import { createSubject, setSubjectActive, updateSubject } from "@/modules/academic/subjects.service";
 import {
@@ -123,5 +130,35 @@ export async function setSubjectActiveAction(_prev: ActionState, fd: FormData): 
   return run(setSubjectActiveSchema, { ...ref(fd), active: formString(fd, "active") === "true" }, async (ctx, d) => {
     await setSubjectActive(ctx, d);
     return d.active ? "Subject activated." : "Subject deactivated. It can't be added to classes; existing classes keep it.";
+  });
+}
+
+// ───────────────────────────── Phase 4A-M2: class subjects ─────────────────────────────
+
+export async function addClassSubjectsAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = {
+    academicSessionId: formString(fd, "academicSessionId"),
+    classId: formString(fd, "classId"),
+    subjectIds: fd.getAll("subjectIds").filter((v): v is string => typeof v === "string").slice(0, 31),
+    isOptional: formString(fd, "isOptional"),
+  };
+  return run(addClassSubjectsSchema, raw, async (ctx, d) => {
+    const r = await addClassSubjects(ctx, d);
+    return `${r.added} subject${r.added === 1 ? "" : "s"} added${d.isOptional ? " as optional" : ""}.`;
+  });
+}
+
+export async function updateClassSubjectAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(updateClassSubjectSchema, { ...ref(fd), isOptional: formString(fd, "isOptional"), sortOrder: formString(fd, "sortOrder") }, async (ctx, d) => (await updateClassSubject(ctx, d), "Saved."));
+}
+
+export async function removeClassSubjectAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(classSubjectRefSchema, ref(fd), async (ctx, d) => (await removeClassSubject(ctx, d), "Subject removed from the class."));
+}
+
+export async function copyClassSubjectsAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(copyClassSubjectsSchema, { fromSessionId: formString(fd, "fromSessionId"), toSessionId: formString(fd, "toSessionId") }, async (ctx, d) => {
+    const r = await copyClassSubjects(ctx, d);
+    return `${r.created} class subject${r.created === 1 ? "" : "s"} copied${r.skipped ? `, ${r.skipped} already existed` : ""}.`;
   });
 }
