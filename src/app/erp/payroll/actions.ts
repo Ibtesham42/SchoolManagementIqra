@@ -5,8 +5,8 @@ import type { z } from "zod";
 import { requireAuth } from "@/lib/auth/context";
 import { formString, fromError, fromZod, type ActionState } from "@/lib/action-state";
 import type { AuthContext } from "@/lib/rbac/authorize";
-import { createRunSchema, runRefSchema } from "@/modules/payroll/runs.schemas";
-import { createRun, prepareRun } from "@/modules/payroll/runs.service";
+import { createRunSchema, reopenRunSchema, runRefSchema } from "@/modules/payroll/runs.schemas";
+import { approveRun, createRun, prepareRun, reopenRun } from "@/modules/payroll/runs.service";
 import { decideSalarySchema, proposeSalarySchema, salaryRefSchema } from "@/modules/payroll/salaries.schemas";
 import { decideSalary, proposeSalary, withdrawSalary } from "@/modules/payroll/salaries.service";
 import { copyStructureSchema, createComponentSchema, createStructureSchema, setActiveSchema, updateComponentSchema, updateStructureSchema } from "@/modules/payroll/structures.schemas";
@@ -93,4 +93,10 @@ export async function prepareRunAction(_prev: ActionState, fd: FormData): Promis
     const skipped = r.withoutSalary.length ? ` ${r.withoutSalary.length} staff have no approved salary and were left out: ${r.withoutSalary.slice(0, 5).map((e) => e.employeeCode).join(", ")}${r.withoutSalary.length > 5 ? ", …" : ""}.` : "";
     return `Prepared ${r.slips} slip(s).${skipped}`;
   });
+}
+export async function approveRunAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(runRefSchema, ref(fd), async (ctx, d) => `Payroll approved: ${(await approveRun(ctx, d)).slips} slip(s) numbered; the month's attendance is now locked.`);
+}
+export async function reopenRunAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(reopenRunSchema, { ...ref(fd), reason: formString(fd, "reason") }, async (ctx, d) => (await reopenRun(ctx, d), "Payroll reopened. Attendance for the month is unlocked; prepare it again before approving."));
 }

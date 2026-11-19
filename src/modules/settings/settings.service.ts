@@ -1,3 +1,4 @@
+import { lockPayroll } from "@/modules/payroll/payroll.tx";
 import { openSessionAttendanceDatesTx } from "@/modules/students/students.tx";
 import { prisma, type Tx } from "@/lib/db";
 import {
@@ -396,8 +397,7 @@ export async function updatePayrollDayBasis(ctx: AuthContext, value: "WORKING_DA
   authorize(ctx, "settings.manage");
   if (value !== "WORKING_DAYS" && value !== "CALENDAR_DAYS") throw new ConflictError("Choose working days or calendar days.");
   await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT set_config('lock_timeout', '5s', true) AS lock_timeout`;
-    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext('school_erp.payroll'))) AS l`;
+    await lockPayroll(tx); // same helper as the payroll module (review 3C-M4 Info)
     const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM school_setting WHERE id = ${SETTINGS_ID} FOR UPDATE`;
     if (locked.length === 0) throw new ConflictError("Save the school profile before setting the payroll basis.");
     const cur = await tx.schoolSetting.findUniqueOrThrow({ where: { id: SETTINGS_ID }, select: { payrollDayBasis: true } });

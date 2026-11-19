@@ -26,7 +26,7 @@ import {
 } from "./hr.policy";
 import { masterNameKeyOf } from "./hr.rules";
 import { STAFF_HOLIDAY_SCOPES } from "./leave.rules";
-import { lockLeaveCalendar } from "./leave.tx";
+import { lockedMonthsBetween, lockLeaveCalendar } from "./leave.tx";
 import type {
   CreateHolidayInput,
   CreateLeaveTypeInput,
@@ -310,6 +310,9 @@ export async function createHoliday(
       const date = parseDate(input.date);
       if (STAFF_HOLIDAY_SCOPES.includes(input.appliesTo))
         await assertNoLeaveOn(tx, date);
+      // Review 3C-M4 L2: a staff holiday can't change a month that payroll has locked.
+      if (STAFF_HOLIDAY_SCOPES.includes(input.appliesTo) && (await lockedMonthsBetween(tx, input.date, input.date)).length > 0)
+        throw new ConflictError(`Payroll for ${input.date.slice(0, 7)} is approved, so its staff calendar is locked.`);
       // Phase 4A: a holiday for students can't fall on a day whose student attendance is already recorded.
       if (input.appliesTo !== "STAFF" && (await studentAttendanceCountOnTx(tx, date)) > 0)
         throw new ConflictError("Student attendance is already recorded for this date. Correct it before adding a holiday.");
@@ -359,6 +362,8 @@ export async function removeHoliday(ctx: AuthContext, id: string) {
         select: { date: true, name: true, appliesTo: true },
       });
       if (STAFF_HOLIDAY_SCOPES.includes(h.appliesTo)) {
+        if ((await lockedMonthsBetween(tx, isoDate(h.date), isoDate(h.date))).length > 0)
+          throw new ConflictError(`Payroll for ${isoDate(h.date).slice(0, 7)} is approved, so its staff calendar is locked.`);
         await assertNoLeaveOn(tx, h.date);
         if (
           (await tx.employeeAttendance.count({

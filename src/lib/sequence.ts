@@ -15,6 +15,21 @@ export async function nextSequence(tx: Tx, key: string): Promise<number> {
   return value;
 }
 
+/**
+ * Reserve `n` consecutive values in ONE statement (row-locked upsert). Returns the first value; the caller uses
+ * first … first + n − 1. Same guarantees as nextSequence (rolled back with the caller's transaction).
+ */
+export async function nextSequenceBlock(tx: Tx, key: string, n: number): Promise<number> {
+  if (!Number.isInteger(n) || n < 1) throw new Error("Sequence block size must be a positive integer");
+  const rows = await tx.$queryRaw<{ value: number }[]>`
+    INSERT INTO sequence_counter (key, value, updated_at) VALUES (${key}, ${n}, now())
+    ON CONFLICT (key) DO UPDATE SET value = sequence_counter.value + ${n}, updated_at = now()
+    RETURNING value`;
+  const last = rows[0]?.value;
+  if (typeof last !== "number") throw new Error(`Sequence ${key} did not return a value`);
+  return last - n + 1;
+}
+
 export interface FormatTokens {
   code?: string;
   year?: number;

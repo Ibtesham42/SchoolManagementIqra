@@ -25,7 +25,7 @@ describe.skipIf(!enabled)("payroll runs (integration)", () => {
   const Y = 1950 + Math.floor(Math.random() * 40);
   const MONTH = `${Y}-03`;
   type Ctx = NonNullable<Awaited<ReturnType<typeof m.validateSessionToken>>>;
-  let hr: Ctx, principal: Ctx, accountant: Ctx;
+  let hr: Ctx, principal: Ctx, accountant: Ctx, superAdmin: Ctx;
   let empA: string, empB: string, structureId: string;
   let settingsBefore: { weeklyOff: unknown; payrollDayBasis: string | null } | null = null;
   const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -57,6 +57,7 @@ describe.skipIf(!enabled)("payroll runs (integration)", () => {
     empB = await linkTeachingEmployee(m.prisma, tag, tb.id);
     await m.prisma.employee.updateMany({ where: { id: { in: [empA, empB] } }, data: { dob: d("1940-01-01"), joiningDate: d("1941-01-01") } });
     [hr, principal, accountant] = [await ctxOf(h.id), await ctxOf(p.id), await ctxOf(a.id)];
+    superAdmin = await ctxOf((await user("sa", "SUPER_ADMIN")).id);
     structureId = (await m.prisma.salaryStructure.create({ data: { name: `${run} Basic only`, nameKey: `${run} basic only` } })).id;
     const s = await m.prisma.schoolSetting.findFirst({ select: { weeklyOff: true, payrollDayBasis: true } });
     settingsBefore = s ? { weeklyOff: s.weeklyOff, payrollDayBasis: s.payrollDayBasis } : null;
@@ -66,6 +67,7 @@ describe.skipIf(!enabled)("payroll runs (integration)", () => {
   afterAll(async () => {
     const { prisma } = m;
     if (!prisma) return;
+    await prisma.attendancePeriodLock.deleteMany({ where: { month: d(`${MONTH}-01`) } });
     const runs = await prisma.payrollRun.findMany({ where: { month: d(`${MONTH}-01`) }, select: { id: true } });
     await prisma.payrollSlip.deleteMany({ where: { runId: { in: runs.map((r) => r.id) } } });
     await prisma.payrollRun.deleteMany({ where: { id: { in: runs.map((r) => r.id) } } });
@@ -129,5 +131,37 @@ describe.skipIf(!enabled)("payroll runs (integration)", () => {
     const full = await m.getRun(accountant, r.id);
     expect(full.slips.find((s) => s.employee.id === empB)!.net.toFixed(2)).toBe("27000.00"); // full month, no LOP
     expect(full.totalNet.toFixed(2)).toBe(full.slips.reduce((t, s) => t + Number(s.net), 0).toFixed(2));
+  });
+
+  it("3C-M4: approval refuses the preparer and stale runs; numbers slips and locks the month; reopen keeps the numbers", async () => {
+    let r = (await m.listRuns(accountant)).find((x) => x.month.toISOString().startsWith(MONTH))!;
+    // Super Admin prepares → can't approve their own preparation.
+    await m.prepareRun(superAdmin, { id: r.id, version: r.version });
+    r = (await m.listRuns(accountant)).find((x) => x.id === r.id)!;
+    await expect(m.approveRun(superAdmin, { id: r.id, version: r.version })).rejects.toThrow(/You prepared this payroll/);
+    // An attendance correction after preparing → approval refused until prepared again.
+    await m.prisma.employeeAttendance.updateMany({ where: { employeeId: empA, date: d(`${MONTH}-07`) }, data: { status: "PRESENT" } });
+    await expect(m.approveRun(principal, { id: r.id, version: r.version })).rejects.toThrow(/changed since this payroll was prepared/);
+    await m.prepareRun(accountant, { id: r.id, version: r.version });
+    r = (await m.listRuns(accountant)).find((x) => x.id === r.id)!;
+    expect(await m.approveRun(principal, { id: r.id, version: r.version })).toEqual({ slips: 2 });
+    const approved = await m.getRun(principal, r.id);
+    expect(approved.status).toBe("APPROVED");
+    const numbers = approved.slips.map((s) => s.slipNo);
+    expect(numbers.every((n) => typeof n === "string" && n.startsWith(`SLIP-${Y}-`))).toBe(true);
+    expect(new Set(numbers).size).toBe(2);
+    expect(await m.prisma.attendancePeriodLock.count({ where: { month: d(`${MONTH}-01`) } })).toBe(1);
+    await expect(m.prepareRun(accountant, { id: r.id, version: approved.version })).rejects.toThrow(/already approved/);
+    // A salary into an approved month is refused (payroll lock + final month check).
+    await expect(m.proposeSalary(hr, { employeeId: empA, structureId, basic: "35000", effectiveFrom: MONTH })).rejects.toThrow(/already approved/);
+    // Reopen: reason required (schema), month unlocked, slip numbers kept.
+    await m.reopenRun(principal, { id: r.id, version: approved.version, reason: "Synthetic correction" });
+    expect(await m.prisma.attendancePeriodLock.count({ where: { month: d(`${MONTH}-01`) } })).toBe(0);
+    const reopened = await m.getRun(principal, r.id);
+    expect(reopened.status).toBe("PREPARED");
+    expect(reopened.slips.map((s) => s.slipNo).sort()).toEqual([...numbers].sort());
+    const log = await m.prisma.auditLog.findFirstOrThrow({ where: { action: "payroll_run.reopen", entityId: r.id } });
+    expect(log.after).toMatchObject({ reasonGiven: true });
+    expect(JSON.stringify(log)).not.toContain("Synthetic correction"); // free text stays out of audit rows (review L3)
   });
 });

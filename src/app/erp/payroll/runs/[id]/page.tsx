@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
-import { PrepareRunForm } from "../run-forms";
+import { ApproveRunForm, PrepareRunForm, ReopenRunForm } from "../run-forms";
 import { RUN_STATUS } from "../run-status";
 
 export const metadata = { title: "Monthly payroll" };
@@ -67,7 +67,22 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
             </dl>
           )}
           {canPrepare && <PrepareRunForm id={run.id} version={run.version} again={run.status === "PREPARED"} />}
-          {run.status === "PREPARED" && <p className="text-xs text-muted-foreground">Approval by the Principal, slips and payments come next (3C-M4 / M5).</p>}
+          {run.status === "PREPARED" && hasPermission(ctx, "payroll.approve") && (
+            <details className="rounded-lg border p-3">
+              <summary className="flex min-h-11 cursor-pointer items-center font-medium pointer-fine:min-h-9">Approve</summary>
+              <div className="mt-3">
+                {run.preparedBy?.id === ctx.userId ? <p className="text-sm">You prepared this payroll, so someone else must approve it.</p> : <ApproveRunForm id={run.id} version={run.version} />}
+              </div>
+            </details>
+          )}
+          {run.status === "APPROVED" && hasPermission(ctx, "payroll.approve") && (
+            <details className="rounded-lg border p-3">
+              <summary className="flex min-h-11 cursor-pointer items-center font-medium pointer-fine:min-h-9">Reopen</summary>
+              <div className="mt-3">
+                <ReopenRunForm id={run.id} version={run.version} />
+              </div>
+            </details>
+          )}
         </CardContent>
       </Card>
       {run.slips.length > 0 && (
@@ -84,6 +99,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
                 <thead>
                   <tr className="border-b text-left">
                     <th scope="col" className="py-2 pr-2 font-medium">Employee</th>
+                    <th scope="col" className="px-2 py-2 font-medium">Slip</th>
                     <th scope="col" className="px-2 py-2 text-right font-medium">Paid / month days</th>
                     <th scope="col" className="px-2 py-2 text-right font-medium">LOP</th>
                     <th scope="col" className="px-2 py-2 text-right font-medium">Gross</th>
@@ -97,6 +113,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
                       <th scope="row" className="py-2 pr-2 text-left font-normal">
                         <span className="font-medium">{s.employee.fullName}</span> <span className="font-mono text-xs text-muted-foreground">{s.employee.employeeCode}</span>
                       </th>
+                      <td className="px-2 py-2 font-mono text-xs">{s.slipNo ?? "—"}</td>
                       <td className="px-2 py-2 text-right tabular-nums">
                         {s.paidDays.toString()} / {s.monthDays}
                       </td>
@@ -117,7 +134,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
                     <span className="font-medium tabular-nums">₹{s.net.toFixed(2)}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {s.employee.employeeCode} · paid {s.paidDays.toString()} / {s.monthDays} days · LOP {s.lopDays.toString()} · gross ₹{s.gross.toFixed(2)} · deductions ₹{s.totalDeductions.toFixed(2)}
+                    {s.employee.employeeCode}{s.slipNo ? ` · ${s.slipNo}` : ""} · paid {s.paidDays.toString()} / {s.monthDays} days · LOP {s.lopDays.toString()} · gross ₹{s.gross.toFixed(2)} · deductions ₹{s.totalDeductions.toFixed(2)}
                   </p>
                 </li>
               ))}

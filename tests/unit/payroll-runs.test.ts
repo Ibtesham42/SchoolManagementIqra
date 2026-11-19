@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 import { ForbiddenError } from "@/lib/errors";
 import { buildPermissionMap, type AuthContext } from "@/lib/rbac/authorize";
 import { normalizeGrant, ROLES } from "@/lib/rbac/catalog";
-import { createRunSchema } from "@/modules/payroll/runs.schemas";
-import { createRun, getRun, listRuns, prepareRun } from "@/modules/payroll/runs.service";
+import { createRunSchema, reopenRunSchema } from "@/modules/payroll/runs.schemas";
+import { approveRun, createRun, DEFAULT_SLIP_FORMAT, getRun, listRuns, prepareRun, reopenRun } from "@/modules/payroll/runs.service";
+import { validateFormat } from "@/lib/sequence";
 
 /** Phase 3C-M3 payroll runs — inputs, gates over every role and the locking contract (no database). */
 function roleCtx(roleKey: string, extra: Partial<AuthContext> = {}): AuthContext {
@@ -53,5 +54,35 @@ describe("locking contract (KI-081)", () => {
     expect(runs).toContain("!e.summary.complete");
     const auditCall = runs.slice(runs.indexOf('action: run.status === "DRAFT"'));
     expect(auditCall.slice(0, auditCall.indexOf("});"))).not.toMatch(/gross|net|basic|deductions/i);
+  });
+});
+
+describe("3C-M4 approve / reopen", () => {
+  it("only payroll approvers (Principal, Super Admin) approve and reopen; reopening needs a reason", async () => {
+    const approvers = ROLES.filter((r) => r.key === "SUPER_ADMIN" || roleCtx(r.key).permissions.has("payroll.approve")).map((r) => r.key).sort();
+    expect(approvers).toEqual(["PRINCIPAL", "SUPER_ADMIN"]);
+    for (const r of ROLES.filter((x) => !approvers.includes(x.key))) {
+      await expect(approveRun(roleCtx(r.key, { employeeId: "me" }), { id: "x", version: 1 }), r.key).rejects.toBeInstanceOf(ForbiddenError);
+      await expect(reopenRun(roleCtx(r.key, { employeeId: "me" }), { id: "x", version: 1, reason: "Synthetic" }), r.key).rejects.toBeInstanceOf(ForbiddenError);
+    }
+    await expect(approveRun(roleCtx("PRINCIPAL"), { id: "x", version: 1 })).rejects.toThrow(/linked/);
+    expect(reopenRunSchema.safeParse({ id: "x", version: "1", reason: "  " }).success).toBe(false);
+  });
+  it("the default slip number format is valid (one {SEQ}, known tokens)", () => {
+    expect(validateFormat(DEFAULT_SLIP_FORMAT)).toBeNull();
+  });
+  const src = readFileSync(new URL("../../src/modules/payroll/runs.service.ts", import.meta.url), "utf8");
+  it("approval: preparer refused, own slip refused, slips recomputed and compared, attendance month locked, all after the locks", () => {
+    const ap = src.slice(src.indexOf("export async function approveRun"), src.indexOf("export async function reopenRun"));
+    expect(ap.indexOf("await lockPayroll(tx)")).toBeLessThan(ap.indexOf("await lockLeaveCalendar(tx)"));
+    expect(ap).toContain('run.prepared_by_id === ctx.userId) throw new ForbiddenError("You prepared this payroll');
+    expect(ap).toContain('throw new ForbiddenError("Your own slip is in this payroll');
+    expect(ap).toContain("await computeSlipsTx(tx, run.id, run.month)");
+    expect(ap).toContain("await lockAttendanceMonthTx(tx");
+  });
+  it("reopening is refused once payments exist and unlocks the month", () => {
+    const re = src.slice(src.indexOf("export async function reopenRun"));
+    expect(re).toContain("salaryPayment.count");
+    expect(re).toContain("await unlockAttendanceMonthTx(tx");
   });
 });
