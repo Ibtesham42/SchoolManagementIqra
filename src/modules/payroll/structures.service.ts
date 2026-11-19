@@ -15,8 +15,10 @@ import type { CreateComponentInput, CreateStructureInput, SetActiveInput, Update
  *   deduction components with the school's own values).
  * - Reads: `payroll.read` or `salary.structure.manage`. Writes: `salary.structure.manage`.
  * - A component's code, kind and calculation are fixed once a structure uses it (they decide how slips are computed).
- * - A structure's items can change; slips already prepared keep their snapshot (ADR-037), and each change is audited
- *   with the items before and after. Percentages of basic are 0–100.
+ * - Review 3C-M2 H1: once any PROPOSED or APPROVED employee salary uses a structure, its items are FROZEN (and so is
+ *   the `prorated` flag of every component in such a structure) — editing them would re-price approved pay without
+ *   the P7 maker-checker. Changes go through `copyStructure` (a new structure) and new salary proposals. Unused
+ *   structures stay editable. Percentages of basic are 0–100.
  * Never deleted — deactivated (an inactive component can't be added to structures; an inactive structure can't be
  * given to employees).
  */
@@ -65,6 +67,11 @@ export async function createComponent(ctx: AuthContext, input: CreateComponentIn
   }
 }
 
+/** PROPOSED or APPROVED salaries whose structure contains the component (review 3C-M2 H1). */
+async function salariesUsingComponent(tx: Tx, componentId: string) {
+  return tx.employeeSalary.count({ where: { status: { in: ["PROPOSED", "APPROVED"] }, structure: { items: { some: { componentId } } } } });
+}
+
 async function lockComponent(tx: Tx, id: string) {
   const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM salary_component WHERE id = ${id} FOR UPDATE`;
   if (rows.length === 0) throw new NotFoundError("Component not found.");
@@ -80,6 +87,9 @@ export async function updateComponent(ctx: AuthContext, input: UpdateComponentIn
       if (cur.version !== input.version) throw stale("component");
       if (cur._count.items > 0 && (cur.code !== input.code || cur.kind !== input.kind || cur.calc !== input.calc)) {
         throw new ConflictError("The code, type and calculation can't change: salary structures already use this component.");
+      }
+      if (cur.prorated !== input.prorated && (await salariesUsingComponent(tx, input.id)) > 0) {
+        throw new ConflictError("\"Reduce for unpaid days\" can't change: approved or pending salaries use this component. Create a new component instead.");
       }
       const diff = changedFields(
         { code: cur.code, name: cur.name, kind: cur.kind, calc: cur.calc, prorated: cur.prorated },
@@ -127,7 +137,7 @@ export async function listStructures(ctx: AuthContext, opts: { includeInactive?:
       name: true,
       isActive: true,
       version: true,
-      _count: { select: { salaries: { where: { status: "APPROVED" } } } },
+      _count: { select: { salaries: { where: { status: { in: ["APPROVED", "PROPOSED"] } } } } },
       items: {
         orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
         select: { value: true, component: { select: { id: true, code: true, name: true, kind: true, calc: true, prorated: true, isActive: true } } },
@@ -193,6 +203,12 @@ export async function updateStructure(ctx: AuthContext, input: UpdateStructureIn
       const before = cur.items.map((i) => ({ code: i.component.code, value: i.value.toFixed(2) }));
       const after = items.map((i) => ({ code: i.code, value: new Decimal(i.value).toFixed(2) }));
       if (cur.name === input.name && JSON.stringify(before) === JSON.stringify(after)) return;
+      if (JSON.stringify(before) !== JSON.stringify(after)) {
+        const inUse = await tx.employeeSalary.count({ where: { structureId: input.id, status: { in: ["PROPOSED", "APPROVED"] } } });
+        if (inUse > 0) {
+          throw new ConflictError(`${inUse} approved or pending salar${inUse === 1 ? "y uses" : "ies use"} this structure, so its components are fixed. Copy it as a new structure, edit the copy, and propose new salaries.`);
+        }
+      }
       await tx.salaryStructureItem.deleteMany({ where: { structureId: input.id } });
       if (items.length) await tx.salaryStructureItem.createMany({ data: items.map(({ componentId, value, sortOrder }) => ({ structureId: input.id, componentId, value, sortOrder })) });
       const r = await tx.salaryStructure.updateMany({ where: { id: input.id, version: input.version }, data: { name: input.name, nameKey: masterNameKeyOf(input.name), version: { increment: 1 } } });
@@ -218,5 +234,27 @@ export async function setStructureActive(ctx: AuthContext, input: SetActiveInput
     });
   } catch (e) {
     mapErrors(e, "structure");
+  }
+}
+
+/** Review 3C-M2 H1: copy-and-edit — a new structure with the same items (its own name); salaries move only by new proposals. */
+export async function copyStructure(ctx: AuthContext, input: { id: string; name: string }) {
+  authorize(ctx, "salary.structure.manage");
+  try {
+    return await prisma.$transaction(async (tx) => {
+      await lockTimeout(tx);
+      const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM salary_structure WHERE id = ${input.id} FOR SHARE`;
+      if (rows.length === 0) throw new NotFoundError("Structure not found.");
+      const src = await tx.salaryStructure.findUniqueOrThrow({ where: { id: input.id }, select: { items: { orderBy: { sortOrder: "asc" }, select: { componentId: true, value: true } } } });
+      const items = await checkedItems(tx, src.items.map((i) => ({ componentId: i.componentId, value: i.value.toFixed(2) })));
+      const s = await tx.salaryStructure.create({
+        data: { name: input.name, nameKey: masterNameKeyOf(input.name), items: { create: items.map(({ componentId, value, sortOrder }) => ({ componentId, value, sortOrder })) } },
+        select: { id: true, name: true },
+      });
+      await audit(tx, actorOf(ctx), { action: "salary_structure.copy", entityType: "SalaryStructure", entityId: s.id, after: { fromStructureId: input.id, name: input.name, items: items.length } });
+      return s;
+    });
+  } catch (e) {
+    mapErrors(e, "structure", input);
   }
 }

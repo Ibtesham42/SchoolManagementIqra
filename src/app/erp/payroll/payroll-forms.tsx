@@ -5,7 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { FormStatus, SelectField, SubmitButton, TextField } from "@/components/erp/form";
 import { Button } from "@/components/ui/button";
 import { initialState } from "@/lib/action-state";
-import { createComponentAction, createStructureAction, updateComponentAction, updateStructureAction } from "./actions";
+import { copyStructureAction, createComponentAction, createStructureAction, updateComponentAction, updateStructureAction } from "./actions";
 
 const FIELD = "h-11 w-full rounded-lg border border-input bg-background px-3 text-base sm:pointer-fine:h-9 sm:text-sm";
 const CHECK_ROW = "flex min-h-11 items-center gap-3 rounded-lg border px-3 text-sm has-checked:border-primary pointer-fine:min-h-9";
@@ -153,6 +153,23 @@ export function StructureForm({
       <SubmitButton className="min-h-11 w-full sm:w-auto" pendingLabel="Saving…">
         {editing ? "Save structure" : "Add structure"}
       </SubmitButton>
+    </form>
+  );
+}
+
+/** Copy a structure under a new name (the way to change a structure that salaries already use). */
+export function CopyStructureForm({ id, name }: { id: string; name: string }) {
+  const [state, action] = useActionState(copyStructureAction, initialState);
+  return (
+    <form action={action} className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+      <input type="hidden" name="id" value={id} />
+      <TextField id={`copy-${id}`} label="Name of the copy" name="name" defaultValue={`${name} (new)`} maxLength={80} required error={state.fieldErrors?.name} />
+      <SubmitButton variant="outline" className="min-h-11" pendingLabel="Copying…">
+        Copy
+      </SubmitButton>
+      <div className="sm:col-span-2">
+        <FormStatus state={state} />
+      </div>
     </form>
   );
 }

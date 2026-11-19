@@ -1,3 +1,4 @@
+import { PayrollBasisForm } from "./payroll-basis-form";
 import Link from "next/link";
 import { CalendarRange, FileText, Trash2 } from "lucide-react";
 import { requireAuth } from "@/lib/auth/context";
@@ -8,6 +9,7 @@ import {
   getSchoolSettings,
   getStaffWeeklyOff,
   getStudentWeeklyOff,
+  getPayrollDayBasis,
   listAcademicSessions,
 } from "@/modules/settings/settings.service";
 import { Badge } from "@/components/ui/badge";
@@ -50,11 +52,12 @@ export default async function SettingsPage() {
   const ctx = await requireAuth();
   if (!hasPermission(ctx, "settings.read")) return <NotPermitted />;
   const canManage = hasPermission(ctx, "settings.manage");
-  const [settings, { sessions, currentId }, weeklyOff, studentWeeklyOff] = await Promise.all([
+  const [settings, { sessions, currentId }, weeklyOff, studentWeeklyOff, payrollBasis] = await Promise.all([
     getSchoolSettings(ctx),
     listAcademicSessions(ctx),
     getStaffWeeklyOff(ctx),
     getStudentWeeklyOff(ctx),
+    getPayrollDayBasis(ctx),
   ]);
   const address = (settings?.address as Address) ?? null;
   const timings = (settings?.timings as Timings) ?? null;
@@ -265,6 +268,22 @@ export default async function SettingsPage() {
               days={weeklyOff.days}
               saturdays={weeklyOff.saturdays}
             />
+          </CardContent>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>Payroll: how pay is prorated</h2>
+          </CardTitle>
+          <CardDescription>
+            Used when staff are absent without pay or join / leave mid-month. {payrollBasis === null ? "Not set yet — payroll can't be prepared until you choose." : ""}
+          </CardDescription>
+        </CardHeader>
+        {canManage && (
+          <CardContent>
+            <PayrollBasisForm current={payrollBasis} />
           </CardContent>
         )}
       </Card>

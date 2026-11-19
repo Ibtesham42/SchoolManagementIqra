@@ -5,8 +5,12 @@ import type { z } from "zod";
 import { requireAuth } from "@/lib/auth/context";
 import { formString, fromError, fromZod, type ActionState } from "@/lib/action-state";
 import type { AuthContext } from "@/lib/rbac/authorize";
-import { createComponentSchema, createStructureSchema, setActiveSchema, updateComponentSchema, updateStructureSchema } from "@/modules/payroll/structures.schemas";
-import { createComponent, createStructure, setComponentActive, setStructureActive, updateComponent, updateStructure } from "@/modules/payroll/structures.service";
+import { createRunSchema, runRefSchema } from "@/modules/payroll/runs.schemas";
+import { createRun, prepareRun } from "@/modules/payroll/runs.service";
+import { decideSalarySchema, proposeSalarySchema, salaryRefSchema } from "@/modules/payroll/salaries.schemas";
+import { decideSalary, proposeSalary, withdrawSalary } from "@/modules/payroll/salaries.service";
+import { copyStructureSchema, createComponentSchema, createStructureSchema, setActiveSchema, updateComponentSchema, updateStructureSchema } from "@/modules/payroll/structures.schemas";
+import { copyStructure, createComponent, createStructure, setComponentActive, setStructureActive, updateComponent, updateStructure } from "@/modules/payroll/structures.service";
 
 /** Phase 3C payroll actions: requireAuth → Zod → service → ActionState (services authorize and enforce every rule). */
 async function run<S extends z.ZodType>(schema: S, raw: unknown, call: (ctx: AuthContext, data: z.infer<S>) => Promise<string>): Promise<ActionState> {
@@ -58,4 +62,35 @@ export async function updateStructureAction(_prev: ActionState, fd: FormData): P
 }
 export async function setStructureActiveAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return run(setActiveSchema, { ...ref(fd), active: formString(fd, "active") === "true" }, async (ctx, d) => (await setStructureActive(ctx, d), d.active ? "Structure activated." : "Structure deactivated."));
+}
+
+// ───────────────────────────── 3C-M2 part 2: employee salaries ─────────────────────────────
+
+export async function proposeSalaryAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { employeeId: formString(fd, "employeeId"), structureId: formString(fd, "structureId"), basic: formString(fd, "basic"), effectiveFrom: formString(fd, "effectiveFrom") };
+  return run(proposeSalarySchema, raw, async (ctx, d) => (await proposeSalary(ctx, d), "Salary proposed. It applies once a payroll approver approves it."));
+}
+export async function decideSalaryAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { ...ref(fd), decision: formString(fd, "decision"), note: formString(fd, "note") };
+  return run(decideSalarySchema, raw, async (ctx, d) => (await decideSalary(ctx, d), d.decision === "APPROVE" ? "Salary approved." : "Proposal rejected."));
+}
+export async function withdrawSalaryAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(salaryRefSchema, ref(fd), async (ctx, d) => (await withdrawSalary(ctx, d), "Proposal withdrawn."));
+}
+
+export async function copyStructureAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(copyStructureSchema, { id: formString(fd, "id"), name: formString(fd, "name") }, async (ctx, d) => `Copied as ${(await copyStructure(ctx, d))!.name}. Edit the copy, then propose new salaries.`);
+}
+
+// ───────────────────────────── 3C-M3: payroll runs ─────────────────────────────
+
+export async function createRunAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(createRunSchema, { month: formString(fd, "month") }, async (ctx, d) => (await createRun(ctx, d), `Payroll for ${d.month} created. Prepare it once attendance is complete.`));
+}
+export async function prepareRunAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(runRefSchema, ref(fd), async (ctx, d) => {
+    const r = await prepareRun(ctx, d);
+    const skipped = r.withoutSalary.length ? ` ${r.withoutSalary.length} staff have no approved salary and were left out: ${r.withoutSalary.slice(0, 5).map((e) => e.employeeCode).join(", ")}${r.withoutSalary.length > 5 ? ", …" : ""}.` : "";
+    return `Prepared ${r.slips} slip(s).${skipped}`;
+  });
 }

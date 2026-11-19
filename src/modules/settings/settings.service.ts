@@ -375,6 +375,38 @@ export async function updateStudentWeeklyOff(ctx: AuthContext, value: WeeklyOff)
   });
 }
 
+/** Phase 3C (P3): how slips are prorated — WORKING_DAYS or CALENDAR_DAYS. No default: payroll refuses until it is set. */
+export async function getPayrollDayBasis(ctx: AuthContext): Promise<"WORKING_DAYS" | "CALENDAR_DAYS" | null> {
+  authorize(ctx, "settings.read");
+  const row = await prisma.schoolSetting.findUnique({ where: { id: SETTINGS_ID }, select: { payrollDayBasis: true } });
+  return row?.payrollDayBasis ?? null;
+}
+
+/** For payroll, inside its transaction (no authorization here). */
+export async function readPayrollSettingsTx(tx: Tx) {
+  const row = await tx.schoolSetting.findUnique({ where: { id: SETTINGS_ID }, select: { payrollDayBasis: true, timezone: true } });
+  return { dayBasis: row?.payrollDayBasis ?? null, timezone: row?.timezone ?? null };
+}
+
+/**
+ * Changing the basis changes how FUTURE runs prorate; prepared slips keep the basis they were computed with (snapshot).
+ * Serialized with payroll runs (payroll advisory lock) so a run can't be prepared half on each basis.
+ */
+export async function updatePayrollDayBasis(ctx: AuthContext, value: "WORKING_DAYS" | "CALENDAR_DAYS") {
+  authorize(ctx, "settings.manage");
+  if (value !== "WORKING_DAYS" && value !== "CALENDAR_DAYS") throw new ConflictError("Choose working days or calendar days.");
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT set_config('lock_timeout', '5s', true) AS lock_timeout`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext('school_erp.payroll'))) AS l`;
+    const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM school_setting WHERE id = ${SETTINGS_ID} FOR UPDATE`;
+    if (locked.length === 0) throw new ConflictError("Save the school profile before setting the payroll basis.");
+    const cur = await tx.schoolSetting.findUniqueOrThrow({ where: { id: SETTINGS_ID }, select: { payrollDayBasis: true } });
+    if (cur.payrollDayBasis === value) return;
+    await tx.schoolSetting.update({ where: { id: SETTINGS_ID }, data: { payrollDayBasis: value } });
+    await audit(tx, actorOf(ctx), { action: "settings.payroll_day_basis_update", entityType: "SchoolSetting", entityId: SETTINGS_ID, before: { payrollDayBasis: cur.payrollDayBasis }, after: { payrollDayBasis: value } });
+  });
+}
+
 /**
  * For the leave services, INSIDE their transaction (no authorization here — the caller authorized its operation):
  * the academic session's dates and status (L1: leave year = session) and the staff weekly off.

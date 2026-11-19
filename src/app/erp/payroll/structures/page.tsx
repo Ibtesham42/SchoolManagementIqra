@@ -8,7 +8,7 @@ import { ConfirmAction } from "@/components/erp/confirm-action";
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { setStructureActiveAction } from "../actions";
-import { StructureForm } from "../payroll-forms";
+import { CopyStructureForm, StructureForm } from "../payroll-forms";
 import { PayrollTabs } from "../payroll-tabs";
 
 export const metadata = { title: "Salary structures" };
@@ -25,7 +25,7 @@ export default async function StructuresPage() {
         title="Payroll"
         description="A salary structure groups components with their amounts or percentages of basic. Each employee's basic and structure are set (and approved) per employee."
       />
-      <PayrollTabs current="structures" />
+      <PayrollTabs current="structures" showSalaries={hasPermission(ctx, "payroll.read")} />
       {canManage && (
         <Card>
           <CardHeader>
@@ -56,7 +56,7 @@ export default async function StructuresPage() {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <span className="font-medium">{s.name}</span>
                     <span className="flex flex-wrap gap-1">
-                      <Badge variant="outline">{s._count.salaries} employee(s)</Badge>
+                      <Badge variant="outline">{s._count.salaries} salar{s._count.salaries === 1 ? "y" : "ies"}</Badge>
                       {!s.isActive && <Badge variant="secondary">Inactive</Badge>}
                     </span>
                   </div>
@@ -76,6 +76,17 @@ export default async function StructuresPage() {
                   )}
                   {canManage && (
                     <div className="grid gap-2">
+                      {s._count.salaries > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Salaries use this structure, so its components are fixed (only the name can change). To change pay, copy it, edit the copy and propose new salaries.
+                        </p>
+                      )}
+                      <details className="rounded-lg border p-3">
+                        <summary className="flex min-h-11 cursor-pointer items-center font-medium pointer-fine:min-h-9">Copy {s.name}</summary>
+                        <div className="mt-3">
+                          <CopyStructureForm id={s.id} name={s.name} />
+                        </div>
+                      </details>
                       <details className="rounded-lg border p-3">
                         <summary className="flex min-h-11 cursor-pointer items-center font-medium pointer-fine:min-h-9">Edit {s.name}</summary>
                         <div className="mt-3">

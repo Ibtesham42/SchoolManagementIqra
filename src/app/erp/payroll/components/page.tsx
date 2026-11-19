@@ -24,7 +24,7 @@ export default async function ComponentsPage() {
         title="Payroll"
         description="Salary components are the school's own earnings and deductions. Nothing is pre-filled and nothing is calculated by law automatically: enter PF, professional tax and similar items with your own values."
       />
-      <PayrollTabs current="components" />
+      <PayrollTabs current="components" showSalaries={hasPermission(ctx, "payroll.read")} />
       {canManage && (
         <Card>
           <CardHeader>

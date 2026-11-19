@@ -14,6 +14,7 @@ import {
   updateAcademicSession,
   updateDefaultSectionCapacity,
   updateSchoolProfile,
+  updatePayrollDayBasis,
 } from "@/modules/settings/settings.service";
 
 const refresh = () => {
@@ -150,6 +151,20 @@ export async function setCurrentSessionAction(_prev: ActionState, fd: FormData):
     await setCurrentAcademicSession(ctx, parsed.data.id);
     refresh();
     return { ok: true, message: "Current session changed." };
+  } catch (e) {
+    return fromError(e);
+  }
+}
+
+/** Phase 3C (P3): payroll proration basis. */
+export async function updatePayrollDayBasisAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireAuth();
+  const value = formString(fd, "payrollDayBasis");
+  if (value !== "WORKING_DAYS" && value !== "CALENDAR_DAYS") return { error: "Choose working days or calendar days.", fieldErrors: { payrollDayBasis: "Choose one." } };
+  try {
+    await updatePayrollDayBasis(ctx, value);
+    revalidatePath("/erp/settings");
+    return { ok: true, message: "Payroll basis saved. Payroll runs prepared from now on use it." };
   } catch (e) {
     return fromError(e);
   }

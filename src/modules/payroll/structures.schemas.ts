@@ -32,6 +32,8 @@ const structureFields = {
 export const createStructureSchema = z.object(structureFields).strict();
 export const updateStructureSchema = z.object({ id: idField, version: versionField, ...structureFields }).strict();
 
+export const copyStructureSchema = z.object({ id: idField, name: masterNameSchema }).strict();
+
 export type CreateComponentInput = z.infer<typeof createComponentSchema>;
 export type UpdateComponentInput = z.infer<typeof updateComponentSchema>;
 export type SetActiveInput = z.infer<typeof setActiveSchema>;

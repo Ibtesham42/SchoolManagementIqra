@@ -2,10 +2,12 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /** Server-rendered sub-navigation of the payroll area. */
-export function PayrollTabs({ current }: { current: "components" | "structures" }) {
+export function PayrollTabs({ current, showSalaries = false }: { current: "components" | "structures" | "salaries" | "runs"; showSalaries?: boolean }) {
   const tabs = [
     { key: "components", href: "/erp/payroll/components", label: "Salary components" },
     { key: "structures", href: "/erp/payroll/structures", label: "Salary structures" },
+    ...(showSalaries ? [{ key: "salaries", href: "/erp/payroll/salaries", label: "Employee salaries" }] : []),
+    ...(showSalaries ? [{ key: "runs", href: "/erp/payroll/runs", label: "Monthly payroll" }] : []),
   ];
   return (
     <nav aria-label="Payroll" className="flex gap-1 overflow-x-auto border-b">

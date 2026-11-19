@@ -6,6 +6,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Added (Phase 3C — payroll, in progress)
 - **Payroll** (new menu item for HR Manager, Accountant, Principal and Super Admin): **salary components** — the school's own earnings and deductions, a fixed amount or a percentage of basic, reduced for unpaid days or not — and **salary structures** that group them with amounts. Nothing is pre-filled and nothing is calculated by law automatically. HR Manager edits; the Principal and Accountant view.
+- **Employee salaries** (Payroll → Employee salaries): HR proposes an employee's basic and structure from a month; the Principal approves or rejects (with a reason). Nobody proposes or approves their own salary, and the approver can't be the proposer. Approved salaries are never edited — a change is a new proposal — and months whose payroll is approved can't be changed. Amounts never appear in the audit log.
+- Salary structures that approved or pending salaries use can't have their components changed (that would change approved pay without approval). Use **Copy** to make a new version, then propose new salaries.
+- **Monthly payroll** (Payroll → Monthly payroll): create a month's payroll and prepare it after the month ends — every slip is calculated from the approved salary and the month's attendance (paid / unpaid leave, absences, half days, joiners and leavers). It won't run while anyone's attendance has unmarked days, and lists staff without an approved salary instead of paying them. Prepare again any time before approval.
+- **Payroll basis** (Settings): prorate pay on working days or calendar days. Not set by default — payroll asks you to choose.
 
 ### Added (Phase 4 — academic management, in progress)
 - **Subjects** (Classes → Subjects; School Admin and Super Admin edit, school-wide academic readers view): the subjects the school teaches, in any language, scholastic or co-scholastic. Nothing is pre-filled. Code and type are fixed once a class studies the subject; subjects are never deleted, only deactivated.
