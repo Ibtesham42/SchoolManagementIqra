@@ -55,6 +55,10 @@ const CLASS_TEACHER_INDEX = "section_session_class_teacher_key";
 /** Phase 3A HR core (migration 20261112000000): 21 CHECKs, 12 foreign keys with their ON DELETE rule, photo index. */
 /** Phase 3B migration 20261119000000 (tests/unit/migration-phase3b.test.ts pins the same number). */
 const PHASE_3B_CHECK_COUNT = 20;
+/** Phase 3C migration 20261120000000 (tests/unit/migration-phase3c.test.ts pins the same numbers). */
+const PHASE_3C_CHECK_COUNT = 28;
+const PHASE_3C_TABLES = ["salary_component", "salary_structure", "salary_structure_item", "employee_salary", "payroll_run", "payroll_slip", "payroll_adjustment", "salary_payment"];
+const PHASE_3C_PARTIAL_INDEXES = ["employee_salary_one_pending_key", "employee_salary_one_approved_per_month_key", "salary_payment_method_reference_key"];
 
 const HR_CHECKS = [
   ...["department", "designation"].flatMap((t) => [`${t}_code_format_check`, `${t}_name_shape_check`, `${t}_name_key_shape_check`, `${t}_version_check`]),
@@ -238,6 +242,22 @@ async function main() {
       );
       const ok = c.rows[0]?.n === String(PHASE_3B_CHECK_COUNT) && c.rows[0]?.v === String(PHASE_3B_CHECK_COUNT);
       console.log(ok ? `✓ ${PHASE_3B_CHECK_COUNT} Phase 3B attendance & leave CHECK constraints validated` : `✗ Phase 3B CHECK constraints: ${c.rows[0]?.n} present, ${c.rows[0]?.v} validated (expected ${PHASE_3B_CHECK_COUNT})`);
+      if (!ok) constraintProblems++;
+    }
+
+    // Phase 3C M1 (draft): 28 CHECKs on the payroll tables + the two employee PAN / bank pair CHECKs, 3 partial unique indexes.
+    if (applied.has("20261120000000_phase3c_payroll")) {
+      const c = await client.query<{ n: string; v: string }>(
+        "select count(*)::text n, count(*) filter (where convalidated)::text v from pg_constraint where contype = 'c' and (conrelid::regclass::text = any($1) or conname = any($2))",
+        [PHASE_3C_TABLES, ["employee_pan_pair_check", "employee_bank_pair_check"]],
+      );
+      const idx = await client.query<{ n: string }>("select count(*)::text n from pg_indexes where indexname = any($1) and indexdef like '% WHERE %'", [PHASE_3C_PARTIAL_INDEXES]);
+      const ok = c.rows[0]?.n === String(PHASE_3C_CHECK_COUNT) && c.rows[0]?.v === String(PHASE_3C_CHECK_COUNT) && idx.rows[0]?.n === String(PHASE_3C_PARTIAL_INDEXES.length);
+      console.log(
+        ok
+          ? `✓ ${PHASE_3C_CHECK_COUNT} Phase 3C payroll CHECK constraints validated; ${PHASE_3C_PARTIAL_INDEXES.length} partial unique indexes present`
+          : `✗ Phase 3C: ${c.rows[0]?.n} CHECKs present, ${c.rows[0]?.v} validated (expected ${PHASE_3C_CHECK_COUNT}); ${idx.rows[0]?.n} partial indexes (expected ${PHASE_3C_PARTIAL_INDEXES.length})`,
+      );
       if (!ok) constraintProblems++;
     }
 

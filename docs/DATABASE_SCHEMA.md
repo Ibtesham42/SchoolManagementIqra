@@ -111,15 +111,20 @@ Legend: **PK** primary key · **U** unique · **IX** index · **FK** foreign key
 
 ## 7. Payroll
 
+**Phase 3C — migration `20261120000000_phase3c_payroll` (DRAFT: awaiting the owner's SQL approval; not applied to any database).** Design: PHASE_3C_PLAN.md (P1–P16 + Q approved 2026-11-19), ADR-037. Generated offline (`migrate diff` between schema files), then hand-edited: one transaction, `lock_timeout` 5 s, 28 CHECKs, 3 partial unique indexes. Expand-only: 7 enums (SalaryComponentKind, SalaryCalc, EmployeeSalaryStatus, PayrollRunStatus, PayrollDayBasis, PayrollAdjustmentKind, SalaryPaymentMethod), 8 new tables; existing tables gain nullable columns only. Money `Decimal(12,2)`, day counts `Decimal(5,1)`. Every FK RESTRICT except actor columns (SET NULL). Salary advances (P9) deferred — no table.
+
 | Model | Key fields | Constraints |
 |---|---|---|
-| SalaryComponent | code, name, kind (EARNING/DEDUCTION), calc (FIXED/PERCENT_OF_BASIC/FORMULA), isStatutory | U(code) |
-| SalaryStructure | name, appointmentType?, items JSON or child table SalaryStructureItem(componentId, value) | U(name) |
-| EmployeeSalary | employeeId, structureId, basic, effectiveFrom, effectiveTo?, approvedById, approvedAt | IX(employeeId, effectiveFrom); exclusion: no overlapping ranges (raw SQL) |
-| PayrollRun | month (YYYY-MM), status (DRAFT/PREPARED/APPROVED/PAID/LOCKED), preparedById, approvedById?, totals | U(month) |
-| Payroll (salary slip) | payrollRunId, employeeId, slipNo, workingDays, paidDays, lopDays, earnings JSON, deductions JSON, gross, totalDeductions, net, advanceRecovery, bonus, arrears | U(payrollRunId, employeeId), U(slipNo) |
-| SalaryAdvance | employeeId, amount, approvedById, recoveryPlan JSON, outstanding | IX(employeeId) |
-| SalaryPayment | payrollId, amount, method, bankReference?, paidAt, paidById | U(bankReference) partial where not null |
+| SalaryComponent | code, name, nameKey, kind (EARNING/DEDUCTION), calc (FIXED/PERCENT_OF_BASIC), prorated, isActive, version | U(code), U(nameKey); code/name shape CHECKs (as departments). School-defined only — nothing seeded, no statutory logic (P1, P2) |
+| SalaryStructure | name, nameKey, isActive, version | U(nameKey); name shape CHECKs |
+| SalaryStructureItem | structureId → SalaryStructure, componentId → SalaryComponent, value (rupees or percent), sortOrder | U(structureId, componentId); value ≥ 0 (percent ≤ 100: service) |
+| EmployeeSalary | employeeId, structureId, basic, effectiveFrom (first of month), status (PROPOSED/APPROVED/REJECTED/WITHDRAWN), proposedById?, decidedById?, decidedAt?, decisionNote?, version | IX(employeeId, effectiveFrom); **partial unique**: one PROPOSED per employee; one APPROVED per (employee, effectiveFrom). CHECKs: basic ≥ 0, day 1, decided ⇔ decidedAt, REJECTED needs a note. Maker-checker (P7); never edited once decided |
+| PayrollRun | month (first day, unique), status (DRAFT/PREPARED/APPROVED/PAID), dayBasis?, employeeCount, totalGross, totalDeductions, totalNet, preparedById?/At?, approvedById?/At?, reopenCount, version | U(month); CHECKs: day 1, totals ≥ 0 and net = gross − deductions, PREPARED+ ⇒ prepared + dayBasis, APPROVED/PAID ⇔ approvedAt |
+| PayrollSlip | runId, employeeId, employeeSalaryId, slipNo? (lib/sequence at approval), salarySnapshot JSON, dayBasis, monthDays, offRollsDays, lopDays, paidDays, earnings JSON, deductions JSON, gross, totalDeductions, net, version | U(runId, employeeId), U(slipNo); CHECKs: paid + LOP + off-rolls = month days, net = gross − deductions ≥ 0, JSON shapes. **Snapshot** — never recomputed from current structures |
+| PayrollAdjustment | slipId, kind (BONUS/ARREARS/OTHER_EARNING/OTHER_DEDUCTION), amount, note (personal tier), createdById? | amount > 0; note ≥ 3 chars |
+| SalaryPayment | slipId, amount, method (BANK_TRANSFER/CHEQUE/CASH/UPI), reference?, paidOn (date), paidById? | amount > 0; **partial unique** (method, reference) where reference not null; sum ≤ net (service) |
+| Employee (+) | panEnc?, panHmac?, bankAccountEnc?, bankAccountHmac?, bankIfsc?, bankAccountName? | U(panHmac); CHECKs: ciphertext/HMAC in pairs, HMAC 64 lowercase hex, IFSC `^[A-Z]{4}0[A-Z0-9]{6}$`. `employee.sensitive.read` only (P8) |
+| SchoolSetting (+) | payrollDayBasis? (WORKING_DAYS/CALENDAR_DAYS) | No default — payroll refuses to prepare until set (P3) |
 
 ## 8. Fees
 

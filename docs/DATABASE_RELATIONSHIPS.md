@@ -47,3 +47,5 @@ AcademicSession 1─< Section >─1 SchoolClass
 | GeneratedDocument.fileId → StoredFile | Restrict (an issued document's PDF can't be hard-deleted) |
 | User.employeeId → Employee; Employee → Department / Designation / reports-to Employee; TeacherProfile, EmployeeDocument, EmployeeServiceEvent → Employee; EmployeeDocument.fileId → StoredFile | Restrict (Phase 3A: employees are soft-deleted, master data deactivated; unlinking an account is explicit and audited) |
 | Employee.createdById; EmployeeDocument.uploadedById / verifiedById; EmployeeServiceEvent.actedById → User | SetNull (actor references; the audit log keeps the actor label) |
+| SalaryStructureItem → SalaryStructure / SalaryComponent; EmployeeSalary → Employee / SalaryStructure; PayrollSlip → PayrollRun / Employee / EmployeeSalary; PayrollAdjustment, SalaryPayment → PayrollSlip | Restrict (Phase 3C draft: payroll history is never hard-deleted) |
+| EmployeeSalary.proposedById / decidedById; PayrollRun.preparedById / approvedById; PayrollAdjustment.createdById; SalaryPayment.paidById → User | SetNull (actor references; the audit log keeps the actor label) |

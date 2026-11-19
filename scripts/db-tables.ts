@@ -44,6 +44,15 @@ export const APP_TABLES_IN_FK_ORDER = [
   "employee_attendance", // → employee, leave_request, user
   "holiday", // → user
   "attendance_period_lock", // → user
+  // Phase 3C payroll — migration 20261120000000 (DRAFT: awaiting SQL approval; not applied anywhere yet).
+  "salary_component",
+  "salary_structure",
+  "salary_structure_item", // → salary_structure, salary_component
+  "employee_salary", // → employee, salary_structure, user
+  "payroll_run", // → user
+  "payroll_slip", // → payroll_run, employee, employee_salary
+  "payroll_adjustment", // → payroll_slip, user
+  "salary_payment", // → payroll_slip, user
   "audit_log",
   "notification",
   "sequence_counter",

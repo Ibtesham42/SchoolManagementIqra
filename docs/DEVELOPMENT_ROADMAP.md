@@ -75,6 +75,7 @@
 - **Completion criteria:** all above tests green on Neon `test`; UI audit of new screens; docs updated.
 
 ## 5. Phase 3 — Staff and HR Management · **Pending**
+- **Status (2026-11-19):** split into 3A HR core (built; verification pending KI-059) · 3B attendance & leave (M1–M5 built; M6 verification blocked on KI-059 / KI-073) · 3C payroll (plan proposed, decisions P1–P16 pending) — see PHASE_3_PLAN.md, PHASE_3B_PLAN.md, PHASE_3C_PLAN.md.
 - **Objectives:** one person record for all staff, with leave and attendance feeding payroll.
 - **Features:** employees (teaching & non-teaching), teacher profiles & qualifications, departments & designations, documents, service history, staff attendance (check-in/out, manual), leave types/balances/requests/approvals, payroll preparation (salary components & structures, monthly run, maker-checker, salary slips PDF), staff import.
 - **Dependencies:** Phase 1; Phase 2's storage/PDF infrastructure.
