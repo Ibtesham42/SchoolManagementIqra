@@ -1,6 +1,6 @@
 # Phase 4 — Academic management: assessment and implementation plan
 
-**Status: decisions AC1–AC20 APPROVED as recommended (owner, 2026-11-19).** Catalog change AC11 / AC12 made in code (84 / 13 / 305; database sync with KI-073). 4A-M1 migration `20261121000000` **approved and applied to development** 2026-11-19 (Test pending KI-059). **4A-M2 code complete** 2026-11-19 (subjects, class subjects, teacher allocation, optional subjects; integration suites written, not run — KI-059). Next: 4A-M3 timetable (+ ASSIGNED-scope widening, KI-077).
+**Status: decisions AC1–AC20 APPROVED as recommended (owner, 2026-11-19).** Catalog change AC11 / AC12 made in code (84 / 13 / 305; database sync with KI-073). 4A-M1 migration `20261121000000` **approved and applied to development** 2026-11-19 (Test pending KI-059). **4A-M2 code complete** 2026-11-19 (subjects, class subjects, teacher allocation, optional subjects; integration suites written, not run — KI-059). **4A-M3 timetable and 4A-M4 daily student attendance code complete** 2026-11-19. Next: 4A-M5 verification on Test (KI-059), then 4B.
 
 Phase 4 is large, so the plan splits it like Phase 3 (AC1): **4A** teaching structure and student attendance · **4B** examinations, grading, marks, report cards and results · **4C** promotion, homework, academic calendar and marks import.
 
@@ -71,6 +71,7 @@ Phase 4 is large, so the plan splits it like Phase 3 (AC1): **4A** teaching stru
 | **AC18** | Academic calendar | 4C. Holidays (STUDENTS / ALL) + exam dates + optional `AcademicEvent`. Kept separate from public CMS events |
 | **AC19** | Marks import (XLSX / CSV) | 4C. Needs `exceljs` / `papaparse` (dependency review and approval, import-export skill). Until then, mobile-friendly manual entry only |
 | **AC21** (added 2026-11-19, open) | Does an EXCUSED day (e.g. medical) count against attendance %? | **Yes, counted as not attended, but shown separately** so the school can apply its own condonation rules (e.g. the 75 % rule with medical exemption). Alternative: leave EXCUSED out of the denominator. Implemented as recommended in `student-attendance.rules.ts`; one line to change |
+| **AC22** (added 2026-11-19, open) | May a class teacher first-mark attendance for any past day without a reason? | **Limit to the last 3 school days**; older days go to the school office with a reason (KI-078). Currently any past day is allowed |
 | **AC20** | Parents and students seeing results | **Not in Phase 4** (no portal yet). `result.publish` marks results as published, and report cards can be printed / downloaded by staff. Portal delivery comes with the portal phase |
 
 ## 4. RBAC (proposed)

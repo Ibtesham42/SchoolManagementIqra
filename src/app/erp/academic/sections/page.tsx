@@ -99,7 +99,7 @@ export default async function SectionsPage({ searchParams }: { searchParams: Pro
         title="Sections"
         description={scope === "ALL" ? "Sections belong to one academic session. Capacity is the most students a section can hold." : "The section(s) you are class teacher of."}
       />
-      <AcademicTabs current="sections" showClasses={scope === "ALL"} showSubjects={scope === "ALL"} />
+      <AcademicTabs current="sections" showClasses={scope === "ALL"} showSubjects={scope === "ALL"} showTimetable={hasPermission(ctx, "timetable.read")} showMine={hasPermission(ctx, "timetable.read") && typeof ctx.employeeId === "string" && ctx.employeeId !== ""} showAttendance={hasPermission(ctx, "attendance.student.mark") || hasPermission(ctx, "attendance.student.read") || canManage} />
     </>
   );
   if (!session) {

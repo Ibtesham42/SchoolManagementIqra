@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { FormStatus, SubmitButton } from "@/components/erp/form";
 import { initialState } from "@/lib/action-state";
-import { updateWeeklyOffAction } from "../hr/actions";
+import { updateStudentWeeklyOffAction, updateWeeklyOffAction } from "../hr/actions";
 
 const DAYS = [
   "Sunday",
@@ -20,11 +20,14 @@ const NTH = ["1st", "2nd", "3rd", "4th", "5th"];
 export function WeeklyOffForm({
   days,
   saturdays,
+  audience = "staff",
 }: {
   days: number[];
   saturdays: number[];
+  /** Phase 4A (AC6): the same form also sets the student weekly off. */
+  audience?: "staff" | "students";
 }) {
-  const [state, action] = useActionState(updateWeeklyOffAction, initialState);
+  const [state, action] = useActionState(audience === "students" ? updateStudentWeeklyOffAction : updateWeeklyOffAction, initialState);
   const box = "flex min-h-11 items-center gap-3 text-sm";
   return (
     <form action={action} className="grid gap-4" noValidate>

@@ -1,3 +1,4 @@
+import { studentAttendanceCountOnTx } from "@/modules/students/students.tx";
 import Decimal from "decimal.js";
 import { prisma, type Tx } from "@/lib/db";
 import { audit, type AuditActor } from "@/lib/audit";
@@ -309,6 +310,9 @@ export async function createHoliday(
       const date = parseDate(input.date);
       if (STAFF_HOLIDAY_SCOPES.includes(input.appliesTo))
         await assertNoLeaveOn(tx, date);
+      // Phase 4A: a holiday for students can't fall on a day whose student attendance is already recorded.
+      if (input.appliesTo !== "STAFF" && (await studentAttendanceCountOnTx(tx, date)) > 0)
+        throw new ConflictError("Student attendance is already recorded for this date. Correct it before adding a holiday.");
       const created = await tx.holiday.create({
         data: {
           date,

@@ -1,5 +1,7 @@
+import { openSessionAttendanceDatesTx } from "@/modules/students/students.tx";
 import { prisma, type Tx } from "@/lib/db";
 import {
+  isWeeklyOff,
   readWeeklyOff,
   weeklyOffSchema,
   type WeeklyOff,
@@ -328,6 +330,47 @@ export async function updateStaffWeeklyOff(ctx: AuthContext, value: WeeklyOff) {
       entityId: SETTINGS_ID,
       before: { weeklyOff: before },
       after: { weeklyOff: normalized },
+    });
+  });
+}
+
+/** Phase 4A (AC6): the STUDENT weekly off — same shape as the staff one, often different. Not set = none. */
+export async function getStudentWeeklyOff(ctx: AuthContext): Promise<WeeklyOff> {
+  authorize(ctx, "settings.read");
+  const row = await prisma.schoolSetting.findUnique({ where: { id: SETTINGS_ID }, select: { studentWeeklyOff: true } });
+  return readWeeklyOff(row?.studentWeeklyOff ?? null);
+}
+
+/** For the student-attendance service, inside its transaction (no authorization here). */
+export async function readStudentCalendarTx(tx: Tx) {
+  const row = await tx.schoolSetting.findUnique({ where: { id: SETTINGS_ID }, select: { studentWeeklyOff: true, timezone: true } });
+  return { weeklyOff: readWeeklyOff(row?.studentWeeklyOff ?? null), timezone: row?.timezone ?? null };
+}
+
+/** Same rules as the staff weekly off; serialized with attendance marking and holiday writes (shared calendar lock). */
+export async function updateStudentWeeklyOff(ctx: AuthContext, value: WeeklyOff) {
+  authorize(ctx, "settings.manage");
+  const next = weeklyOffSchema.parse(value);
+  const normalized = { days: [...next.days].sort(), saturdays: [...next.saturdays].sort() };
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT set_config('lock_timeout', '5s', true) AS lock_timeout`;
+    await lockLeaveCalendar(tx);
+    const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM school_setting WHERE id = ${SETTINGS_ID} FOR UPDATE`;
+    const current = locked.length ? await tx.schoolSetting.findUnique({ where: { id: SETTINGS_ID }, select: { studentWeeklyOff: true } }) : null;
+    if (!current) throw new ConflictError("Save the school profile before setting the weekly off.");
+    const before = readWeeklyOff(current.studentWeeklyOff);
+    if (JSON.stringify(before) === JSON.stringify(normalized)) return;
+    // Review 4A L1: a day that becomes a weekly off must not already have student attendance in an open session —
+    // otherwise past percentages would change silently.
+    const clash = (await openSessionAttendanceDatesTx(tx)).find((d) => isWeeklyOff(d, normalized) && !isWeeklyOff(d, before));
+    if (clash) throw new ConflictError(`Student attendance is already recorded on ${clash}, which would become a weekly off. Choose different days or correct that attendance first.`);
+    await tx.schoolSetting.update({ where: { id: SETTINGS_ID }, data: { studentWeeklyOff: normalized } });
+    await audit(tx, actorOf(ctx), {
+      action: "settings.student_weekly_off_update",
+      entityType: "SchoolSetting",
+      entityId: SETTINGS_ID,
+      before: { studentWeeklyOff: before },
+      after: { studentWeeklyOff: normalized },
     });
   });
 }

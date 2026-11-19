@@ -27,7 +27,11 @@ import { addClassSubjects, copyClassSubjects, removeClassSubject, updateClassSub
 import { allocationRefSchema, assignTeacherSchema } from "@/modules/academic/allocations.schemas";
 import { assignTeacher, removeAllocation } from "@/modules/academic/allocations.service";
 import { createSubjectSchema, setSubjectActiveSchema, updateSubjectSchema } from "@/modules/academic/subjects.schemas";
+import { copyDayPlanSchema, saveDayPlanSchema, setSlotSchema } from "@/modules/academic/timetable.schemas";
+import { copyDayPlan, saveDayPlan, setSlot } from "@/modules/academic/timetable.service";
 import { setSubjectChoicesSchema } from "@/modules/students/subject-choices.schemas";
+import { markStudentDaySchema } from "@/modules/students/student-attendance.schemas";
+import { markStudentDay } from "@/modules/students/student-attendance.service";
 import { setSubjectChoices } from "@/modules/students/subject-choices.service";
 import { createSubject, setSubjectActive, updateSubject } from "@/modules/academic/subjects.service";
 import {
@@ -192,4 +196,73 @@ export async function setSubjectChoicesAction(_prev: ActionState, fd: FormData):
     const r = await setSubjectChoices(ctx, d);
     return r.added + r.removed === 0 ? "Nothing changed." : `Saved: ${r.added} added, ${r.removed} removed.`;
   });
+}
+
+// ───────────────────────────── Phase 4A-M3: period plan and timetable ─────────────────────────────
+
+export async function saveDayPlanAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const starts = fd.getAll("startTime").slice(0, 16);
+  const ends = fd.getAll("endTime");
+  const kinds = fd.getAll("kind");
+  const labels = fd.getAll("label");
+  const raw = {
+    academicSessionId: formString(fd, "academicSessionId"),
+    dayOfWeek: formString(fd, "dayOfWeek"),
+    fingerprint: formString(fd, "fingerprint"),
+    periods: starts.map((s, i) => ({ startTime: s, endTime: ends[i] ?? "", kind: kinds[i] ?? "", label: labels[i] ?? "" })),
+  };
+  return run(saveDayPlanSchema, raw, async (ctx, d) => {
+    const r = await saveDayPlan(ctx, d);
+    return r.created + r.updated + r.removed === 0 ? "Nothing changed." : `Saved: ${r.created} added, ${r.updated} changed, ${r.removed} removed.`;
+  });
+}
+
+export async function copyDayPlanAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const fingerprints = Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((d) => [String(d), formString(fd, `fp:${d}`)]));
+  const raw = { academicSessionId: formString(fd, "academicSessionId"), fromDay: formString(fd, "fromDay"), toDays: fd.getAll("toDays").slice(0, 7), fingerprints };
+  return run(copyDayPlanSchema, raw, async (ctx, d) => {
+    const r = await copyDayPlan(ctx, d);
+    return `${r.periods} period${r.periods === 1 ? "" : "s"} copied to ${r.days} day${r.days === 1 ? "" : "s"}.`;
+  });
+}
+
+export async function setSlotAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const cs = formString(fd, "classSubjectId");
+  const v = formString(fd, "version");
+  const raw = { sectionId: formString(fd, "sectionId"), periodId: formString(fd, "periodId"), classSubjectId: cs === "" ? null : cs, version: v === "" ? null : v };
+  return run(setSlotSchema, raw, async (ctx, d) => {
+    const r = await setSlot(ctx, d);
+    if (!r.changed) return "Nothing changed.";
+    if (d.classSubjectId === null) return "Period cleared.";
+    return "teacherAssigned" in r && r.teacherAssigned ? "Saved." : "Saved. No teacher is allocated to this subject in this section yet.";
+  });
+}
+
+// ───────────────────────────── Phase 4A-M4: student attendance ─────────────────────────────
+
+export async function markStudentDayAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const ids = fd.getAll("enr").filter((v): v is string => typeof v === "string").slice(0, 201);
+  const raw = {
+    sectionId: formString(fd, "sectionId"),
+    date: formString(fd, "date"),
+    reason: formString(fd, "reason"),
+    entries: ids.map((id) => {
+      const v = formString(fd, `ver:${id}`);
+      return { enrollmentId: id, status: formString(fd, `st:${id}`), version: v === "" ? null : v };
+    }),
+  };
+  const ctx = await requireAuth();
+  const parsed = markStudentDaySchema.safeParse(raw);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    const state = fromZod(parsed.error);
+    return first?.path[0] === "entries" ? { ...state, error: first.message } : state;
+  }
+  try {
+    const r = await markStudentDay(ctx, parsed.data);
+    refresh();
+    return { ok: true, message: r.created + r.changed === 0 ? "Nothing changed." : `Saved: ${r.created} marked, ${r.changed} changed.` };
+  } catch (e) {
+    return fromError(e);
+  }
 }

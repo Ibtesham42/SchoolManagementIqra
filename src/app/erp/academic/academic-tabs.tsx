@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /** Server-rendered sub-navigation between Sections, Classes and Subjects (links, no client state). */
-export function AcademicTabs({ current, showClasses, showSubjects = false }: { current: "sections" | "classes" | "subjects" | "class-subjects" | "allocations" | "optional-subjects"; showClasses: boolean; showSubjects?: boolean }) {
+export function AcademicTabs({ current, showClasses, showSubjects = false, showTimetable = false, showMine = false, showAttendance = false }: { showTimetable?: boolean; showMine?: boolean; showAttendance?: boolean; current: "sections" | "classes" | "subjects" | "class-subjects" | "allocations" | "optional-subjects" | "timetable" | "my-timetable" | "attendance"; showClasses: boolean; showSubjects?: boolean }) {
   const tabs = [
     { key: "sections", href: "/erp/academic/sections", label: "Sections" },
     ...(showClasses ? [{ key: "classes", href: "/erp/academic/classes", label: "Classes" }] : []),
@@ -10,6 +10,9 @@ export function AcademicTabs({ current, showClasses, showSubjects = false }: { c
     ...(showSubjects ? [{ key: "class-subjects", href: "/erp/academic/class-subjects", label: "Class subjects" }] : []),
     ...(showSubjects ? [{ key: "allocations", href: "/erp/academic/allocations", label: "Teachers" }] : []),
     ...(showSubjects ? [{ key: "optional-subjects", href: "/erp/academic/optional-subjects", label: "Optional subjects" }] : []),
+    ...(showSubjects || showTimetable ? [{ key: "timetable", href: "/erp/academic/timetable", label: "Timetable" }] : []),
+    ...(showMine ? [{ key: "my-timetable", href: "/erp/academic/timetable/mine", label: "My timetable" }] : []),
+    ...(showAttendance ? [{ key: "attendance", href: "/erp/academic/attendance", label: "Attendance" }] : []),
   ];
   if (tabs.length < 2) return null;
   return (

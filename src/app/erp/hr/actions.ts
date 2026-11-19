@@ -72,7 +72,7 @@ import {
   updateLeaveTypeSchema,
   weeklyOffFormSchema,
 } from "@/modules/hr/leave.schemas";
-import { updateStaffWeeklyOff } from "@/modules/settings/settings.service";
+import { updateStaffWeeklyOff, updateStudentWeeklyOff } from "@/modules/settings/settings.service";
 
 /** requireAuth → Zod parse → service → refresh; every error becomes a safe ActionState. */
 async function run<S extends z.ZodType>(
@@ -548,4 +548,10 @@ export async function updateWeeklyOffAction(
     raw,
     async (ctx, d) => (await updateStaffWeeklyOff(ctx, d), "Weekly off saved."),
   );
+}
+
+/** Phase 4A (AC6): student weekly off (Settings). Same form shape as the staff one. */
+export async function updateStudentWeeklyOffAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { days: fd.getAll("days").map(String), saturdays: fd.getAll("saturdays").map(String) };
+  return run(weeklyOffFormSchema, raw, async (ctx, d) => (await updateStudentWeeklyOff(ctx, d), "Student weekly off saved."));
 }

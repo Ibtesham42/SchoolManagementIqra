@@ -7,6 +7,7 @@ import { selectedTimeZone, timeZoneOptions } from "@/lib/timezones";
 import {
   getSchoolSettings,
   getStaffWeeklyOff,
+  getStudentWeeklyOff,
   listAcademicSessions,
 } from "@/modules/settings/settings.service";
 import { Badge } from "@/components/ui/badge";
@@ -49,10 +50,11 @@ export default async function SettingsPage() {
   const ctx = await requireAuth();
   if (!hasPermission(ctx, "settings.read")) return <NotPermitted />;
   const canManage = hasPermission(ctx, "settings.manage");
-  const [settings, { sessions, currentId }, weeklyOff] = await Promise.all([
+  const [settings, { sessions, currentId }, weeklyOff, studentWeeklyOff] = await Promise.all([
     getSchoolSettings(ctx),
     listAcademicSessions(ctx),
     getStaffWeeklyOff(ctx),
+    getStudentWeeklyOff(ctx),
   ]);
   const address = (settings?.address as Address) ?? null;
   const timings = (settings?.timings as Timings) ?? null;
@@ -263,6 +265,23 @@ export default async function SettingsPage() {
               days={weeklyOff.days}
               saturdays={weeklyOff.saturdays}
             />
+          </CardContent>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>Student weekly off</h2>
+          </CardTitle>
+          <CardDescription>
+            Days with no school for students (attendance isn&apos;t taken on them). Often different from staff.{" "}
+            {studentWeeklyOff.days.length === 0 && studentWeeklyOff.saturdays.length === 0 ? "Not set yet — every day counts as a school day." : ""}
+          </CardDescription>
+        </CardHeader>
+        {canManage && (
+          <CardContent>
+            <WeeklyOffForm audience="students" days={studentWeeklyOff.days} saturdays={studentWeeklyOff.saturdays} />
           </CardContent>
         )}
       </Card>
