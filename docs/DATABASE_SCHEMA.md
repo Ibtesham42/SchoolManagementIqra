@@ -48,7 +48,7 @@ Legend: **PK** primary key · **U** unique · **IX** index · **FK** foreign key
 
 ## 3. Academics
 
-**Phase 4A: migration `20261121000000_phase4a_teaching_attendance` (DRAFT, awaiting the owner's SQL approval; not applied).** Design: PHASE_4_PLAN.md (AC1–AC20 approved 2026-11-19), ADR-038. Offline diff + hand edits: one transaction, `lock_timeout`, 16 CHECKs. Expand-only; existing tables gain `school_setting.student_weekly_off` (nullable JSONB + CHECK) and a unique index `student_enrollment(id, academic_session_id)` (composite-FK target). StudentAttendance is listed in §6.
+**Phase 4A: migration `20261121000000_phase4a_teaching_attendance` (owner-approved 2026-11-19; **applied to development** 10:36Z, drift 0; Test pending KI-059).** Design: PHASE_4_PLAN.md (AC1–AC20 approved 2026-11-19), ADR-038. Offline diff + hand edits: one transaction, `lock_timeout`, 16 CHECKs. Expand-only; existing tables gain `school_setting.student_weekly_off` (nullable JSONB + CHECK) and a unique index `student_enrollment(id, academic_session_id)` (composite-FK target). StudentAttendance is listed in §6.
 
 | Model | Key fields | Constraints |
 |---|---|---|
@@ -114,7 +114,7 @@ Legend: **PK** primary key · **U** unique · **IX** index · **FK** foreign key
 
 ## 7. Payroll
 
-**Phase 3C — migration `20261120000000_phase3c_payroll` (DRAFT: awaiting the owner's SQL approval; not applied to any database).** Design: PHASE_3C_PLAN.md (P1–P16 + Q approved 2026-11-19), ADR-037. Generated offline (`migrate diff` between schema files), then hand-edited: one transaction, `lock_timeout` 5 s, 28 CHECKs, 3 partial unique indexes. Expand-only: 7 enums (SalaryComponentKind, SalaryCalc, EmployeeSalaryStatus, PayrollRunStatus, PayrollDayBasis, PayrollAdjustmentKind, SalaryPaymentMethod), 8 new tables; existing tables gain nullable columns only. Money `Decimal(12,2)`, day counts `Decimal(5,1)`. Every FK RESTRICT except actor columns (SET NULL). Salary advances (P9) deferred — no table.
+**Phase 3C — migration `20261120000000_phase3c_payroll` (owner-approved 2026-11-19; **applied to development** 10:36Z, drift 0; Test pending KI-059).** Design: PHASE_3C_PLAN.md (P1–P16 + Q approved 2026-11-19), ADR-037. Generated offline (`migrate diff` between schema files), then hand-edited: one transaction, `lock_timeout` 5 s, 28 CHECKs, 3 partial unique indexes. Expand-only: 7 enums (SalaryComponentKind, SalaryCalc, EmployeeSalaryStatus, PayrollRunStatus, PayrollDayBasis, PayrollAdjustmentKind, SalaryPaymentMethod), 8 new tables; existing tables gain nullable columns only. Money `Decimal(12,2)`, day counts `Decimal(5,1)`. Every FK RESTRICT except actor columns (SET NULL). Salary advances (P9) deferred — no table.
 
 | Model | Key fields | Constraints |
 |---|---|---|

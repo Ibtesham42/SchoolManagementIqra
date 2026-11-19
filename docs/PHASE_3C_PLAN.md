@@ -1,6 +1,6 @@
 # Phase 3C — Payroll: assessment and implementation plan
 
-**Status: decisions P1–P16 and Q APPROVED as recommended (owner, 2026-11-19).** 3C-M1 (schema + migration `20261120000000_phase3c_payroll`, generated offline) **ready for SQL review** 2026-11-19; the pure calculator (part of 3C-M3, `src/modules/payroll/payroll-calc.ts`) built and unit-tested 2026-11-19; nothing is applied to any database until the owner approves the SQL, and building 3C-M2 onwards waits for 3B-M6 on Test. Phase 3 split (PHASE_3_PLAN.md §1.3 B6): 3A HR core (done; M6 verification pending KI-059) · 3B attendance & leave (M1–M5 built; M6 verification blocked on KI-059 / KI-073) · **3C payroll (this plan)**.
+**Status: decisions P1–P16 and Q APPROVED as recommended (owner, 2026-11-19).** 3C-M1 (schema + migration `20261120000000_phase3c_payroll`, generated offline) **SQL approved and applied to development** 2026-11-19 (Test pending KI-059); the pure calculator (part of 3C-M3, `src/modules/payroll/payroll-calc.ts`) built and unit-tested 2026-11-19; nothing is applied to any database until the owner approves the SQL, and building 3C-M2 onwards waits for 3B-M6 on Test. Phase 3 split (PHASE_3_PLAN.md §1.3 B6): 3A HR core (done; M6 verification pending KI-059) · 3B attendance & leave (M1–M5 built; M6 verification blocked on KI-059 / KI-073) · **3C payroll (this plan)**.
 
 3C should start building only after 3B-M6 has run on Test: payroll depends on attendance and leave behaving correctly against a real database.
 

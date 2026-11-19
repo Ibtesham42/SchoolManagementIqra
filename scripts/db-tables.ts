@@ -44,7 +44,7 @@ export const APP_TABLES_IN_FK_ORDER = [
   "employee_attendance", // → employee, leave_request, user
   "holiday", // → user
   "attendance_period_lock", // → user
-  // Phase 3C payroll — migration 20261120000000 (DRAFT: awaiting SQL approval; not applied anywhere yet).
+  // Phase 3C payroll — migration 20261120000000 (applied to development 2026-11-19; Test pending KI-059).
   "salary_component",
   "salary_structure",
   "salary_structure_item", // → salary_structure, salary_component
@@ -53,7 +53,7 @@ export const APP_TABLES_IN_FK_ORDER = [
   "payroll_slip", // → payroll_run, employee, employee_salary
   "payroll_adjustment", // → payroll_slip, user
   "salary_payment", // → payroll_slip, user
-  // Phase 4A teaching structure & student attendance — migration 20261121000000 (DRAFT: awaiting SQL approval).
+  // Phase 4A teaching structure & student attendance — migration 20261121000000 (applied to development 2026-11-19; Test pending KI-059).
   "subject",
   "class_subject", // → academic_session, school_class, subject
   "student_subject", // → academic_session, student_enrollment, class_subject

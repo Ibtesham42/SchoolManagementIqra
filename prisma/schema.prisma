@@ -1371,6 +1371,9 @@ model EmployeeSalary {
   decidedBy  User?           @relation("SalaryDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
   slips      PayrollSlip[]
 
+  /// One pending proposal per employee; one approved salary per employee and month (partial unique indexes).
+  @@unique([employeeId], map: "employee_salary_one_pending_key", where: raw("status = 'PROPOSED'"))
+  @@unique([employeeId, effectiveFrom], map: "employee_salary_one_approved_per_month_key", where: raw("status = 'APPROVED'"))
   @@index([employeeId, effectiveFrom])
   @@index([structureId])
   @@map("employee_salary")
@@ -1476,6 +1479,7 @@ model SalaryPayment {
   slip   PayrollSlip @relation(fields: [slipId], references: [id], onDelete: Restrict)
   paidBy User?       @relation("SalaryPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
 
+  @@unique([method, reference], map: "salary_payment_method_reference_key", where: raw("reference IS NOT NULL"))
   @@index([slipId])
   @@map("salary_payment")
 }

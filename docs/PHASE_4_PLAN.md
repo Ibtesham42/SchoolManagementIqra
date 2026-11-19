@@ -1,6 +1,6 @@
 # Phase 4 — Academic management: assessment and implementation plan
 
-**Status: decisions AC1–AC20 APPROVED as recommended (owner, 2026-11-19).** Catalog change AC11 / AC12 made in code (84 / 13 / 305; database sync with KI-073). 4A-M1 schema + migration drafted offline for SQL review; nothing is applied to any database.
+**Status: decisions AC1–AC20 APPROVED as recommended (owner, 2026-11-19).** Catalog change AC11 / AC12 made in code (84 / 13 / 305; database sync with KI-073). 4A-M1 migration `20261121000000` **approved and applied to development** 2026-11-19 (Test pending KI-059).
 
 Phase 4 is large, so the plan splits it like Phase 3 (AC1): **4A** teaching structure and student attendance · **4B** examinations, grading, marks, report cards and results · **4C** promotion, homework, academic calendar and marks import.
 
