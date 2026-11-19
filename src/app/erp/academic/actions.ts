@@ -17,6 +17,8 @@ import {
   updateSectionSchema,
 } from "@/modules/academic/academic.schemas";
 import { createClass, setClassActive, updateClass } from "@/modules/academic/classes.service";
+import { createSubjectSchema, setSubjectActiveSchema, updateSubjectSchema } from "@/modules/academic/subjects.schemas";
+import { createSubject, setSubjectActive, updateSubject } from "@/modules/academic/subjects.service";
 import {
   assignClassTeacher,
   copySectionsFromSession,
@@ -102,5 +104,24 @@ export async function copySectionsAction(_prev: ActionState, fd: FormData): Prom
   return run(copySectionsSchema, { fromSessionId: formString(fd, "fromSessionId"), toSessionId: formString(fd, "toSessionId") }, async (ctx, d) => {
     const r = await copySectionsFromSession(ctx, d);
     return `${r.created} section${r.created === 1 ? "" : "s"} copied${r.skipped ? `, ${r.skipped} already existed` : ""}. Class teachers were not copied.`;
+  });
+}
+
+// ───────────────────────────── Phase 4A-M2: subjects ─────────────────────────────
+
+const subjectFields = (fd: FormData) => ({ code: formString(fd, "code"), name: formString(fd, "name"), kind: formString(fd, "kind") });
+
+export async function createSubjectAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(createSubjectSchema, subjectFields(fd), async (ctx, d) => `Subject ${(await createSubject(ctx, d))!.name} added.`);
+}
+
+export async function updateSubjectAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(updateSubjectSchema, { ...ref(fd), ...subjectFields(fd) }, async (ctx, d) => (await updateSubject(ctx, d), "Subject saved."));
+}
+
+export async function setSubjectActiveAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(setSubjectActiveSchema, { ...ref(fd), active: formString(fd, "active") === "true" }, async (ctx, d) => {
+    await setSubjectActive(ctx, d);
+    return d.active ? "Subject activated." : "Subject deactivated. It can't be added to classes; existing classes keep it.";
   });
 }

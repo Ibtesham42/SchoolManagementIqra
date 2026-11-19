@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added (Phase 4 — academic management, in progress)
+- **Subjects** (Classes → Subjects; School Admin and Super Admin edit, school-wide academic readers view): the subjects the school teaches, in any language, scholastic or co-scholastic. Nothing is pre-filled. Code and type are fixed once a class studies the subject; subjects are never deleted, only deactivated.
+
 ### Added (Phase 3B — attendance & leave, in progress)
 - Leave types (Staff → Leave types; School Admin and HR Manager): the school's own leave types with a quota per academic session, paid or unpaid, half days, carry-forward limit and who can use it (all, teaching or non-teaching staff). Deactivate instead of delete; once a type is in use its code, paid setting and staff group are fixed.
 - Holidays (Staff → Holidays): the school calendar per academic session — for everyone, staff only or students only. A holiday can't be added or removed on a date that pending or approved leave already covers.

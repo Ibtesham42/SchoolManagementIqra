@@ -81,7 +81,7 @@ export default async function ClassesPage() {
   return (
     <div className="mx-auto grid max-w-4xl gap-4">
       <PageHeader title="Classes" description="The school's classes, used in every academic session. Streams are separate classes, e.g. Class 11 Science and Class 11 Commerce. Classes are never deleted — deactivate one that is no longer offered." />
-      <AcademicTabs current="classes" showClasses />
+      <AcademicTabs current="classes" showClasses showSubjects />
 
       <Card>
         <CardHeader>

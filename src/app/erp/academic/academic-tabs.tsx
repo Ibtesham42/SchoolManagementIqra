@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-/** Server-rendered sub-navigation between Sections and Classes (links, no client state). */
-export function AcademicTabs({ current, showClasses }: { current: "sections" | "classes"; showClasses: boolean }) {
+/** Server-rendered sub-navigation between Sections, Classes and Subjects (links, no client state). */
+export function AcademicTabs({ current, showClasses, showSubjects = false }: { current: "sections" | "classes" | "subjects"; showClasses: boolean; showSubjects?: boolean }) {
   const tabs = [
     { key: "sections", href: "/erp/academic/sections", label: "Sections" },
     ...(showClasses ? [{ key: "classes", href: "/erp/academic/classes", label: "Classes" }] : []),
+    ...(showSubjects ? [{ key: "subjects", href: "/erp/academic/subjects", label: "Subjects" }] : []),
   ];
   if (tabs.length < 2) return null;
   return (

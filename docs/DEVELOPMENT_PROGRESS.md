@@ -10,6 +10,12 @@
 
 ## Log
 
+### 2026-11-19 — Phase 4A-M2 (part 1): subjects (uncommitted)
+- `src/modules/academic/subjects.schemas.ts` + `subjects.service.ts`: list (`academic.read`), create / update / activate (`academic.manage`); same Unicode-safe code and name rules as departments (reused from hr.rules / hr.schemas); row lock + version on edits; code and type fixed once a class studies the subject; never deleted; audited `subject.create` / `subject.update` / `subject.status_change`.
+- Page `/erp/academic/subjects` ("Subjects" tab for school-wide academic readers): add form (placeholders only, nothing pre-filled — AC2), table ≥ md / cards below, edit in place, deactivate / activate with confirmation.
+- Tests: unit `tests/unit/academic-subjects.test.ts` (4: schemas, permission gates over every role); integration `tests/integration/academic-subjects.test.ts` (5: Unicode names, duplicates, versions, code / type lock, deactivate, RBAC, database CHECKs) — **not run: KI-059**.
+- Gates: lint ✓, typecheck ✓, check:deps ✓, unit 68 files / 2,547 ✓, `next build` ✓. Not yet: browser check (needs a signed-in session on development).
+
 ### 2026-11-19 — Migrations 20261120000000 (3C) + 20261121000000 (4A) APPLIED to development; KI-073 grants synced on development; Test blocked (KI-059)
 - **Owner approvals (2026-11-19):** commit + push; apply both migrations to development then Test; sync the 14 grants on development and Test; owner reported the KI-059 `.env` lines added.
 - **Development pre-check (read-only, 10:35:44Z; scratchpad `apply/precheck.mts`, `.env` parsed privately, unchanged `db-target-guard`, every query in `BEGIN READ ONLY`):** shell clean; identity `br-morning-scene-aoxm8ctk` / `ep-quiet-river-aoywr8xg` on pooled and direct URLs; 8/8 migrations finished; 0/15 new tables; 1 other connection. `migrate status`: exactly the 2 migrations pending. **Live diff = the offline 3C + 4A statements** (Prisma merges the two `school_setting` column adds into one statement). Baseline: role 13, permission 84, role_permission 291, user 3, academic_session 1, school_setting 1, audit_log 32; HR / student tables 0.
