@@ -16,6 +16,7 @@ const load = async () => ({
   ...(await import("@/lib/errors")),
   ...(await import("@/modules/payroll/runs.service")),
   ...(await import("@/modules/payroll/salaries.service")),
+  ...(await import("@/modules/payroll/slips.service")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
 
@@ -25,7 +26,7 @@ describe.skipIf(!enabled)("payroll runs (integration)", () => {
   const Y = 1950 + Math.floor(Math.random() * 40);
   const MONTH = `${Y}-03`;
   type Ctx = NonNullable<Awaited<ReturnType<typeof m.validateSessionToken>>>;
-  let hr: Ctx, principal: Ctx, accountant: Ctx, superAdmin: Ctx;
+  let hr: Ctx, principal: Ctx, accountant: Ctx, superAdmin: Ctx, teacherA: Ctx;
   let empA: string, empB: string, structureId: string;
   let settingsBefore: { weeklyOff: unknown; payrollDayBasis: string | null } | null = null;
   const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -58,6 +59,7 @@ describe.skipIf(!enabled)("payroll runs (integration)", () => {
     await m.prisma.employee.updateMany({ where: { id: { in: [empA, empB] } }, data: { dob: d("1940-01-01"), joiningDate: d("1941-01-01") } });
     [hr, principal, accountant] = [await ctxOf(h.id), await ctxOf(p.id), await ctxOf(a.id)];
     superAdmin = await ctxOf((await user("sa", "SUPER_ADMIN")).id);
+    teacherA = await ctxOf(ta.id);
     structureId = (await m.prisma.salaryStructure.create({ data: { name: `${run} Basic only`, nameKey: `${run} basic only` } })).id;
     const s = await m.prisma.schoolSetting.findFirst({ select: { weeklyOff: true, payrollDayBasis: true } });
     settingsBefore = s ? { weeklyOff: s.weeklyOff, payrollDayBasis: s.payrollDayBasis } : null;
@@ -69,6 +71,8 @@ describe.skipIf(!enabled)("payroll runs (integration)", () => {
     if (!prisma) return;
     await prisma.attendancePeriodLock.deleteMany({ where: { month: d(`${MONTH}-01`) } });
     const runs = await prisma.payrollRun.findMany({ where: { month: d(`${MONTH}-01`) }, select: { id: true } });
+    await prisma.salaryPayment.deleteMany({ where: { slip: { runId: { in: runs.map((r) => r.id) } } } });
+    await prisma.payrollAdjustment.deleteMany({ where: { slip: { runId: { in: runs.map((r) => r.id) } } } });
     await prisma.payrollSlip.deleteMany({ where: { runId: { in: runs.map((r) => r.id) } } });
     await prisma.payrollRun.deleteMany({ where: { id: { in: runs.map((r) => r.id) } } });
     await prisma.employeeAttendance.deleteMany({ where: { employeeId: { in: [empA, empB].filter(Boolean) } } });
@@ -163,5 +167,38 @@ describe.skipIf(!enabled)("payroll runs (integration)", () => {
     const log = await m.prisma.auditLog.findFirstOrThrow({ where: { action: "payroll_run.reopen", entityId: r.id } });
     expect(log.after).toMatchObject({ reasonGiven: true });
     expect(JSON.stringify(log)).not.toContain("Synthetic correction"); // free text stays out of audit rows (review L3)
+  });
+
+  it("3C-M5: an adjustment needs a re-prepare before approval; payments can't exceed the net; the run is PAID when every slip is paid", async () => {
+    let r = (await m.listRuns(accountant)).find((x) => x.month.toISOString().startsWith(MONTH))!; // PREPARED after the reopen
+    const slipA = (await m.getRun(accountant, r.id)).slips.find((s) => s.employee.id === empA)!;
+    const grossBefore = Number(slipA.gross);
+    await m.addAdjustment(hr, { slipId: slipA.id, kind: "BONUS", amount: "1000", note: "Synthetic bonus" });
+    await expect(m.approveRun(principal, { id: r.id, version: r.version })).rejects.toThrow(/changed since this payroll was prepared/);
+    await m.prepareRun(accountant, { id: r.id, version: r.version });
+    r = (await m.listRuns(accountant)).find((x) => x.id === r.id)!;
+    const after = (await m.getRun(accountant, r.id)).slips.find((s) => s.employee.id === empA)!;
+    expect(Number(after.gross)).toBe(grossBefore + 1000);
+    await m.approveRun(principal, { id: r.id, version: r.version });
+    await expect(m.addAdjustment(hr, { slipId: slipA.id, kind: "BONUS", amount: "1", note: "Too late" })).rejects.toThrow(/prepared \(not yet approved\)/);
+
+    const net = Number(after.net);
+    await expect(m.recordPayment(accountant, { slipId: after.id, amount: (net + 1).toFixed(2), method: "BANK_TRANSFER", reference: `${tag}UTR1`, paidOn: "2026-01-02" })).rejects.toThrow(/still due/);
+    await m.recordPayment(accountant, { slipId: after.id, amount: "100.00", method: "BANK_TRANSFER", reference: `${tag}UTR1`, paidOn: "2026-01-02" });
+    await expect(m.recordPayment(accountant, { slipId: after.id, amount: "1.00", method: "BANK_TRANSFER", reference: `${tag}UTR1`, paidOn: "2026-01-02" })).rejects.toThrow(/already recorded/);
+    const bulk = await m.recordBulkPayment(accountant, { runId: r.id, method: "BANK_TRANSFER", reference: `${tag}BATCH`, paidOn: "2026-01-03" });
+    expect(bulk).toMatchObject({ slips: 2, runPaid: true });
+    const paid = await m.getRun(accountant, r.id);
+    expect(paid.status).toBe("PAID");
+    await expect(m.reopenRun(principal, { id: r.id, version: paid.version, reason: "Synthetic" })).rejects.toThrow(/payments/);
+    const logs = await m.prisma.auditLog.findMany({ where: { action: { startsWith: "salary_payment" } , entityId: { in: [after.id, r.id] } } });
+    expect(JSON.stringify(logs)).not.toMatch(/UTR1|BATCH|Synthetic bonus/);
+
+    // My salary slips: the teacher sees their own slip, not another's.
+    const mine = await m.listMySlips(teacherA);
+    expect(mine.linked && mine.slips.map((s) => s.id)).toEqual([after.id]);
+    const other = paid.slips.find((s) => s.employee.id === empB)!;
+    await expect(m.getSlip(teacherA, other.id)).rejects.toBeInstanceOf(m.NotFoundError);
+    expect((await m.getSlip(teacherA, after.id)).own).toBe(true);
   });
 });

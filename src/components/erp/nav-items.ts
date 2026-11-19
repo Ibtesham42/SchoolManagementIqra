@@ -79,6 +79,13 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "payroll",
     anyOf: ["payroll.read", "salary.structure.manage"],
   },
+  // Phase 3C-M5 (P12): every staff member's own slips (salary.self.read SELF).
+  {
+    href: "/erp/payroll/my-slips",
+    label: "My salary slips",
+    icon: "payroll",
+    anyOf: ["salary.self.read"],
+  },
   {
     href: "/erp/academic",
     label: "Classes",

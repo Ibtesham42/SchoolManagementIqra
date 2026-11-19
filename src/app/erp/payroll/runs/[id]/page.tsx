@@ -11,6 +11,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { ApproveRunForm, PrepareRunForm, ReopenRunForm } from "../run-forms";
+import { BulkPaymentForm } from "../../slips/slip-forms";
+import { todayInTimeZone } from "@/lib/format";
+import { getSchoolTimezone } from "@/modules/settings/settings.public";
 import { RUN_STATUS } from "../run-status";
 
 export const metadata = { title: "Monthly payroll" };
@@ -75,6 +78,14 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
               </div>
             </details>
           )}
+          {run.status === "APPROVED" && hasPermission(ctx, "payroll.pay") && (
+            <details className="rounded-lg border p-3">
+              <summary className="flex min-h-11 cursor-pointer items-center font-medium pointer-fine:min-h-9">Record payment</summary>
+              <div className="mt-3">
+                <BulkPaymentForm runId={run.id} today={todayInTimeZone(await getSchoolTimezone())} />
+              </div>
+            </details>
+          )}
           {run.status === "APPROVED" && hasPermission(ctx, "payroll.approve") && (
             <details className="rounded-lg border p-3">
               <summary className="flex min-h-11 cursor-pointer items-center font-medium pointer-fine:min-h-9">Reopen</summary>
@@ -111,7 +122,10 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
                   {run.slips.map((s) => (
                     <tr key={s.id} className="border-b last:border-0">
                       <th scope="row" className="py-2 pr-2 text-left font-normal">
-                        <span className="font-medium">{s.employee.fullName}</span> <span className="font-mono text-xs text-muted-foreground">{s.employee.employeeCode}</span>
+                        <Link href={`/erp/payroll/slips/${s.id}`} className="font-medium underline-offset-2 hover:underline">
+                          {s.employee.fullName}
+                        </Link>{" "}
+                        <span className="font-mono text-xs text-muted-foreground">{s.employee.employeeCode}</span>
                       </th>
                       <td className="px-2 py-2 font-mono text-xs">{s.slipNo ?? "—"}</td>
                       <td className="px-2 py-2 text-right tabular-nums">
@@ -130,7 +144,9 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
               {run.slips.map((s) => (
                 <li key={s.id} className="rounded-lg border p-3 text-sm">
                   <div className="flex justify-between gap-2">
-                    <span className="font-medium">{s.employee.fullName}</span>
+                    <Link href={`/erp/payroll/slips/${s.id}`} className="flex min-h-11 items-center font-medium">
+                      {s.employee.fullName}
+                    </Link>
                     <span className="font-medium tabular-nums">₹{s.net.toFixed(2)}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">

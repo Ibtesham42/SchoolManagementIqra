@@ -7,6 +7,8 @@ import { formString, fromError, fromZod, type ActionState } from "@/lib/action-s
 import type { AuthContext } from "@/lib/rbac/authorize";
 import { createRunSchema, reopenRunSchema, runRefSchema } from "@/modules/payroll/runs.schemas";
 import { approveRun, createRun, prepareRun, reopenRun } from "@/modules/payroll/runs.service";
+import { addAdjustmentSchema, adjustmentRefSchema, bulkPaymentSchema, recordPaymentSchema } from "@/modules/payroll/slips.schemas";
+import { addAdjustment, recordBulkPayment, recordPayment, removeAdjustment } from "@/modules/payroll/slips.service";
 import { decideSalarySchema, proposeSalarySchema, salaryRefSchema } from "@/modules/payroll/salaries.schemas";
 import { decideSalary, proposeSalary, withdrawSalary } from "@/modules/payroll/salaries.service";
 import { copyStructureSchema, createComponentSchema, createStructureSchema, setActiveSchema, updateComponentSchema, updateStructureSchema } from "@/modules/payroll/structures.schemas";
@@ -99,4 +101,25 @@ export async function approveRunAction(_prev: ActionState, fd: FormData): Promis
 }
 export async function reopenRunAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return run(reopenRunSchema, { ...ref(fd), reason: formString(fd, "reason") }, async (ctx, d) => (await reopenRun(ctx, d), "Payroll reopened. Attendance for the month is unlocked; prepare it again before approving."));
+}
+
+// ───────────────────────────── 3C-M5: adjustments and payments ─────────────────────────────
+
+export async function addAdjustmentAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { slipId: formString(fd, "slipId"), kind: formString(fd, "kind"), amount: formString(fd, "amount"), note: formString(fd, "note") };
+  return run(addAdjustmentSchema, raw, async (ctx, d) => (await addAdjustment(ctx, d), "Adjustment added. Prepare the payroll again to apply it."));
+}
+export async function removeAdjustmentAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(adjustmentRefSchema, { id: formString(fd, "id") }, async (ctx, d) => (await removeAdjustment(ctx, d.id), "Adjustment removed. Prepare the payroll again to apply it."));
+}
+export async function recordPaymentAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { slipId: formString(fd, "slipId"), amount: formString(fd, "amount"), method: formString(fd, "method"), reference: formString(fd, "reference"), paidOn: formString(fd, "paidOn") };
+  return run(recordPaymentSchema, raw, async (ctx, d) => ((await recordPayment(ctx, d)).runPaid ? "Payment recorded. Every slip of this payroll is now paid." : "Payment recorded."));
+}
+export async function bulkPaymentAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { runId: formString(fd, "runId"), method: formString(fd, "method"), reference: formString(fd, "reference"), paidOn: formString(fd, "paidOn") };
+  return run(bulkPaymentSchema, raw, async (ctx, d) => {
+    const r = await recordBulkPayment(ctx, d);
+    return `Recorded full payment for ${r.slips} slip(s).${r.ownSlipLeft ? " Your own slip was left for someone else to record." : ""}${r.runPaid ? " The payroll is now fully paid." : ""}`;
+  });
 }
