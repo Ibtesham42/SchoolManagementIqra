@@ -32,7 +32,7 @@ const busy = (e: unknown): never => {
 async function lockSlip(tx: Tx, slipId: string) {
   const peek = await tx.payrollSlip.findUnique({ where: { id: slipId }, select: { runId: true } });
   if (!peek) throw new NotFoundError("Salary slip not found.");
-  const [run] = await tx.$queryRaw<{ id: string; status: string }[]>`SELECT id, status::text AS status FROM payroll_run WHERE id = ${peek.runId} FOR UPDATE`;
+  const [run] = await tx.$queryRaw<{ id: string; status: string; month: Date }[]>`SELECT id, status::text AS status, month FROM payroll_run WHERE id = ${peek.runId} FOR UPDATE`;
   const [slip] = await tx.$queryRaw<{ id: string; employee_id: string; net: string; slip_no: string | null }[]>`
     SELECT id, employee_id, net::text AS net, slip_no FROM payroll_slip WHERE id = ${slipId} FOR UPDATE`;
   if (!run || !slip) throw new NotFoundError("Salary slip not found.");
@@ -96,9 +96,12 @@ async function markPaidIfComplete(tx: Tx, runId: string) {
   return false;
 }
 
-async function assertPaidOnOk(tx: Tx, paidOn: string) {
+/** Not in the future, and (review 3C-M5 L2) not before the payroll month starts. */
+async function assertPaidOnOk(tx: Tx, paidOn: string, runMonth: Date) {
   const { timezone } = await readPayrollSettingsTx(tx);
   if (paidOn > todayInTimeZone(timezone ?? undefined)) throw new ValidationError("The payment date can't be in the future.", [{ path: "paidOn", message: "In the future." }]);
+  const start = runMonth.toISOString().slice(0, 10);
+  if (paidOn < start) throw new ValidationError(`The payment date can't be before the payroll month (${start.slice(0, 7)}).`, [{ path: "paidOn", message: "Before the payroll month." }]);
 }
 
 export async function recordPayment(ctx: AuthContext, input: RecordPaymentInput) {
@@ -110,7 +113,7 @@ export async function recordPayment(ctx: AuthContext, input: RecordPaymentInput)
       const { run, slip } = await lockSlip(tx, input.slipId);
       if (isOwnRecord(ctx, slip.employee_id)) throw new ForbiddenError("You can't record a payment of your own salary. Someone else must do it.");
       if (run.status !== "APPROVED" && run.status !== "PAID") throw new ConflictError("Payments can only be recorded for an approved payroll.");
-      await assertPaidOnOk(tx, input.paidOn);
+      await assertPaidOnOk(tx, input.paidOn, run.month);
       const due = new Decimal(slip.net).minus(await paidSoFar(tx, slip.id));
       if (new Decimal(input.amount).gt(due)) throw new ValidationError(`Only ₹${due.toFixed(2)} is still due on this slip.`, [{ path: "amount", message: "More than the amount due." }]);
       const p = await tx.salaryPayment.create({
@@ -135,10 +138,10 @@ export async function recordBulkPayment(ctx: AuthContext, input: BulkPaymentInpu
     return await prisma.$transaction(
       async (tx) => {
         await lockPayroll(tx);
-        const [run] = await tx.$queryRaw<{ status: string }[]>`SELECT status::text AS status FROM payroll_run WHERE id = ${input.runId} FOR UPDATE`;
+        const [run] = await tx.$queryRaw<{ status: string; month: Date }[]>`SELECT status::text AS status, month FROM payroll_run WHERE id = ${input.runId} FOR UPDATE`;
         if (!run) throw new NotFoundError("Payroll run not found.");
         if (run.status !== "APPROVED") throw new ConflictError(run.status === "PAID" ? "This payroll is already fully paid." : "Payments can only be recorded for an approved payroll.");
-        await assertPaidOnOk(tx, input.paidOn);
+        await assertPaidOnOk(tx, input.paidOn, run.month);
         const due = await tx.$queryRaw<{ id: string; employee_id: string; slip_no: string | null; due: string }[]>`
           SELECT s.id, s.employee_id, s.slip_no, (s.net - COALESCE((SELECT sum(p.amount) FROM salary_payment p WHERE p.slip_id = s.id), 0))::text AS due
           FROM payroll_slip s WHERE s.run_id = ${input.runId} ORDER BY s.id FOR UPDATE OF s`;

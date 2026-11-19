@@ -32,7 +32,7 @@ export function AddAdjustmentForm({ slipId }: { slipId: string }) {
         />
         <TextField id="adj-amount" label="Amount (₹)" name="amount" inputMode="decimal" required error={state.fieldErrors?.amount} />
       </div>
-      <TextField id="adj-note" label="Note (shown on the slip)" name="note" maxLength={500} required error={state.fieldErrors?.note} />
+      <TextField id="adj-note" label="Note (shown on the slip)" name="note" maxLength={500} required hint="The employee sees this note on their slip — don't write internal remarks here." error={state.fieldErrors?.note} />
       <FormStatus state={state} />
       <SubmitButton className="min-h-11 w-full sm:w-auto" pendingLabel="Adding…">
         Add adjustment
