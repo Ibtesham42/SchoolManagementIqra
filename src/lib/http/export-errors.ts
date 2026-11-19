@@ -43,3 +43,11 @@ export const ATTENDANCE_EXPORT_MESSAGES: Record<ExportCode, string> = {
   too_many: "Too many staff for one export (limit 5,000). Choose a department and try again.",
   forbidden: "You don't have permission to export the attendance summary, or the request didn't come from this site.",
 };
+
+/** Phase 3C-M6: payroll register export — same fixed codes, payroll wording. */
+export const PAYROLL_EXPORT_MESSAGES: Record<ExportCode, string> = {
+  ...EXPORT_MESSAGES,
+  too_many: "This payroll has too many slips for one export.",
+  forbidden: "You don't have permission to export payroll, or the request didn't come from this site.",
+  invalid: "This payroll can't be exported yet (prepare it first).",
+};

@@ -17,6 +17,7 @@ const load = async () => ({
   ...(await import("@/modules/payroll/runs.service")),
   ...(await import("@/modules/payroll/salaries.service")),
   ...(await import("@/modules/payroll/slips.service")),
+  ...(await import("@/modules/payroll/reports.service")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
 
@@ -200,5 +201,21 @@ describe.skipIf(!enabled)("payroll runs (integration)", () => {
     const other = paid.slips.find((s) => s.employee.id === empB)!;
     await expect(m.getSlip(teacherA, other.id)).rejects.toBeInstanceOf(m.NotFoundError);
     expect((await m.getSlip(teacherA, after.id)).own).toBe(true);
+  });
+
+  it("3C-M6: the register CSV lists every slip with paid and due amounts; component totals add up; export audited with counts", async () => {
+    const r = (await m.listRuns(accountant)).find((x) => x.month.toISOString().startsWith(MONTH))!;
+    const { csv, rows } = await m.exportRunRegister(accountant, r.id);
+    expect(rows).toBe(2);
+    expect(csv.split(String.fromCharCode(13, 10))[0]).toContain("Slip no,Employee ID,Name");
+    expect(csv).toContain(`SLIP-${Y}-`);
+    const totals = await m.getRunComponentTotals(accountant, r.id);
+    const basic = totals.earnings.find((e) => e.code === "BASIC")!;
+    const run = await m.getRun(accountant, r.id);
+    const bonus = totals.earnings.find((e) => e.code === "ADJ:BONUS")!;
+    expect((Number(basic.total) + Number(bonus.total)).toFixed(2)).toBe(run.totalGross.toFixed(2));
+    const log = await m.prisma.auditLog.findFirstOrThrow({ where: { action: "payroll_run.export", entityId: r.id }, orderBy: { at: "desc" } });
+    expect(log.after).toMatchObject({ rows: 2, format: "csv" });
+    expect(JSON.stringify(log)).not.toMatch(/SLIP-|Synthetic/);
   });
 });

@@ -1,4 +1,8 @@
 import Decimal from "decimal.js";
+import { createElement } from "react";
+import { renderPdf } from "@/lib/pdf/render";
+import { loadBranding } from "@/modules/documents/documents.service";
+import { SalarySlipDocument } from "@/modules/documents/templates/salary-slip";
 import { prisma, type Tx } from "@/lib/db";
 import { audit, type AuditActor } from "@/lib/audit";
 import { isTransactionBusy, isUniqueViolation } from "@/lib/db-errors";
@@ -214,4 +218,48 @@ export async function listMySlips(ctx: AuthContext) {
     select: { id: true, slipNo: true, net: true, run: { select: { month: true, status: true } } },
   });
   return { linked: true as const, slips };
+}
+
+// ───────────────────────────── Slip PDF (P12) ─────────────────────────────
+
+/**
+ * The slip as a PDF on the school letterhead, rendered on demand from the SNAPSHOT (nothing stored). Same access as
+ * `getSlip`; only APPROVED / PAID runs (a prepared slip can still change). The issued, verifiable copy with a
+ * verification code (GeneratedDocument) is KI-089.
+ */
+export async function renderSlipPdf(ctx: AuthContext, slipId: string): Promise<{ pdf: Buffer; fileName: string }> {
+  const slip = await getSlip(ctx, slipId);
+  if (slip.run.status !== "APPROVED" && slip.run.status !== "PAID") throw new ConflictError("A slip can be printed once its payroll is approved.");
+  const month = slip.run.month.toISOString().slice(0, 7);
+  type Line = { name: string; amount: string };
+  const lines = (v: unknown): Line[] => (Array.isArray(v) ? (v as Line[]).filter((l) => l && typeof l.name === "string").map((l) => ({ name: l.name, amount: String(l.amount) })) : []);
+  const ADJ: Record<string, string> = { BONUS: "Bonus", ARREARS: "Arrears", OTHER_EARNING: "Other earning", OTHER_DEDUCTION: "Deduction" };
+  const earnAdj = slip.adjustments.filter((a) => a.kind !== "OTHER_DEDUCTION").map((a) => ({ name: `${ADJ[a.kind]}: ${a.note}`, amount: a.amount.toFixed(2) }));
+  const dedAdj = slip.adjustments.filter((a) => a.kind === "OTHER_DEDUCTION").map((a) => ({ name: a.note, amount: a.amount.toFixed(2) }));
+  const paid = slip.payments.reduce((t, p) => t.plus(p.amount.toString()), new Decimal(0));
+  const paidStatus = paid.gte(slip.net.toString()) ? "Paid" : paid.gt(0) ? `Partly paid (Rs. ${paid.toFixed(2)})` : "Not yet paid";
+  const branding = await loadBranding();
+  const pdf = await renderPdf(
+    createElement(SalarySlipDocument, {
+      branding,
+      generatedAt: new Date(),
+      slip: {
+        slipNo: slip.slipNo ?? "—",
+        month,
+        employee: { code: slip.employee.employeeCode, name: slip.employee.fullName, designation: slip.employee.designation.name, department: slip.employee.department.name },
+        dayBasis: slip.dayBasis === "WORKING_DAYS" ? "working days" : "calendar days",
+        monthDays: slip.monthDays,
+        offRollsDays: slip.offRollsDays,
+        lopDays: slip.lopDays.toString(),
+        paidDays: slip.paidDays.toString(),
+        earnings: [...lines(slip.earnings), ...earnAdj],
+        deductions: [...lines(slip.deductions), ...dedAdj],
+        gross: slip.gross.toFixed(2),
+        totalDeductions: slip.totalDeductions.toFixed(2),
+        net: slip.net.toFixed(2),
+        paidStatus,
+      },
+    }),
+  );
+  return { pdf, fileName: `salary-slip-${month}-${slip.employee.employeeCode}.pdf` };
 }

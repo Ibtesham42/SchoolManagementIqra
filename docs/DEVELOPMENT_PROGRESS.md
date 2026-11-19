@@ -10,7 +10,15 @@
 
 ## Log
 
-### 2026-11-19 — Phase 3C (P8): PAN and bank details (uncommitted)
+### 2026-11-19 — Phase 3C-M6: payroll register CSV and component totals (uncommitted)
+- `src/modules/payroll/reports.service.ts`: `getRunComponentTotals` (`payroll.read`; earnings / deductions by component across the run, adjustments by kind) and `exportRunRegister` (`payroll.read` + `export.run`; one row per slip — slip no, employee, department, designation, month days, not on rolls, LOP, paid days, gross, deductions, net, paid, due; ≤ 5,000 rows; every cell through `lib/csv`; **no PAN / bank / personal columns**; audited `payroll_run.export` with month, status, row count, format). Route `POST /api/v1/payroll/runs/{id}/export` (existing export pattern: same-origin, session, rate limit, fixed redirect codes; `PAYROLL_EXPORT_MESSAGES`). Run page: "Totals by component" card and "Download register (CSV)".
+- Tests: unit `tests/unit/payroll-export.test.ts` (5: CSV headers, CSRF / 401 / 429, fixed redirect codes, Principal / Teacher / Parent / Student refused, no PAN / bank columns); integration `payroll-runs.test.ts` +1 (CSV rows and slip numbers, totals reconcile with gross, export audit without names / slip numbers) — **not run: KI-059**.
+
+### 2026-11-19 — Phase 3C (P12): salary slip PDF (uncommitted)
+- Template `src/modules/documents/templates/salary-slip.tsx` (school letterhead; employee, month, slip number, days, earnings and deductions incl. adjustments, net pay, payment status; "Rs." — Helvetica can't print ₹, KI-051; no PAN / bank, KI-088). `slips.service.renderSlipPdf` renders on demand from the snapshot with `getSlip`'s access (payroll readers; own slip for staff) and only for APPROVED / PAID runs. Route `GET /api/v1/payroll/slips/{id}/pdf` (`private, no-store`, 401 / 404 / 409). "Download PDF" on the slip page. Verification code / stored copy → **KI-089**.
+- Tests: unit `tests/unit/salary-slip-pdf.test.ts` (2: real render with synthetic data — slip number, net, WinAnsi-only text, no bank details; Parent / Student refused; service order).
+
+### 2026-11-19 — Phase 3C (P8): PAN and bank details (commit 1f25af5)
 - `src/modules/hr/bank-details.schemas.ts` + `bank-details.service.ts`: PAN (`AAAAA9999A`), account (9–18 digits), IFSC, account name; blank keeps the saved value, "remove" clears it. Stored with `lib/crypto` (`encryptField`, AES-256-GCM, key-versioned) + `lookupHash` (HMAC; PAN unique across staff). Reads `employee.sensitive.read` — **masked values only** leave the service; changes also need `employee.manage`, a linked actor and never one's own record; employee row locked + version. Audit rows hold change flags only, never values.
 - Employee profile card "PAN and bank details" (masked; change form never pre-fills saved values).
 - Tests: unit `tests/unit/bank-details.test.ts` (5: formats, masking, gates over every role, own / unlinked refusals, audit contract); integration `tests/integration/bank-details.test.ts` (3: ciphertext and HMAC stored — no plaintext, masked display, audit without values, duplicate PAN refused, stale version, remove clears both halves, database CHECK pairs and IFSC) — **not run: KI-059**.

@@ -5,6 +5,8 @@ import { NotFoundError } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
 import { hasPermission } from "@/lib/rbac/authorize";
 import { getRun } from "@/modules/payroll/runs.service";
+import { getRunComponentTotals } from "@/modules/payroll/reports.service";
+import { isExportCode, PAYROLL_EXPORT_MESSAGES } from "@/lib/http/export-errors";
 import { idField } from "@/modules/students/person.schemas";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +20,7 @@ import { RUN_STATUS } from "../run-status";
 
 export const metadata = { title: "Monthly payroll" };
 
-export default async function RunPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RunPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const ctx = await requireAuth();
   if (!hasPermission(ctx, "payroll.read")) return <NotPermitted />;
   const parsed = idField.safeParse((await params).id);
@@ -28,6 +30,9 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
     throw e;
   });
   const month = run.month.toISOString().slice(0, 7);
+  const exportCode = (await searchParams).export;
+  const totals = run.status === "DRAFT" ? null : await getRunComponentTotals(ctx, run.id);
+  const canExport = run.status !== "DRAFT" && hasPermission(ctx, "export.run");
   const canPrepare = hasPermission(ctx, "payroll.prepare") && (run.status === "DRAFT" || run.status === "PREPARED");
   return (
     <div className="mx-auto grid max-w-5xl gap-4">
@@ -96,6 +101,40 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
           )}
         </CardContent>
       </Card>
+      {typeof exportCode === "string" && isExportCode(exportCode) && (
+        <p role="alert" className="rounded-lg border border-destructive p-3 text-sm">
+          {PAYROLL_EXPORT_MESSAGES[exportCode]}
+        </p>
+      )}
+      {totals && (totals.earnings.length > 0 || totals.deductions.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2>Totals by component</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            {([["Earnings", totals.earnings], ["Deductions", totals.deductions]] as const).map(([label, rows]) => (
+              <section key={label} aria-label={label} className="grid gap-1 text-sm">
+                <h3 className="font-medium">{label}</h3>
+                {rows.map((r) => (
+                  <p key={r.code} className="flex justify-between gap-2">
+                    <span>{r.name}</span>
+                    <span className="tabular-nums">₹{r.total}</span>
+                  </p>
+                ))}
+              </section>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+      {canExport && (
+        <form method="post" action={`/api/v1/payroll/runs/${run.id}/export`} className="flex justify-end">
+          <button type="submit" className="flex min-h-11 items-center rounded-lg border px-3 text-sm">
+            Download register (CSV)
+          </button>
+        </form>
+      )}
       {run.slips.length > 0 && (
         <Card>
           <CardHeader>

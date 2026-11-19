@@ -47,9 +47,16 @@ export default async function SlipPage({ params }: { params: Promise<{ id: strin
         title={`Salary slip ${month}`}
         description={`${slip.employee.fullName} · ${slip.employee.employeeCode} · ${slip.employee.designation.name} · ${slip.employee.department.name}`}
         actions={
-          <Link href={back} className="flex min-h-11 items-center rounded-lg border px-3 text-sm">
-            Back
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {(slip.run.status === "APPROVED" || slip.run.status === "PAID") && (
+              <a href={`/api/v1/payroll/slips/${slip.id}/pdf`} className="flex min-h-11 items-center rounded-lg border px-3 text-sm" target="_blank" rel="noopener">
+                Download PDF
+              </a>
+            )}
+            <Link href={back} className="flex min-h-11 items-center rounded-lg border px-3 text-sm">
+              Back
+            </Link>
+          </div>
         }
       />
       <Card>

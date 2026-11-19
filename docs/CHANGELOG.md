@@ -12,6 +12,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - **Payroll approval**: the Principal approves a prepared payroll (never the person who prepared it, and never a payroll that includes their own slip). Approval re-checks every slip and refuses if attendance or salaries changed since preparing, numbers the salary slips and locks the month's staff attendance. It can be reopened with a reason until a payment is recorded; slip numbers stay the same.
 - **Salary slips and payments**: each slip shows earnings, deductions, bonus / arrears and paid days. Before approval, HR or the Accountant can add a bonus, arrears or a one-off deduction (it applies when the payroll is prepared again). After approval, the Accountant records payments — per slip or all unpaid slips at once — never more than is due; the payroll shows as paid when everything is paid. Nobody adjusts or records a payment of their own salary.
 - **PAN and bank details** on the employee profile (HR Manager): stored encrypted, always shown masked (e.g. XXXXXX234F). Nobody changes their own; the same PAN can't be recorded twice.
+- **Payroll reports**: totals by component on each monthly payroll, and the payroll register as a CSV (Accountant, HR Manager) — paid days, gross, deductions, net, paid and due per slip. No PAN or bank details.
+- **Salary slip PDF**: "Download PDF" on an approved slip — the school letterhead with earnings, deductions, paid days and net pay.
 - **My salary slips** (new menu item for staff): your own slips from approved payrolls.
 - **Payroll basis** (Settings): prorate pay on working days or calendar days. Not set by default — payroll asks you to choose.
 
