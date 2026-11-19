@@ -10,6 +10,9 @@
 
 ## Log
 
+### 2026-11-19 — Phase 4 academic management: assessment and plan (docs only)
+- New `docs/PHASE_4_PLAN.md`: starting point verified from code (classes, sessions, sections with a User class teacher — ADR-034 interim, enrollments, holidays, academic policy ASSIGNED = class-teacher sections; `exam.manage` and `reportcard.generate` held by no role except Super Admin), split 4A (subjects, allocations, timetable, student attendance) / 4B (grading, exams, marks, report cards, publication) / 4C (promotion, homework, calendar, import), owner decisions **AC1–AC20**, RBAC (+5 grants proposed → 305), milestones, risks. No code, schema or database change.
+
 ### 2026-11-19 — Phase 3C M3 (part): pure payroll calculator (no database; branch `feat/phase3b-m4-staff-attendance`, uncommitted)
 - New module `src/modules/payroll/` with `payroll-calc.ts`: `calculateSlip` (basic always the first, prorated earning; FIXED / PERCENT_OF_BASIC items of the full basic, prorated by paidDays / monthDays when flagged; adjustments; every component half-up to 2 dp; net never negative — refused, not capped; typed `PayrollCalcError`) and `slipDays` (WORKING_DAYS / CALENDAR_DAYS month denominator and days off the rolls, P3 / P15). decimal.js only.
 - Tests: `tests/unit/payroll-calc.test.ts` (11, hand-worked golden values: full month, 2.5 LOP, half-up tie, joiner, adjustments, whole-month LOP, negative net, bad inputs, large salary, both day bases).

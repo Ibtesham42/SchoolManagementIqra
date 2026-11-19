@@ -86,6 +86,7 @@
 - **Completion criteria:** tests green on Neon `test`; payroll reports reconcile.
 
 ## 6. Phase 4 — Academic Management · **Pending**
+- **Status (2026-11-19):** plan proposed — PHASE_4_PLAN.md (split 4A / 4B / 4C; owner decisions AC1–AC20 pending).
 - **Objectives:** run the academic year: what is taught, when, and how students perform.
 - **Features:** subjects & class-subject mapping, teacher allocation, timetables (no double-booking), academic calendar, homework & assignments, examinations (configurable CBSE grading), marks entry (theory/practical/internal, mobile grid), report cards (PDF), result publication, promotion to next session, marks import.
 - **Dependencies:** Phase 2 (enrollments), Phase 3 (teachers).
