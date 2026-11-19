@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
+  Wallet,
   CalendarCheck,
   CalendarDays,
   ClipboardList,
@@ -43,6 +44,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   staff: UserRoundCog,
   leave: CalendarDays,
   staffAttendance: CalendarCheck,
+  payroll: Wallet,
 };
 
 /** Desktop sidebar (≥ lg). */

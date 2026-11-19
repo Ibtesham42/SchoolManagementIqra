@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added (Phase 3C — payroll, in progress)
+- **Payroll** (new menu item for HR Manager, Accountant, Principal and Super Admin): **salary components** — the school's own earnings and deductions, a fixed amount or a percentage of basic, reduced for unpaid days or not — and **salary structures** that group them with amounts. Nothing is pre-filled and nothing is calculated by law automatically. HR Manager edits; the Principal and Accountant view.
+
 ### Added (Phase 4 — academic management, in progress)
 - **Subjects** (Classes → Subjects; School Admin and Super Admin edit, school-wide academic readers view): the subjects the school teaches, in any language, scholastic or co-scholastic. Nothing is pre-filled. Code and type are fixed once a class studies the subject; subjects are never deleted, only deactivated.
 - **Class subjects** (Classes → Class subjects): for each session and class, the subjects it studies — compulsory or optional — in report-card order. Copy last session's plan in one step. Closed sessions are read-only; a subject in use can't be removed.

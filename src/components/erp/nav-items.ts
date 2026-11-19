@@ -12,7 +12,8 @@ export type NavIcon =
   | "account"
   | "staff"
   | "leave"
-  | "staffAttendance";
+  | "staffAttendance"
+  | "payroll";
 
 export interface NavItem {
   href: string;
@@ -70,6 +71,13 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Staff attendance",
     icon: "staffAttendance",
     anyOf: ["attendance.employee.read", "attendance.employee.mark", "payroll.prepare"],
+  },
+  // Phase 3C: salary components and structures (more payroll screens follow).
+  {
+    href: "/erp/payroll",
+    label: "Payroll",
+    icon: "payroll",
+    anyOf: ["payroll.read", "salary.structure.manage"],
   },
   {
     href: "/erp/academic",

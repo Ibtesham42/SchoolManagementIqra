@@ -66,7 +66,7 @@ describe("B5 — ERP navigation before and after the forced password change", ()
   });
 
   it("Super Admin sees every item", () => {
-    expect(menu({ ...ctxFor("SCHOOL_ADMIN", false), isSuperAdmin: true })).toEqual(["Dashboard", "Admissions", "Students", "Roll numbers", "Staff", "Leave", "Staff attendance", "Classes", "Users", "Roles", "Settings", "My account"]);
+    expect(menu({ ...ctxFor("SCHOOL_ADMIN", false), isSuperAdmin: true })).toEqual(["Dashboard", "Admissions", "Students", "Roll numbers", "Staff", "Leave", "Staff attendance", "Payroll", "Classes", "Users", "Roles", "Settings", "My account"]);
   });
 });
 
