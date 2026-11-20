@@ -1,4 +1,4 @@
-import { Trash2 } from "lucide-react";
+import { Paperclip, Trash2 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth/context";
 import { NotFoundError } from "@/lib/errors";
@@ -12,7 +12,8 @@ import { ConfirmAction } from "@/components/erp/confirm-action";
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../academic-tabs";
-import { removeHomeworkAction } from "../actions";
+import { removeHomeworkAction, removeHomeworkAttachmentAction } from "../actions";
+import { HOMEWORK_UPLOAD_MESSAGES, isUploadCode } from "@/lib/http/upload-errors";
 import { academicTabFlags } from "../tab-flags";
 import { HomeworkForm } from "./homework-form";
 
@@ -36,11 +37,19 @@ export default async function HomeworkPage({ searchParams }: { searchParams: Pro
       })
     : null;
   const postable = data?.subjects.filter((s) => s.canPost) ?? [];
+  // Fixed text for an attachment upload result (never text from the URL).
+  const upload = isUploadCode(sp.upload) ? sp.upload : null;
+  const kb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
   return (
     <div className="mx-auto grid max-w-4xl gap-4">
       <PageHeader title="Homework" description="Homework for each section and subject. Students and parents will see it once the portal exists." />
       <AcademicTabs current="homework" {...academicTabFlags(ctx)} />
+      {upload && (
+        <Alert variant={upload === "ok" ? "default" : "destructive"}>
+          <AlertDescription role={upload === "ok" ? "status" : "alert"}>{HOMEWORK_UPLOAD_MESSAGES[upload]}</AlertDescription>
+        </Alert>
+      )}
       {sections.length > 1 && section && (
         <form method="get" className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[1fr_auto] sm:items-end">
           <label className="grid gap-1.5 text-sm font-medium" htmlFor="hw-section">
@@ -106,6 +115,11 @@ export default async function HomeworkPage({ searchParams }: { searchParams: Pro
                           </span>
                         </div>
                         <p className="text-sm whitespace-pre-line">{h.details}</p>
+                        {h.attachment && (
+                          <a href={`/api/v1/academic/homework/${h.id}/attachment`} className="inline-flex min-h-11 items-center gap-2 text-sm underline pointer-fine:min-h-9">
+                            <Paperclip className="size-4" aria-hidden="true" /> {h.attachment.name} ({kb(h.attachment.sizeBytes)})
+                          </a>
+                        )}
                         {h.canManage && !data.section.closed && (
                           <div className="flex flex-wrap items-start gap-2">
                             <details className="grow rounded-lg border p-3 open:pb-4">
@@ -115,6 +129,27 @@ export default async function HomeworkPage({ searchParams }: { searchParams: Pro
                               </div>
                             </details>
                             <ConfirmAction label="Remove" variant="destructive" icon={<Trash2 aria-hidden="true" />} title={`Remove "${h.title}"?`} description="It disappears from this list." confirmLabel="Remove" action={removeHomeworkAction} fields={{ id: h.id, version: String(h.version) }} />
+                            <details className="w-full rounded-lg border p-3 open:pb-4">
+                              <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium pointer-fine:min-h-9">
+                                <Paperclip className="size-4" aria-hidden="true" /> {h.attachment ? "Replace or remove the attachment" : "Attach a file"}
+                              </summary>
+                              <form method="post" encType="multipart/form-data" action={`/api/v1/academic/homework/${h.id}/attachment`} className="mt-3 grid gap-2">
+                                <input type="hidden" name="version" value={String(h.version)} />
+                                <input type="hidden" name="section" value={data.section.id} />
+                                <label htmlFor={`hw-file-${h.id}`} className="text-sm font-medium">
+                                  PDF, JPEG or PNG, up to 10 MB
+                                </label>
+                                <input id={`hw-file-${h.id}`} name="file" type="file" required accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" className="min-h-11 rounded-lg border border-input p-2 text-sm" />
+                                <Button type="submit" variant="outline" className="min-h-11 justify-self-start">
+                                  Upload
+                                </Button>
+                              </form>
+                              {h.attachment && (
+                                <div className="mt-3">
+                                  <ConfirmAction label="Remove attachment" variant="destructive" icon={<Trash2 aria-hidden="true" />} title="Remove the attachment?" description={`${h.attachment.name} is removed from this homework.`} confirmLabel="Remove" action={removeHomeworkAttachmentAction} fields={{ id: h.id, version: String(h.version) }} />
+                                </div>
+                              )}
+                            </details>
                           </div>
                         )}
                       </li>

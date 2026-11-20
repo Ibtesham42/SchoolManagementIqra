@@ -5,7 +5,7 @@ import { FormStatus, SelectField, SubmitButton, TextField } from "@/components/e
 import { initialState } from "@/lib/action-state";
 import { createHomeworkAction, updateHomeworkAction } from "../actions";
 
-/** Post (sectionId + subject choice) or edit (id + version) homework. Text only (attachments later, KI-094). */
+/** Post (sectionId + subject choice) or edit (id + version) homework. Attachments are added per homework item on the list (KI-094). */
 export function HomeworkForm({
   sectionId,
   subjects,

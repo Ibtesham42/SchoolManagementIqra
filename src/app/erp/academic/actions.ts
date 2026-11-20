@@ -49,7 +49,7 @@ import { examRefSchema, reportCardRemarkSchema, saveMarksSchema, sheetActionSche
 import { lockExamMarks, saveMarks, sheetAction, unlockExamMarks } from "@/modules/academic/marks.service";
 import { publishResults, setReportCardRemark } from "@/modules/academic/results.service";
 import { createHomeworkSchema, homeworkRefSchema, updateHomeworkSchema } from "@/modules/academic/homework.schemas";
-import { createHomework, removeHomework, updateHomework } from "@/modules/academic/homework.service";
+import { createHomework, removeHomework, removeHomeworkAttachment, updateHomework } from "@/modules/academic/homework.service";
 import { createEventSchema, eventRefSchema, updateEventSchema } from "@/modules/academic/calendar.schemas";
 import { createEvent, deleteEvent, updateEvent } from "@/modules/academic/calendar.service";
 import { confirmPromotionsSchema, proposePromotionsSchema } from "@/modules/students/promotion.schemas";
@@ -457,6 +457,10 @@ export async function updateHomeworkAction(_prev: ActionState, fd: FormData): Pr
 
 export async function removeHomeworkAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return run(homeworkRefSchema, ref(fd), async (ctx, d) => (await removeHomework(ctx, d), "Homework removed."));
+}
+
+export async function removeHomeworkAttachmentAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(homeworkRefSchema, ref(fd), async (ctx, d) => (await removeHomeworkAttachment(ctx, d), "Attachment removed."));
 }
 
 // ───────────────────────────── Phase 4C-M3: academic calendar ─────────────────────────────

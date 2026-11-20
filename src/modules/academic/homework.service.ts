@@ -3,7 +3,10 @@ import { audit, type AuditActor } from "@/lib/audit";
 import { isTransactionBusy } from "@/lib/db-errors";
 import { ConflictError, ForbiddenError, NotFoundError, ServiceBusyError, ValidationError } from "@/lib/errors";
 import { todayInTimeZone } from "@/lib/format";
+import { stripDocumentImageMetadata } from "@/lib/images/photo";
 import { hasPermission, scopeFor, type AuthContext } from "@/lib/rbac/authorize";
+import { detectFileType } from "@/lib/storage/file-types";
+import { discardUpload, prepareUpload, readStoredFile, recordUpload, retireStoredFile, type PreparedUpload } from "@/modules/files/files.service";
 import { ALLOCATABLE_TEACHER_EMPLOYEE } from "@/modules/hr/hr.tx";
 import { getSchoolTimezone } from "@/modules/settings/settings.public";
 import { assertSessionWritable } from "./academic.rules";
@@ -21,7 +24,13 @@ import type { CreateHomeworkInput, HomeworkRefInput, UpdateHomeworkInput } from 
  * - The due date is today or later (school time zone) and inside the session. Removal is a soft delete.
  * Lock order: academic_session FOR SHARE → section FOR SHARE → teacher_allocation FOR SHARE → homework FOR UPDATE.
  * Audit rows carry ids and dates, never the text.
+ * Attachment (KI-094): at most one private, encrypted file per homework (StoredFile purpose `homework.attachment`, owner
+ * ("Homework", id)); replacing retires the old one. Upload / remove = the same rights and locks as editing; download =
+ * the same rights as reading the homework, then the file layer's purpose / owner / `academic.read` check. Unknown and
+ * out-of-scope look the same (NotFound).
  */
+const ATTACHMENT = "homework.attachment" as const;
+const OWNER_TYPE = "Homework";
 const actorOf = (ctx: AuthContext): AuditActor => ({ userId: ctx.userId, label: ctx.username, ipHash: ctx.ipHash, requestId: ctx.requestId });
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const day = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -101,11 +110,20 @@ export async function getSectionHomework(ctx: AuthContext, sectionId: string) {
     }),
     getSchoolTimezone(),
   ]);
+  const files = items.length
+    ? await prisma.storedFile.findMany({
+        where: { purpose: ATTACHMENT, ownerType: OWNER_TYPE, ownerId: { in: items.map((h) => h.id) }, deletedAt: null },
+        select: { ownerId: true, originalName: true, sizeBytes: true, mimeType: true },
+      })
+    : [];
+  // Review L1: the file layer reads attachments with academic.read — no link for a caller who couldn't download it.
+  const canDownload = hasPermission(ctx, "academic.read");
+  const fileOf = new Map(files.filter(() => canDownload).map((f) => [f.ownerId, { name: f.originalName, sizeBytes: f.sizeBytes, mimeType: f.mimeType }]));
   return {
     section: { id: s.id, code: s.code, sessionName: s.academicSession.name, sessionEnd: iso(s.academicSession.endDate), closed: s.academicSession.status === "CLOSED" },
     today: todayInTimeZone(tz),
     subjects: subjects.map((c) => ({ id: c.id, name: c.subject.name, canPost: manageable.has(c.id) })),
-    items: items.map((h) => ({ ...h, subjectName: h.classSubject.subject.name, postedBy: h.postedBy?.displayName ?? null, canManage: manageable.has(h.classSubjectId) })),
+    items: items.map((h) => ({ ...h, subjectName: h.classSubject.subject.name, postedBy: h.postedBy?.displayName ?? null, canManage: manageable.has(h.classSubjectId), attachment: fileOf.get(h.id) ?? null })),
   };
 }
 
@@ -183,6 +201,7 @@ export async function removeHomework(ctx: AuthContext, input: HomeworkRefInput) 
     await prisma.$transaction(async (tx) => {
       await lockHomework(tx, ctx, input.id, input.version);
       await tx.homework.update({ where: { id: input.id }, data: { deletedAt: new Date(), version: { increment: 1 } } });
+      await retireAttachments(tx, ctx, input.id);
       await audit(tx, actorOf(ctx), { action: "homework.remove", entityType: "Homework", entityId: input.id });
     });
   } catch (e) {
@@ -194,3 +213,62 @@ export const homeworkAccess = (ctx: AuthContext) => {
   const academic = hasPermission(ctx, "academic.read") ? scopeFor(ctx, "academic.read") : null;
   return { manage: manageScope(ctx) !== null, any: manageScope(ctx) !== null || academic === "ALL" || academic === "ASSIGNED" };
 };
+
+// ───────────────────────────── Attachment (KI-094) ─────────────────────────────
+
+async function retireAttachments(tx: Tx, ctx: AuthContext, homeworkId: string): Promise<number> {
+  const old = await tx.storedFile.findMany({ where: { purpose: ATTACHMENT, ownerType: OWNER_TYPE, ownerId: homeworkId, deletedAt: null }, select: { id: true }, take: 10 });
+  for (const f of old) await retireStoredFile(tx, ctx, f.id);
+  return old.length;
+}
+
+/** Adds or replaces the homework's attachment. Scope is checked BEFORE the file is stored; images lose their metadata. */
+export async function attachHomeworkFile(ctx: AuthContext, input: HomeworkRefInput, file: { bytes: Uint8Array; fileName: string }) {
+  if (!manageScope(ctx)) throw new ForbiddenError();
+  // Cheap scope check first (no blob written for out-of-scope callers); repeated under the locks below.
+  const h = await prisma.homework.findUnique({ where: { id: input.id }, select: { sectionId: true, classSubjectId: true, deletedAt: true } });
+  if (!h || h.deletedAt || !(await manageableSubjects(prisma, ctx, await sectionFacts(prisma, h.sectionId))).has(h.classSubjectId)) throw new NotFoundError("Homework not found.");
+  let bytes = file.bytes;
+  const detected = detectFileType(bytes);
+  if (detected === "image/jpeg" || detected === "image/png") bytes = await stripDocumentImageMetadata(bytes, detected);
+  const prepared: PreparedUpload = await prepareUpload(ctx, ATTACHMENT, bytes, file.fileName, { type: OWNER_TYPE, id: input.id });
+  try {
+    await prisma.$transaction(async (tx) => {
+      await lockHomework(tx, ctx, input.id, input.version);
+      const replaced = await retireAttachments(tx, ctx, input.id);
+      const stored = await recordUpload(tx, ctx, prepared);
+      await tx.homework.update({ where: { id: input.id }, data: { version: { increment: 1 } } });
+      await audit(tx, actorOf(ctx), { action: replaced ? "homework.attachment_replace" : "homework.attachment_add", entityType: "Homework", entityId: input.id, after: { fileId: stored.id, mimeType: prepared.mimeType, sizeBytes: prepared.sizeBytes } });
+    });
+  } catch (e) {
+    await discardUpload(prepared); // storage and database stay consistent
+    busy(e);
+  }
+}
+
+export async function removeHomeworkAttachment(ctx: AuthContext, input: HomeworkRefInput) {
+  if (!manageScope(ctx)) throw new ForbiddenError();
+  try {
+    await prisma.$transaction(async (tx) => {
+      await lockHomework(tx, ctx, input.id, input.version);
+      if ((await retireAttachments(tx, ctx, input.id)) === 0) throw new NotFoundError("This homework has no attachment.");
+      await tx.homework.update({ where: { id: input.id }, data: { version: { increment: 1 } } });
+      await audit(tx, actorOf(ctx), { action: "homework.attachment_remove", entityType: "Homework", entityId: input.id });
+    });
+  } catch (e) {
+    busy(e);
+  }
+}
+
+/** Download: whoever may read this homework (whole section, or the subject they manage). Anything else → NotFound. */
+export async function readHomeworkAttachment(ctx: AuthContext, homeworkId: string) {
+  // Review L1: the file rule's readPermission (academic.read) is required up front, before any database access.
+  if (!hasPermission(ctx, "academic.read")) throw new NotFoundError("Attachment not found.");
+  const h = await prisma.homework.findUnique({ where: { id: homeworkId }, select: { sectionId: true, classSubjectId: true, deletedAt: true } });
+  if (!h || h.deletedAt) throw new NotFoundError("Attachment not found.");
+  const s = await sectionFacts(prisma, h.sectionId);
+  if (!readsWholeSection(ctx, s) && !(await manageableSubjects(prisma, ctx, s)).has(h.classSubjectId)) throw new NotFoundError("Attachment not found.");
+  const f = await prisma.storedFile.findFirst({ where: { purpose: ATTACHMENT, ownerType: OWNER_TYPE, ownerId: homeworkId, deletedAt: null }, orderBy: { createdAt: "desc" }, select: { id: true } });
+  if (!f) throw new NotFoundError("Attachment not found.");
+  return readStoredFile(ctx, f.id, { purpose: ATTACHMENT, owner: { type: OWNER_TYPE, id: homeworkId } });
+}

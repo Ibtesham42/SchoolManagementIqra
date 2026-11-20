@@ -95,6 +95,17 @@ export const UPLOAD_RULES = {
     ownerType: "EmployeeDocument",
     description: "Staff photo (re-encoded JPEG)",
   },
+  // Homework attachment (Phase 4C, KI-094): one optional handout per Homework row (owner = the Homework id). Read with
+  // academic.read AFTER the homework service's own section / subject check (every homework reader holds it).
+  "homework.attachment": {
+    allowed: ["application/pdf", "image/jpeg", "image/png"],
+    maxBytes: DOCUMENT_MAX_BYTES,
+    visibility: "PRIVATE",
+    uploadPermission: "homework.manage",
+    readPermission: "academic.read",
+    ownerType: "Homework",
+    description: "Homework attachment (PDF, JPEG or PNG, up to 10 MB)",
+  },
 } as const satisfies Record<string, UploadRule>;
 
 /** Purposes recorded for files that predate purposes (migration 20261109000000): Super Admin only. */

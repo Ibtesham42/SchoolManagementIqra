@@ -94,6 +94,11 @@ describe.skipIf(!enabled)("Phase 4C homework, calendar and promotion (integratio
     if (!prisma) return;
     const sessions = [nowSession, pastSession, nextSession].filter(Boolean);
     await prisma.promotionDecision.deleteMany({ where: { academicSessionId: { in: sessions } } });
+    const hw = await prisma.homework.findMany({ where: { academicSessionId: { in: sessions } }, select: { id: true } });
+    const files = await prisma.storedFile.findMany({ where: { ownerType: "Homework", ownerId: { in: hw.map((x) => x.id) } }, select: { id: true, storageKey: true } });
+    const { getStorageDriver } = await import("@/lib/storage/driver");
+    for (const f of files) await getStorageDriver().delete(f.storageKey).catch(() => undefined);
+    await prisma.storedFile.deleteMany({ where: { id: { in: files.map((f) => f.id) } } });
     await prisma.homework.deleteMany({ where: { academicSessionId: { in: sessions } } });
     await prisma.academicEvent.deleteMany({ where: { academicSessionId: { in: sessions } } });
     await prisma.teacherAllocation.deleteMany({ where: { academicSessionId: { in: sessions } } });
@@ -122,8 +127,37 @@ describe.skipIf(!enabled)("Phase 4C homework, calendar and promotion (integratio
     expect(view.subjects.filter((s) => s.canPost).map((s) => s.id)).toEqual([csMath]);
     await expect(m.getSectionHomework(otherTeacher, hwSection)).rejects.toBeInstanceOf(m.NotFoundError);
     await m.updateHomework(admin, { id: h.id, version: 1, title: "Chapter 4 (revised)", details: "Q1–Q6", dueOn: later });
+    // KI-094 attachment: manager uploads (version checked), readers download, others get NotFound; replace retires the old file.
+    const pdf = (tagText: string) => ({ bytes: new Uint8Array(Buffer.from(`%PDF-1.7
+1 0 obj<<>>endobj
+% ${run} ${tagText}
+%%EOF`)), fileName: "chapter-4.pdf" });
+    await expect(m.attachHomeworkFile(otherTeacher, { id: h.id, version: 2 }, pdf("x"))).rejects.toBeInstanceOf(m.NotFoundError);
+    await expect(m.attachHomeworkFile(teacher, { id: h.id, version: 1 }, pdf("x"))).rejects.toThrow(/changed by someone else/);
+    await expect(m.attachHomeworkFile(teacher, { id: h.id, version: 2 }, { bytes: new Uint8Array(Buffer.from("not a pdf")), fileName: "x.pdf" })).rejects.toBeInstanceOf(m.ValidationError);
+    await m.attachHomeworkFile(teacher, { id: h.id, version: 2 }, pdf("first"));
+    expect((await m.getSectionHomework(teacher, hwSection)).items[0].attachment).toMatchObject({ name: "chapter-4.pdf", mimeType: "application/pdf" });
+    const got = await m.readHomeworkAttachment(teacher, h.id);
+    expect(Buffer.from(got.bytes).toString()).toContain(`${run} first`);
+    expect(Buffer.from((await m.readHomeworkAttachment(admin, h.id)).bytes).toString()).toContain("first");
+    await expect(m.readHomeworkAttachment(otherTeacher, h.id)).rejects.toBeInstanceOf(m.NotFoundError);
+    await m.attachHomeworkFile(teacher, { id: h.id, version: 3 }, pdf("second"));
+    expect(Buffer.from((await m.readHomeworkAttachment(teacher, h.id)).bytes).toString()).toContain("second");
+    expect(await m.prisma.storedFile.count({ where: { ownerType: "Homework", ownerId: h.id, deletedAt: null } })).toBe(1);
+    expect(await m.prisma.storedFile.count({ where: { ownerType: "Homework", ownerId: h.id, deletedAt: { not: null } } })).toBe(1);
+    // Stored encrypted: the blob isn't the plain PDF.
+    expect(await m.prisma.storedFile.count({ where: { ownerType: "Homework", ownerId: h.id, encrypted: true } })).toBe(2);
+    await m.removeHomeworkAttachment(teacher, { id: h.id, version: 4 });
+    await expect(m.readHomeworkAttachment(teacher, h.id)).rejects.toBeInstanceOf(m.NotFoundError);
+    await m.attachHomeworkFile(teacher, { id: h.id, version: 5 }, pdf("third"));
+    // Audit rows carry ids, type and size — never the file name or content.
+    const rows = await m.prisma.auditLog.findMany({ where: { entityType: "Homework", entityId: h.id, action: { startsWith: "homework.attachment" } }, select: { action: true, after: true } });
+    expect(rows.map((x) => x.action).sort()).toEqual(["homework.attachment_add", "homework.attachment_add", "homework.attachment_remove", "homework.attachment_replace"]);
+    expect(JSON.stringify(rows)).not.toMatch(/chapter-4|first|second/);
     await expect(m.removeHomework(teacher, { id: h.id, version: 1 })).rejects.toThrow(/changed by someone else/);
-    await m.removeHomework(teacher, { id: h.id, version: 2 });
+    await m.removeHomework(teacher, { id: h.id, version: 6 });
+    // Removing the homework retires its attachment too.
+    expect(await m.prisma.storedFile.count({ where: { ownerType: "Homework", ownerId: h.id, deletedAt: null } })).toBe(0);
     expect((await m.getSectionHomework(admin, hwSection)).items).toEqual([]);
     expect(await m.prisma.homework.count({ where: { id: h.id, deletedAt: { not: null } } })).toBe(1);
   });

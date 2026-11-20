@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added (Phase 4C — homework attachments)
+- Teachers can **attach a file to homework** (a worksheet or handout: PDF, JPEG or PNG, up to 10 MB), replace it or remove it. Staff who can see the homework can download it. Files are stored privately and encrypted; photos are saved without their location data.
+
 ### Added (Phase 4C — marks import)
 - **Import marks from a spreadsheet** (on each marks sheet): download the template (Excel or CSV) with the sheet's students and any saved marks, fill it in (AB = absent, EX = exempt; a blank cell keeps the saved mark), upload it, check the preview and confirm. Nothing is imported while any row has a problem, and the same rules apply as on the entry grid.
 

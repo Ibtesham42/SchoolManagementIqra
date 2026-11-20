@@ -42,6 +42,17 @@ export const STAFF_UPLOAD_MESSAGES: Record<UploadCode, string> = {
   closed: "Documents can't be changed for this staff record.",
 };
 
+/** Phase 4C homework attachments — homework wording, never text from the URL. */
+export const HOMEWORK_UPLOAD_MESSAGES: Record<UploadCode, string> = {
+  ...UPLOAD_MESSAGES,
+  ok: "Attachment saved.",
+  bad_type: "This file type isn't accepted. Use PDF, JPEG or PNG.",
+  invalid: "The upload couldn't be accepted. Choose a PDF, JPEG or PNG file and try again.",
+  forbidden: "You can't change this homework, or the request didn't come from this site.",
+  not_found: "That homework wasn't found.",
+  closed: "This homework was changed by someone else, or can't be changed now. Reload the page and try again.",
+};
+
 export function isUploadCode(v: unknown): v is UploadCode {
   return typeof v === "string" && Object.hasOwn(UPLOAD_MESSAGES, v);
 }
