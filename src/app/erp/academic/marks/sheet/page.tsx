@@ -19,6 +19,8 @@ import { AcademicTabs } from "../../academic-tabs";
 import { academicTabFlags } from "../../tab-flags";
 import { sheetActionAction } from "../../actions";
 import { MarksGrid, type GridRow } from "./marks-grid";
+import { ImportPanel } from "./import-panel";
+import { isExportCode, MARKS_TEMPLATE_MESSAGES } from "@/lib/http/export-errors";
 
 export const metadata = { title: "Marks sheet" };
 
@@ -52,6 +54,8 @@ export default async function MarksSheetPage({ searchParams }: { searchParams: P
   const fields = { examSubjectId: data.examSubjectId, sectionId: data.section.id, sheetVersion: String(data.sheet?.version ?? 1) };
   const total = data.max.theory + data.max.practical + data.max.internal;
   const show = (v: string | null, max: number) => (max === 0 ? null : (v ?? "—"));
+  // Fixed text for a failed template download (never text from the URL).
+  const templateError = isExportCode(sp.template) ? MARKS_TEMPLATE_MESSAGES[sp.template] : null;
 
   return (
     <div className="mx-auto grid max-w-4xl gap-4">
@@ -107,6 +111,8 @@ export default async function MarksSheetPage({ searchParams }: { searchParams: P
           )}
         </CardContent>
       </Card>
+
+      {editable && data.rows.length > 0 && <ImportPanel examSubjectId={data.examSubjectId} sectionId={data.section.id} correction={!data.canEdit && data.canCorrect} templateError={templateError} />}
 
       {data.rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">No students take this subject in this section.</p>

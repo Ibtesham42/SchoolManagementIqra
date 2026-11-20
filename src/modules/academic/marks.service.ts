@@ -381,7 +381,7 @@ export async function saveMarks(ctx: AuthContext, input: SaveMarksInput) {
         action: mode === "correct" ? "marks.correct" : "marks.save",
         entityType: "MarksSheet",
         entityId: sheetId,
-        after: { examSubjectId: sc.es.id, sectionId: sc.section.id, created, changed, sheetStatus: sheet?.status ?? "OPEN" },
+        after: { examSubjectId: sc.es.id, sectionId: sc.section.id, created, changed, sheetStatus: sheet?.status ?? "OPEN", source: input.source ?? "grid" },
       });
       return { created, changed };
     });

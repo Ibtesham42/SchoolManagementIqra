@@ -18,6 +18,7 @@ const load = async () => ({
   ...(await import("@/modules/academic/grading.service")),
   ...(await import("@/modules/academic/examinations.service")),
   ...(await import("@/modules/academic/marks.service")),
+  ...(await import("@/modules/academic/marks-import.service")),
   ...(await import("@/modules/academic/results.service")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
@@ -146,6 +147,32 @@ describe.skipIf(!enabled)("examinations, marks and results (integration)", () =>
     sheet = await m.getMarksSheet(teacher, ref);
     expect(sheet.completeCount).toBe(3);
     await expect(m.saveMarks(teacher, { ...ref, sheetVersion: 1, reason: "", entries: [entry(enr[0], "71", "18")] })).rejects.toThrow(/changed by someone else/);
+    // 4C-M4 marks import: template → preview (writes nothing) → confirm through saveMarks; out of scope → NotFound.
+    const tpl = await m.marksImportTemplate(teacher, ref, "csv");
+    const csv = new TextDecoder().decode(tpl.body);
+    expect(csv).toContain(`${tag}-STU-1,,Synthetic Pupil 1,70,18\r\n`);
+    await expect(m.marksImportTemplate(otherTeacher, ref, "csv")).rejects.toBeInstanceOf(m.NotFoundError);
+    const file = (text: string) => ({ bytes: new TextEncoder().encode(text), fileName: "marks.csv" });
+    const upload = `Student ID,Name,Theory,Internal
+${tag}-STU-1,x,72,
+${tag}-STU-2,x,30,5
+`;
+    await expect(m.previewMarksImport(otherTeacher, ref, file(upload))).rejects.toBeInstanceOf(m.NotFoundError);
+    const pv = await m.previewMarksImport(teacher, ref, file(upload));
+    expect(pv.canConfirm).toBe(true);
+    expect(pv.plan.counts).toMatchObject({ changed: 1, same: 1, problems: 0, notInFile: 1 });
+    expect(pv.plan.entries).toEqual([expect.objectContaining({ enrollmentId: enr[0], theory: "72", internal: "18" })]);
+    expect((await m.getMarksSheet(teacher, ref)).sheet!.version).toBe(sheet.sheet!.version); // preview wrote nothing
+    expect(await m.saveMarks(teacher, { ...ref, sheetVersion: pv.sheetVersion, reason: "", entries: pv.plan.entries, source: "import" })).toEqual({ created: 0, changed: 1 });
+    // Replaying the same confirmation is refused (versions moved on).
+    await expect(m.saveMarks(teacher, { ...ref, sheetVersion: pv.sheetVersion, reason: "", entries: pv.plan.entries, source: "import" })).rejects.toThrow(/changed by someone else/);
+    const bad = await m.previewMarksImport(teacher, ref, file(`Student ID,Theory,Internal
+${tag}-STU-1,99,1
+`));
+    expect(bad.canConfirm).toBe(false);
+    const imported = await m.prisma.auditLog.findFirst({ where: { action: "marks.save", actorId: teacher.userId }, orderBy: { at: "desc" }, select: { after: true } });
+    expect(imported?.after).toMatchObject({ source: "import", changed: 1 });
+    sheet = await m.getMarksSheet(teacher, ref);
     await m.sheetAction(teacher, { ...ref, sheetVersion: sheet.sheet!.version, action: "submit" });
     sheet = await m.getMarksSheet(teacher, ref);
     expect(sheet.sheet!.status).toBe("SUBMITTED");
@@ -159,7 +186,7 @@ describe.skipIf(!enabled)("examinations, marks and results (integration)", () =>
     // No marks or reasons in audit rows.
     const rows = await m.prisma.auditLog.findMany({ where: { action: { startsWith: "marks" }, actorId: teacher.userId }, select: { after: true } });
     expect(rows.length).toBeGreaterThan(0);
-    expect(JSON.stringify(rows)).not.toMatch(/"70"|45\.5/);
+    expect(JSON.stringify(rows)).not.toMatch(/"70"|"72"|45\.5/);
   });
 
   it("a section of another class is not found; parents and students see no sheets or results (AC20)", async () => {

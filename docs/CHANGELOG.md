@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added (Phase 4C — marks import)
+- **Import marks from a spreadsheet** (on each marks sheet): download the template (Excel or CSV) with the sheet's students and any saved marks, fill it in (AB = absent, EX = exempt; a blank cell keeps the saved mark), upload it, check the preview and confirm. Nothing is imported while any row has a problem, and the same rules apply as on the entry grid.
+
 ### Added (Phase 4C — promotion, homework, academic calendar; needs migration 20261123000000, not yet applied)
 - **Promotion** (Academic → Promotion): at session end the class teacher marks each student Promote, Detain or Leave (transferred / withdrawn / graduated); for classes with streams the next class is chosen, never guessed. From the session's last day the School Admin confirms a section in one step: promoted and detained students get their enrollment in the next session's chosen section (section capacity checked), this session's enrollments are closed on its last day, and leavers get their new status recorded. Roll numbers are then generated in the new sections as usual.
 - **Homework** (Academic → Homework): teachers post homework (title, what to do, due date) for the subjects they teach in each section; the School Admin for any section; class teachers see all of their section's homework. Text only for now — attachments come next.

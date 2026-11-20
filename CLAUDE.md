@@ -24,7 +24,7 @@ This is a real product used for daily administration. No placeholder buttons, no
 | Files | *Planned (Phase 2/8):* public media → Cloudinary Free / local; private documents → local or S3-compatible, **app-encrypted**, served only via authorized route. Not implemented yet |
 | Email | Provider interface: `log` (dev preview, default) / Resend Free |
 | PDF | *Planned (Phase 2):* `@react-pdf/renderer` (server-side). Not installed yet |
-| Import/Export | *Planned (Phases 2–7):* `exceljs`, `papaparse`. Not installed yet |
+| Import/Export | `exceljs` 4.4.0 + `papaparse` 5.5.3 (owner-approved 2026-11-20; uuid overridden to 11.1.1), in-memory reader `lib/import/tabular.ts` (size, zip-bomb, row/column caps). First user: marks import (4C-M4). The generic ImportJob pipeline (Phases 2–7) is not built yet |
 | AI | Default **no LLM**: FAQ + Postgres FTS. Optional LLM (`openai-compatible`) with hard daily cap; optional local embeddings |
 | Tests | Vitest (unit + integration against real Postgres), Playwright (e2e, mobile viewports) |
 

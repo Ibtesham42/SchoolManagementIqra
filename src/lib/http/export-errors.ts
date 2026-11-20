@@ -51,3 +51,12 @@ export const PAYROLL_EXPORT_MESSAGES: Record<ExportCode, string> = {
   forbidden: "You don't have permission to export payroll, or the request didn't come from this site.",
   invalid: "This payroll can't be exported yet (prepare it first).",
 };
+
+/** Phase 4C-M4: the marks import template (one marks sheet) — same fixed codes, marks wording. */
+export const MARKS_TEMPLATE_MESSAGES: Record<ExportCode, string> = {
+  ...EXPORT_MESSAGES,
+  too_many: "This marks sheet can't be downloaded right now.",
+  forbidden: "These marks can't be changed now, or the request didn't come from this site.",
+  invalid: "The template request wasn't valid. Reload the page and try again.",
+  rate_limited: "Too many downloads in a short time. Please wait a few minutes.",
+};

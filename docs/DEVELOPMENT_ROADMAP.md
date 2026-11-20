@@ -86,7 +86,7 @@
 - **Completion criteria:** tests green on Neon `test`; payroll reports reconcile.
 
 ## 6. Phase 4 — Academic Management · **Pending**
-- **Status (2026-11-20):** decisions AC1–AC20 approved (2026-11-19). 4A built (verification pending KI-059). **4B code complete** (grading, exams, marks entry and approval, lock, publication, report cards) — migration `20261122000000` awaiting SQL approval; verification on Test pending. **4C code complete** except marks import (promotion, homework, calendar; migration `20261123000000` awaiting SQL approval; marks import waits for dependency approval, KI-093). See PHASE_4_PLAN.md.
+- **Status (2026-11-20):** decisions AC1–AC20 approved (2026-11-19). 4A built (verification pending KI-059). **4B code complete** (grading, exams, marks entry and approval, lock, publication, report cards) — migration `20261122000000` awaiting SQL approval; verification on Test pending. **4C code complete** incl. marks import; migrations 4B / 4C applied to development and Test (2026-11-20). See PHASE_4_PLAN.md.
 - **Objectives:** run the academic year: what is taught, when, and how students perform.
 - **Features:** subjects & class-subject mapping, teacher allocation, timetables (no double-booking), academic calendar, homework & assignments, examinations (configurable CBSE grading), marks entry (theory/practical/internal, mobile grid), report cards (PDF), result publication, promotion to next session, marks import.
 - **Dependencies:** Phase 2 (enrollments), Phase 3 (teachers).

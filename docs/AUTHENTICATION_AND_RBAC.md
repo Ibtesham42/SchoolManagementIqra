@@ -65,7 +65,7 @@ The UI disables options the policy would reject (same functions), but the server
 | Academics | `academic.read` (view classes & sections; ASSIGNED = own class-teacher sections, ADR-034) `academic.manage` `timetable.manage` `exam.manage` `marks.enter` `marks.approve` `result.publish` `reportcard.generate` |
 | Library | `library.read` `library.manage` `library.issue` |
 | Inventory | `inventory.read` `inventory.manage` |
-| Import/Export | `import.run` `export.run` (each export additionally needs the module's read permission; sensitive columns need `*.sensitive.read`) |
+| Import/Export | `import.run` `export.run` (each export additionally needs the module's read permission; sensitive columns need `*.sensitive.read`). **Exception (ADR-039):** the per-sheet marks import and its template need only the right to save that marks sheet now |
 | Chatbot | `chatbot.manage` `chatbot.analytics` |
 | System | `audit.read` `backup.manage` `integration.manage` `notification.send` |
 

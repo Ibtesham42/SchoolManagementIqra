@@ -42,6 +42,8 @@ export const saveMarksSchema = z
       .min(1, "Nobody to save.")
       .max(200, "A section has at most 200 students."),
     reason: freeText(500).refine((v) => v === "" || v.length >= 3, "Say briefly why approved marks are changed."),
+    /** 4C-M4: recorded in the audit row only — the rules are the same for the grid and an import. */
+    source: z.enum(["grid", "import"]).optional(),
   })
   .strict()
   .refine((v) => new Set(v.entries.map((e) => e.enrollmentId)).size === v.entries.length, { message: "Each student may appear only once.", path: ["entries"] });
