@@ -3,23 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import {
-  Wallet,
-  CalendarCheck,
-  CalendarDays,
-  ClipboardList,
-  GraduationCap,
-  IdCard,
-  KeyRound,
-  ListOrdered,
-  LayoutDashboard,
-  Menu,
-  Settings,
-  ShieldCheck,
-  UserRoundCog,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
+import { CalendarCheck, CalendarDays, ClipboardList, GraduationCap, IdCard, IndianRupee, KeyRound, LayoutDashboard, ListOrdered, Menu, Settings, ShieldCheck, UserRoundCog, Users, Wallet, type LucideIcon } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -45,6 +29,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   leave: CalendarDays,
   staffAttendance: CalendarCheck,
   payroll: Wallet,
+  fees: IndianRupee,
 };
 
 /** Desktop sidebar (≥ lg). */

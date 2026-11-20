@@ -1,4 +1,5 @@
 import { ConflictError, ValidationError } from "@/lib/errors";
+import { validateFormat } from "@/lib/sequence";
 
 /**
  * Pure academic-session rules (no I/O — unit tested). Services apply them inside transactions.
@@ -85,4 +86,37 @@ export function assertCanBeCurrent(session: SessionLike): void {
 /** Dates and name are editable only while PLANNED (later they anchor enrollments and records). */
 export function assertEditable(session: SessionLike): void {
   if (session.status !== "PLANNED") throw new ConflictError("Only planned sessions can be edited.");
+}
+
+/**
+ * Phase 5 (FC12): fee number formats. Pure — unit tested. Exactly one {SEQ}/{SEQ:n} (lib/sequence) and only these
+ * tokens: receipts {CODE} {YYYY} {YY} (a receipt can pay several sessions, so no {SESSION}); invoices also {SESSION}.
+ * Never {CLASS}. A rendered number (5-digit counter, longest session name) must fit the 40-character columns.
+ */
+export type FeeNumberKind = "feeReceipt" | "feeInvoice";
+const FEE_TOKENS: Record<FeeNumberKind, readonly string[]> = { feeReceipt: ["CODE", "YYYY", "YY"], feeInvoice: ["CODE", "YYYY", "YY", "SESSION"] };
+
+export function feeFormatProblem(kind: FeeNumberKind, format: string, sample: { code: string | null; longestSession: string }): string | null {
+  if (!/^[A-Za-z0-9{}:/._ -]+$/.test(format)) return "Use letters, digits, / - . _ and the tokens in braces.";
+  const seq = (format.match(/\{SEQ(?::\d+)?\}/g) ?? []).length;
+  if (seq !== 1) return "Use exactly one {SEQ} or {SEQ:n} (for example {SEQ:5}).";
+  const width = Number(/\{SEQ:(\d+)\}/.exec(format)?.[1] ?? "1");
+  if (width > 8) return "Pad the number to at most 8 digits ({SEQ:8}).";
+  // Review 5A-M2 L1: only {SEQ} may carry a width; everything else is a bare token, exactly as lib/sequence renders.
+  const TOKEN = /\{(?:([A-Z]+)|SEQ:\d+)\}/g;
+  const tokens = [...format.matchAll(TOKEN)].map((m) => m[1]).filter((t): t is string => t !== undefined && t !== "SEQ");
+  const bad = tokens.find((t) => !FEE_TOKENS[kind].includes(t));
+  if (bad) return `{${bad}} can't be used here. Allowed: ${FEE_TOKENS[kind].map((t) => `{${t}}`).join(" ")} and {SEQ}.`;
+  const rest = format.replace(TOKEN, "");
+  if (rest.includes("{") || rest.includes("}")) return "Check the braces: tokens look like {SEQ:5}; only {SEQ} takes a number.";
+  if (validateFormat(format) !== null) return "Check the tokens: only {CODE} {YYYY} {YY} {SESSION} and one {SEQ} are understood.";
+  if (tokens.includes("CODE") && !sample.code) return "Set the school's short code first, or leave out {CODE}.";
+  const rendered = format
+    .replace(/\{CODE\}/g, sample.code ?? "")
+    .replace(/\{YYYY\}/g, "2026")
+    .replace(/\{YY\}/g, "26")
+    .replace(/\{SESSION\}/g, sample.longestSession)
+    .replace(/\{SEQ(?::\d+)?\}/, "9".repeat(Math.max(width, 7)));
+  if (rendered.length > 40) return "Numbers made with this format would be longer than 40 characters.";
+  return null;
 }

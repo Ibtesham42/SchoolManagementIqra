@@ -1,4 +1,4 @@
-import type { Tx } from "@/lib/db";
+import type { prisma, Tx } from "@/lib/db";
 import { audit, type AuditActor } from "@/lib/audit";
 import { NotFoundError } from "@/lib/errors";
 
@@ -89,4 +89,21 @@ export async function lockClassSubjectForChoices(tx: Tx, classSubjectId: string)
   const r = rows[0];
   const subject = await tx.classSubject.findUniqueOrThrow({ where: { id: classSubjectId }, select: { subject: { select: { code: true } } } });
   return { id: r.id, academicSessionId: r.academic_session_id, classId: r.class_id, isOptional: r.is_optional, subjectCode: subject.subject.code };
+}
+
+/**
+ * Phase 5 (fees): read-only option lists for modules whose users don't hold `academic.read` (the Accountant). No
+ * authorization here — the calling service authorized its own operation. Names and codes only.
+ */
+export async function sessionOptions(db: Tx | typeof prisma) {
+  const rows = await db.academicSession.findMany({
+    orderBy: { startDate: "desc" },
+    take: 50,
+    select: { id: true, name: true, status: true, startDate: true, endDate: true, currentFor: { select: { id: true } } },
+  });
+  return rows.map(({ currentFor, ...r }) => ({ ...r, isCurrent: currentFor !== null }));
+}
+
+export async function activeClassOptions(db: Tx | typeof prisma) {
+  return db.schoolClass.findMany({ where: { isActive: true }, orderBy: [{ displayOrder: "asc" }, { numericLevel: "asc" }, { id: "asc" }], take: 100, select: { id: true, code: true, name: true } });
 }

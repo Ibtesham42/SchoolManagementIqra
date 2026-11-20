@@ -13,7 +13,8 @@ export type NavIcon =
   | "staff"
   | "leave"
   | "staffAttendance"
-  | "payroll";
+  | "payroll"
+  | "fees";
 
 export interface NavItem {
   href: string;
@@ -85,6 +86,14 @@ export const NAV_ITEMS: NavItem[] = [
     label: "My salary slips",
     icon: "payroll",
     anyOf: ["salary.self.read"],
+  },
+  // Phase 5A-M2: fee setup. fee.read at ALL only — Parent (CHILDREN) and Student (SELF) wait for the portal (FC17).
+  {
+    href: "/erp/fees",
+    label: "Fees",
+    icon: "fees",
+    anyOf: ["fee.read", "fee.structure.manage"],
+    scope: { key: "fee.read", scopes: ["ALL"] },
   },
   {
     href: "/erp/academic",

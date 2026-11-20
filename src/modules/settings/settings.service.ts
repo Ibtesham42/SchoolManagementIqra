@@ -10,8 +10,8 @@ import {
 import { lockLeaveCalendar } from "@/modules/hr/leave.tx";
 import { audit } from "@/lib/audit";
 import { isUniqueViolation } from "@/lib/db-errors";
-import { ConflictError, NotFoundError } from "@/lib/errors";
-import { authorize, type AuthContext } from "@/lib/rbac/authorize";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import { authorize, authorizeAny, hasPermission, type AuthContext } from "@/lib/rbac/authorize";
 import type { Prisma } from "@/generated/prisma/client";
 import {
   discardUpload,
@@ -30,6 +30,7 @@ import {
   assertNoOverlap,
   assertSessionShape,
   assertStatusTransition,
+  feeFormatProblem,
   parseDateOnly,
   type SessionLike,
   type SessionStatus,
@@ -399,6 +400,65 @@ export async function updateShowRank(ctx: AuthContext, value: boolean) {
     if (cur.showRank === value) return;
     await tx.schoolSetting.update({ where: { id: SETTINGS_ID }, data: { showRank: value } });
     await audit(tx, actorOf(ctx), { action: "settings.show_rank_update", entityType: "SchoolSetting", entityId: SETTINGS_ID, before: { showRank: cur.showRank }, after: { showRank: value } });
+  });
+}
+
+const formatsOf = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+
+/** Phase 5 (FC12): fee number formats — no default; issue and collection refuse until both are set. */
+export async function getFeeNumberFormats(ctx: AuthContext) {
+  authorizeAny(ctx, ["settings.read", "fee.structure.manage", "fee.collect"]);
+  const row = await prisma.schoolSetting.findUnique({ where: { id: SETTINGS_ID }, select: { idFormats: true, shortCode: true } });
+  const f = formatsOf(row?.idFormats);
+  return { feeReceipt: typeof f.feeReceipt === "string" ? f.feeReceipt : null, feeInvoice: typeof f.feeInvoice === "string" ? f.feeInvoice : null, shortCode: row?.shortCode ?? null };
+}
+
+/** For the fee services, inside their transaction (no authorization here). */
+export async function readFeeSettingsTx(tx: Tx) {
+  const row = await tx.schoolSetting.findUnique({ where: { id: SETTINGS_ID }, select: { idFormats: true, shortCode: true, timezone: true } });
+  const f = formatsOf(row?.idFormats);
+  return {
+    feeReceipt: typeof f.feeReceipt === "string" ? f.feeReceipt : null,
+    feeInvoice: typeof f.feeInvoice === "string" ? f.feeInvoice : null,
+    shortCode: row?.shortCode ?? null,
+    timezone: row?.timezone ?? null,
+  };
+}
+
+/**
+ * Set both fee number formats (FC12). `settings.manage` or the fee setup manager (the Accountant sets fees up) — but
+ * once any invoice or receipt exists, `settings.manage` only (KI-104). Changing a format only affects numbers issued
+ * afterwards; issued numbers never change (unique columns).
+ */
+export async function updateFeeNumberFormats(ctx: AuthContext, input: { feeReceipt: string; feeInvoice: string }) {
+  authorizeAny(ctx, ["settings.manage", "fee.structure.manage"]);
+  await prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM school_setting WHERE id = ${SETTINGS_ID} FOR UPDATE`;
+    if (locked.length === 0) throw new ConflictError("Save the school profile before setting fee number formats.");
+    const cur = await tx.schoolSetting.findUniqueOrThrow({ where: { id: SETTINGS_ID }, select: { idFormats: true, shortCode: true } });
+    // KI-104 (owner 2026-11-20): once any invoice or receipt number exists, only settings.manage may change the formats
+    // (a cashier must not restart the visible numbering mid-year).
+    const [invoices, receipts] = await Promise.all([tx.feeInvoice.count({ take: 1 }), tx.feePayment.count({ take: 1 })]);
+    if (invoices + receipts > 0 && !hasPermission(ctx, "settings.manage")) {
+      throw new ForbiddenError("Invoices or receipts already have numbers, so only the school administrator can change these formats.");
+    }
+    const sessions = await tx.academicSession.findMany({ select: { name: true }, take: 200 });
+    const longestSession = sessions.reduce((a, s) => (s.name.length > a.length ? s.name : a), "2026-27");
+    const issues = (["feeReceipt", "feeInvoice"] as const).flatMap((k) => {
+      const problem = feeFormatProblem(k, input[k], { code: cur.shortCode, longestSession });
+      return problem ? [{ path: k, message: problem }] : [];
+    });
+    if (issues.length) throw new ValidationError(issues[0].message, issues);
+    const before = formatsOf(cur.idFormats);
+    if (before.feeReceipt === input.feeReceipt && before.feeInvoice === input.feeInvoice) return;
+    await tx.schoolSetting.update({ where: { id: SETTINGS_ID }, data: { idFormats: { ...before, feeReceipt: input.feeReceipt, feeInvoice: input.feeInvoice } } });
+    await audit(tx, actorOf(ctx), {
+      action: "settings.fee_number_formats_update",
+      entityType: "SchoolSetting",
+      entityId: SETTINGS_ID,
+      before: { feeReceipt: before.feeReceipt ?? null, feeInvoice: before.feeInvoice ?? null },
+      after: { feeReceipt: input.feeReceipt, feeInvoice: input.feeInvoice },
+    });
   });
 }
 

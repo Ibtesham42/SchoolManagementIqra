@@ -4,6 +4,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added (Phase 5A — fee setup)
+- New **Fees** menu (Accountant sets up; School Admin, Principal and Vice Principal can view):
+  - **Fee heads**: the school's own fee names (tuition, admission, lab…), with who pays each (everyone, new admissions only, or existing students only). Nothing is pre-filled.
+  - **Receipt and invoice number formats**, e.g. `RCT/{YYYY}/{SEQ:5}`; invoices and receipts can't be issued until both are saved.
+  - **Installments** per academic session (monthly, quarterly or terms, with due dates) and the session's **late fee** (a fixed amount, an amount per day with a maximum, or a percentage), with a grace period.
+  - **Class fees**: what each class pays per fee head and installment. One structure is active per class; once invoices are issued its amounts are fixed, and changes are made on a copy that is then made active.
+- Parents and students don't see fees yet; that comes with the portal.
+
 ### Added (Phase 4C — homework attachments)
 - Teachers can **attach a file to homework** (a worksheet or handout: PDF, JPEG or PNG, up to 10 MB), replace it or remove it. Staff who can see the homework can download it. Files are stored privately and encrypted; photos are saved without their location data.
 

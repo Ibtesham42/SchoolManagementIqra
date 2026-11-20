@@ -58,7 +58,7 @@ describe("B5 — ERP navigation before and after the forced password change", ()
   // Phase 2 (ADR-034) added "Classes" (academic.read), Phase 2B "Admissions" (admission.read) and S7 "Students" (student.read) to the G7 J13/J14 menus;
   // Phase 3A M2 "Staff" (employee.read at ALL).
   it("School Admin after the change: Classes, Users and Settings, no Roles (G7 J13 expectation + Classes)", () => {
-    expect(menu(ctxFor("SCHOOL_ADMIN", false))).toEqual(["Dashboard", "Admissions", "Students", "Roll numbers", "Staff", "Staff attendance", "My salary slips", "Classes", "Users", "Settings", "My account"]);
+    expect(menu(ctxFor("SCHOOL_ADMIN", false))).toEqual(["Dashboard", "Admissions", "Students", "Roll numbers", "Staff", "Staff attendance", "My salary slips", "Fees", "Classes", "Users", "Settings", "My account"]);
   });
 
   it("Teacher after the change: Classes (own sections), no Users, Roles or Settings (G7 J14 expectation + Classes)", () => {
@@ -66,7 +66,7 @@ describe("B5 — ERP navigation before and after the forced password change", ()
   });
 
   it("Super Admin sees every item", () => {
-    expect(menu({ ...ctxFor("SCHOOL_ADMIN", false), isSuperAdmin: true })).toEqual(["Dashboard", "Admissions", "Students", "Roll numbers", "Staff", "Leave", "Staff attendance", "Payroll", "My salary slips", "Classes", "Users", "Roles", "Settings", "My account"]);
+    expect(menu({ ...ctxFor("SCHOOL_ADMIN", false), isSuperAdmin: true })).toEqual(["Dashboard", "Admissions", "Students", "Roll numbers", "Staff", "Leave", "Staff attendance", "Payroll", "My salary slips", "Fees", "Classes", "Users", "Roles", "Settings", "My account"]);
   });
 });
 

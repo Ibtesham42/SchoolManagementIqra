@@ -1,0 +1,119 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { z } from "zod";
+import { requireAuth } from "@/lib/auth/context";
+import { formString, fromError, fromZod, type ActionState } from "@/lib/action-state";
+import type { AuthContext } from "@/lib/rbac/authorize";
+import {
+  clearLateFeeRuleSchema,
+  copyStructureSchema,
+  createCategorySchema,
+  createInstallmentSchema,
+  createStructureSchema,
+  feeNumberFormatsSchema,
+  refSchema,
+  setActiveSchema,
+  setLateFeeRuleSchema,
+  updateCategorySchema,
+  updateInstallmentSchema,
+  updateStructureSchema,
+} from "@/modules/fees/setup.schemas";
+import {
+  clearLateFeeRule,
+  copyFeeStructure,
+  createFeeCategory,
+  createFeeInstallment,
+  createFeeStructure,
+  deleteFeeInstallment,
+  setFeeCategoryActive,
+  setFeeStructureActive,
+  setLateFeeRule,
+  updateFeeCategory,
+  updateFeeInstallment,
+  updateFeeStructure,
+} from "@/modules/fees/setup.service";
+import { updateFeeNumberFormats } from "@/modules/settings/settings.service";
+
+/** Phase 5A-M2 fee setup actions: requireAuth → Zod → service → ActionState (services authorize and enforce every rule). */
+async function run<S extends z.ZodType>(schema: S, raw: unknown, call: (ctx: AuthContext, data: z.infer<S>) => Promise<string>): Promise<ActionState> {
+  const ctx = await requireAuth();
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) return fromZod(parsed.error);
+  try {
+    const message = await call(ctx, parsed.data);
+    revalidatePath("/erp/fees", "layout");
+    return { ok: true, message };
+  } catch (e) {
+    return fromError(e);
+  }
+}
+
+const ref = (fd: FormData) => ({ id: formString(fd, "id"), version: formString(fd, "version") });
+const active = (fd: FormData) => ({ ...ref(fd), active: formString(fd, "active") === "true" });
+const items = (fd: FormData) => {
+  const cats = fd.getAll("categoryId").slice(0, 401);
+  const insts = fd.getAll("installmentId");
+  const amounts = fd.getAll("amount");
+  return cats
+    .map((c, i) => ({ categoryId: typeof c === "string" ? c : "", installmentId: typeof insts[i] === "string" ? (insts[i] as string) : "", amount: typeof amounts[i] === "string" ? (amounts[i] as string) : "" }))
+    .filter((i) => i.categoryId !== "" || i.installmentId !== "" || i.amount !== "");
+};
+
+// Fee heads
+export async function createCategoryAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { code: formString(fd, "code"), name: formString(fd, "name"), kind: formString(fd, "kind"), appliesTo: formString(fd, "appliesTo") };
+  return run(createCategorySchema, raw, async (ctx, d) => (await createFeeCategory(ctx, d), "Fee head added."));
+}
+export async function updateCategoryAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(updateCategorySchema, { ...ref(fd), name: formString(fd, "name"), appliesTo: formString(fd, "appliesTo") }, async (ctx, d) => (await updateFeeCategory(ctx, d), "Fee head saved."));
+}
+export async function setCategoryActiveAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(setActiveSchema, active(fd), async (ctx, d) => (await setFeeCategoryActive(ctx, d), d.active ? "Fee head activated." : "Fee head deactivated."));
+}
+
+// Number formats
+export async function updateFeeNumberFormatsAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(feeNumberFormatsSchema, { feeReceipt: formString(fd, "feeReceipt"), feeInvoice: formString(fd, "feeInvoice") }, async (ctx, d) => (await updateFeeNumberFormats(ctx, d), "Number formats saved."));
+}
+
+// Installments
+export async function createInstallmentAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { academicSessionId: formString(fd, "academicSessionId"), name: formString(fd, "name"), dueOn: formString(fd, "dueOn"), sortOrder: formString(fd, "sortOrder") || "0" };
+  return run(createInstallmentSchema, raw, async (ctx, d) => (await createFeeInstallment(ctx, d), "Installment added."));
+}
+export async function updateInstallmentAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { ...ref(fd), name: formString(fd, "name"), dueOn: formString(fd, "dueOn"), sortOrder: formString(fd, "sortOrder") || "0" };
+  return run(updateInstallmentSchema, raw, async (ctx, d) => (await updateFeeInstallment(ctx, d), "Installment saved."));
+}
+export async function deleteInstallmentAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(refSchema, ref(fd), async (ctx, d) => (await deleteFeeInstallment(ctx, d), "Installment deleted."));
+}
+
+// Late fee
+export async function setLateFeeRuleAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const cap = formString(fd, "cap").trim();
+  const raw = { academicSessionId: formString(fd, "academicSessionId"), graceDays: formString(fd, "graceDays"), calc: formString(fd, "calc"), value: formString(fd, "value"), cap: cap === "" ? null : cap };
+  return run(setLateFeeRuleSchema, raw, async (ctx, d) => (await setLateFeeRule(ctx, d), "Late fee rule saved."));
+}
+export async function clearLateFeeRuleAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(clearLateFeeRuleSchema, { academicSessionId: formString(fd, "academicSessionId") }, async (ctx, d) => (await clearLateFeeRule(ctx, d.academicSessionId), "Late fee turned off."));
+}
+
+// Structures
+export async function createStructureAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { academicSessionId: formString(fd, "academicSessionId"), classId: formString(fd, "classId"), name: formString(fd, "name"), items: items(fd) };
+  return run(createStructureSchema, raw, async (ctx, d) => {
+    const st = await createFeeStructure(ctx, d);
+    return st?.isActive ? "Fee structure added and active." : "Fee structure added (inactive: the class already has an active one).";
+  });
+}
+export async function updateStructureAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(updateStructureSchema, { ...ref(fd), name: formString(fd, "name"), items: items(fd) }, async (ctx, d) => (await updateFeeStructure(ctx, d), "Fee structure saved."));
+}
+export async function copyStructureAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(copyStructureSchema, { id: formString(fd, "id"), name: formString(fd, "name") }, async (ctx, d) => (await copyFeeStructure(ctx, d), "Copy created (inactive)."));
+}
+export async function setStructureActiveAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(setActiveSchema, active(fd), async (ctx, d) => (await setFeeStructureActive(ctx, d), d.active ? "Structure is now active for new invoices." : "Structure deactivated."));
+}

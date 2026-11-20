@@ -1,6 +1,6 @@
 # Phase 5 — Fee and finance management: assessment and implementation plan
 
-**Status: decisions FC1–FC26 APPROVED as recommended (owner, 2026-11-20).** Catalog change FC6 / FC13 made and synced to development and Test (86 / 13 / 312). 5A-M1 done: migration `20261124000000` applied to development and Test 2026-11-20. The §9 questions for the school are still open (they shape setup data and screens, not the schema). Like Phases 3 and 4, Phase 5 is split (FC1): **5A** fee setup and billing · **5B** counter collection, receipts and cancellation · **5C** reports, reconciliation and opening-balance import. Online payments are designed here but deferred to Phase 6 (FC16).
+**Status: decisions FC1–FC26 APPROVED as recommended (owner, 2026-11-20).** Catalog change FC6 / FC13 made and synced to development and Test (86 / 13 / 312). 5A-M1 done: migration `20261124000000` applied to development and Test 2026-11-20. 5A-M2 (setup services and screens) built 2026-11-20. The §9 questions for the school are still open (they shape setup data and screens, not the schema). Like Phases 3 and 4, Phase 5 is split (FC1): **5A** fee setup and billing · **5B** counter collection, receipts and cancellation · **5C** reports, reconciliation and opening-balance import. Online payments are designed here but deferred to Phase 6 (FC16).
 
 Drafted by the architect agent (read-only) from the code; key claims spot-checked (no user ↔ student link, `lib/money.ts` missing, `students.policy` refuses CHILDREN / SELF).
 
@@ -238,3 +238,10 @@ Fixed in the draft migration / pure modules: M1 (receipt and allocation immutabi
 - **I3:** late-fee waivers by the collector (FC7) appear in the concession register with who / when.
 - **I4:** `StudentConcession.reason`, `fee_invoice.cancel_reason` and `fee_payment.cancel_reason` are read only with the fee permission that decides them, never in default selects, audit rows or CSVs; `receiptSnapshot` is built from a whitelist (school letterhead, student name / ID / class, items, amounts, method, reference, date, receipt number, collector name) — never Aadhaar, medical data, guardian phone or address.
 - **I1:** a delegated admin without `fee.concession.approve` / `fee.refund` can no longer modify Principal accounts (anti-escalation working as intended; noted in AUTHENTICATION_AND_RBAC.md).
+
+## 11. Security review 5A-M2 — carried forward (2026-11-20)
+
+Fixed in 5A-M2: M1 interim freeze (ever-active structures in invoiced classes), M2 (items re-checked on activate / copy), L1 (only {SEQ} takes a width; `validateFormat` too), L4 (totals fit Decimal(12,2)), L5 (closed sessions don't block deactivating a head), L6 (RBAC integration cases for the number formats; Parent refused at service level).
+- **5A-M4 (generation):** add `FeeInvoice.structureId` and freeze exactly the invoiced structures (KI-103); generation and invoice cancellation take `lockFeeSetup` first (I5).
+- **5B (issue / collection), L2:** render the receipt / invoice number inside the transaction and refuse with a fixed message if it exceeds 40 characters or {CODE} has no short code (the profile or session names may change after the formats were saved).
+- **KI-104 (L3) resolved:** once numbers exist, only `settings.manage` may change the formats.
