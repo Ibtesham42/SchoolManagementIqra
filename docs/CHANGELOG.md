@@ -4,6 +4,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added (Phase 5A — invoices)
+- **Invoices** (Fees → Invoices): choose a class and an installment, check the preview (who is billed, how much, who is skipped and why), then issue the invoices in one step. They are numbered from the school's invoice format, include approved concessions and extra charges, and running it again only adds students who don't have the invoice yet. An unpaid invoice can be cancelled with a reason and issued again.
+- Approving or revoking a concession updates the student's unpaid invoices straight away.
+- **Student fee page**: every invoice of a student across sessions, with its lines, concessions and the balance due.
+
 ### Added (Phase 5A — concessions and extra charges)
 - **Concessions** (Fees → Concessions): the school's concessions and scholarships, as a percentage or a fixed amount on every installment, on chosen fee heads. The accountant proposes one for a student with a reason; the Principal (or another person with approval rights) approves or rejects it — nobody decides their own proposal. Each proposal shows its effect for the whole session. Approved concessions can be revoked for future invoices.
 - **Extra charges** (Fees → Extra charges): one-off charges for one student on one installment (hostel, an activity, a bounced-cheque charge), added to that installment's invoice.

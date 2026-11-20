@@ -34,6 +34,8 @@ import {
   updateFeeStructure,
 } from "@/modules/fees/setup.service";
 import { updateFeeNumberFormats } from "@/modules/settings/settings.service";
+import { cancelInvoiceSchema, generateInvoicesSchema } from "@/modules/fees/invoices.schemas";
+import { cancelInvoice, issueInvoices } from "@/modules/fees/invoices.service";
 import { addChargeSchema, concessionRefSchema, createConcessionSchema, decideConcessionSchema, proposeConcessionSchema, updateConcessionSchema } from "@/modules/fees/concessions.schemas";
 import { addCharge, createConcession, decideConcession, proposeConcession, removeCharge, revokeConcession, setConcessionActive, updateConcession } from "@/modules/fees/concessions.service";
 
@@ -158,4 +160,20 @@ export async function addChargeAction(_prev: ActionState, fd: FormData): Promise
 }
 export async function removeChargeAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return run(concessionRefSchema, ref(fd), async (ctx, d) => (await removeCharge(ctx, d), "Charge removed."));
+}
+
+// ───────────────────────────── Phase 5A-M4: invoices ─────────────────────────────
+
+export async function issueInvoicesAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { academicSessionId: formString(fd, "academicSessionId"), classId: formString(fd, "classId"), installmentId: formString(fd, "installmentId") };
+  const countRaw = formString(fd, "expectedCount");
+  const count = Number(countRaw);
+  const expected = /^\d{1,5}$/.test(countRaw) && Number.isInteger(count) ? { count, total: formString(fd, "expectedTotal"), structureId: formString(fd, "expectedStructure") } : undefined;
+  return run(generateInvoicesSchema, raw, async (ctx, d) => {
+    const r = await issueInvoices(ctx, d, expected);
+    return !r || r.issued === 0 ? "Nothing to issue: everyone billable already has this invoice." : `${r.issued} invoice${r.issued === 1 ? "" : "s"} issued.`;
+  });
+}
+export async function cancelInvoiceAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(cancelInvoiceSchema, { ...ref(fd), reason: formString(fd, "reason") }, async (ctx, d) => (await cancelInvoice(ctx, d), "Invoice cancelled. It can be issued again."));
 }

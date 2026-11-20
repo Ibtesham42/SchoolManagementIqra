@@ -10,6 +10,15 @@
 
 ## Log
 
+### 2026-11-20 — Phase 5A-M4: invoice generation, cancellation, re-pricing, student ledger (committed; migration applied)
+- **Migration** `20261125000000_phase5a_invoice_structure` (offline diff, DRAFT): `fee_invoice.structure_id` + index + composite FK (structure, session) + CHECK kind INSTALLMENT ⇔ structure. Expand-only on an empty table. **Owner-approved and applied 2026-11-20:** development (`ep-quiet-river`) 18:17:37Z and Test (`ep-quiet-brook`, host confirmed by `migrate status` before the deploy) 18:18:38Z — `env:check` PASSED, drift exit 0 on both, `db:check` ✓ (51 Phase 5A CHECKs validated). Guard `tests/unit/migration-phase5a4.test.ts` (2); `db:check` +1 CHECK.
+- **Pure** `fees/invoice-build.ts`: build one invoice (heads by who pays, zero lines dropped, concessions on structure lines only, charges attached, WAIVED at 0) and re-price items (late fees outside the subtotal).
+- **Service** `fees/invoices.{schemas,service}.ts`: preview (no writes) and issue per class + installment from the ACTIVE structure (billable enrollments only, already-invoiced skipped → idempotent, approved concessions, unbilled charges, one sequence block, format required, numbers ≤ 40 chars, structure recorded); cancel only unpaid invoices in a generating session (charges re-created unbilled if still billable); `repriceUnpaidInvoicesTx` called on concession approve / revoke; `listInvoices`; `getStudentFeeLedger` (`fee.read` ALL). `setup.service` freeze is now exact (KI-103). `students/enrollment-reads.tx.ts` + `classEnrollments`.
+- **Screens** `/erp/fees/invoices` (class / installment picker, preview, issue with the previewed figures, list, cancel, "not issued again" notice) and `/erp/fees/students/[id]` (ledger).
+- **Security review (security-auditor, read-only):** no Critical / High. Fixed M1–M3 and L1–L5 (PHASE_5_PLAN.md §13).
+- Tests: unit `tests/unit/fee-invoices.test.ts` (8), `migration-phase5a4.test.ts` (2); integration `tests/integration/fees-invoices.test.ts` (4) — **not run (KI-059; needs the migration on Test)**.
+- Gates (after fixes): lint ✓, typecheck ✓, check:deps ✓, unit 94 files / 2,750 ✓, `next build` ✓.
+
 ### 2026-11-20 — Phase 5A-M3: concessions and extra charges (committed)
 - **Services** `fees/concessions.{schemas,service}.ts`: templates (percent or FIXED per installment on chosen heads; value and heads fixed once a proposal or approval uses them), student concessions PROPOSED (`fee.concession.manage`) → APPROVED / REJECTED (`fee.concession.approve`, never the proposer — Super Admin included; unknown proposer → Super Admin only), REVOKED by an approver; session-effect estimate from the class's active fees (billed installments and applicable heads only); per-student MANUAL charges (`fee.structure.manage`), removable until invoiced. Reasons visible to concession staff only, never audited. Writes under the fee-setup lock.
 - `students/enrollment-reads.tx.ts`: read-only enrollment search / summary (names, permanent IDs, class / section; no contact, guardian or sensitive data; soft-deleted excluded; LIKE wildcards escaped).

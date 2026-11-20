@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /** Server-rendered sub-navigation of the fees area (Phase 5A-M2: setup screens). */
-export function FeesTabs({ current, session }: { current: "heads" | "schedule" | "structures" | "concessions" | "charges"; session?: string }) {
+export function FeesTabs({ current, session }: { current: "heads" | "schedule" | "structures" | "concessions" | "charges" | "invoices"; session?: string }) {
   const q = session ? `?session=${encodeURIComponent(session)}` : "";
   const tabs = [
     { key: "heads", href: "/erp/fees", label: "Fee heads" },
@@ -10,6 +10,7 @@ export function FeesTabs({ current, session }: { current: "heads" | "schedule" |
     { key: "structures", href: `/erp/fees/structures${q}`, label: "Class fees" },
     { key: "concessions", href: `/erp/fees/concessions${q}`, label: "Concessions" },
     { key: "charges", href: `/erp/fees/charges${q}`, label: "Extra charges" },
+    { key: "invoices", href: `/erp/fees/invoices${q}`, label: "Invoices" },
   ];
   return (
     <nav aria-label="Fees" className="flex gap-1 overflow-x-auto border-b">

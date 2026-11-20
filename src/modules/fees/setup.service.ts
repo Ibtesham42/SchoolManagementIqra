@@ -31,10 +31,9 @@ import type {
  * - Categories: code and kind are fixed once used; deactivate, never delete. System kinds (TRANSPORT, LATE_FEE,
  *   OPENING_BALANCE) are created by the fee services themselves, never here.
  * - Installments: deleted only while nothing uses them (no structure amount, charge or invoice).
- * - Structures: one ACTIVE per (session, class) — partial unique. Review 5A-M2 M1: a structure that has EVER been
- *   active (append-only audit history) is FROZEN once its class has a live invoice in the session — deactivating it
- *   doesn't unfreeze it. Changes go through a copy that has never been active, which is then activated for future
- *   invoices. (Exact per-structure freezing needs FeeInvoice.structureId — KI-103, with the generation migration.)
+ * - Structures: one ACTIVE per (session, class) — partial unique. A structure is FROZEN once any live invoice was made
+ *   from it (FeeInvoice.structureId, KI-103 — exact, whether or not it is still active). Changes go through a copy,
+ *   which is then activated for future invoices.
  *   Items only for active, school-kind categories and the session's installments — re-checked on activate and copy
  *   (review M2). Totals fit Decimal(12,2) per installment and overall (review L4).
  * - Late fee: one active rule per session; setting a new one retires the old one (history kept).
@@ -233,26 +232,11 @@ export async function deleteFeeInstallment(ctx: AuthContext, input: RefInput) {
 
 // ───────────────────────────── Structures ─────────────────────────────
 
-/** Live invoices of the class in the session. */
-async function classInvoiceCount(db: Tx | typeof prisma, academicSessionId: string, classId: string) {
-  return db.feeInvoice.count({ where: { academicSessionId, kind: "INSTALLMENT", deletedAt: null, enrollment: { section: { classId } } } });
-}
-
-/** Has this structure ever been active? Read from the append-only audit rows (created active, or activated). */
-async function everActive(db: Tx | typeof prisma, ids: string[]): Promise<Set<string>> {
+/** KI-103 (migration 20261125000000): a structure is frozen once any live invoice was made from it. */
+async function invoicedStructures(db: Tx | typeof prisma, ids: string[]): Promise<Set<string>> {
   if (ids.length === 0) return new Set();
-  const rows = await db.auditLog.findMany({
-    where: { entityType: "FeeStructure", entityId: { in: ids }, action: { in: ["fee_structure.create", "fee_structure.status_change"] }, after: { path: ["isActive"], equals: true } },
-    select: { entityId: true },
-    distinct: ["entityId"],
-  });
-  return new Set(rows.map((r) => r.entityId).filter((x): x is string => x !== null));
-}
-
-/** Review M1: frozen = ever active AND the class has live invoices in the session. */
-async function isFrozen(db: Tx | typeof prisma, st: { id: string; isActive: boolean; academicSessionId: string; classId: string }) {
-  if ((await classInvoiceCount(db, st.academicSessionId, st.classId)) === 0) return false;
-  return st.isActive || (await everActive(db, [st.id])).has(st.id);
+  const rows = await db.feeInvoice.groupBy({ by: ["structureId"], where: { structureId: { in: ids }, deletedAt: null }, _count: { _all: true } });
+  return new Set(rows.map((r) => r.structureId).filter((x): x is string => x !== null));
 }
 
 export async function listFeeStructures(ctx: AuthContext, academicSessionId: string) {
@@ -271,9 +255,7 @@ export async function listFeeStructures(ctx: AuthContext, academicSessionId: str
       items: { select: { categoryId: true, installmentId: true, amount: true }, take: 400 },
     },
   });
-  const invoiced = new Map<string, number>();
-  for (const classId of new Set(rows.map((r) => r.classId))) invoiced.set(classId, await classInvoiceCount(prisma, academicSessionId, classId));
-  const wasActive = await everActive(prisma, rows.filter((r) => (invoiced.get(r.classId) ?? 0) > 0 && !r.isActive).map((r) => r.id));
+  const invoiced = await invoicedStructures(prisma, rows.map((r) => r.id));
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
@@ -281,7 +263,7 @@ export async function listFeeStructures(ctx: AuthContext, academicSessionId: str
     className: r.class.name,
     isActive: r.isActive,
     version: r.version,
-    frozen: (invoiced.get(r.classId) ?? 0) > 0 && (r.isActive || wasActive.has(r.id)),
+    frozen: invoiced.has(r.id),
     items: r.items.map((i) => ({ categoryId: i.categoryId, installmentId: i.installmentId, amount: moneyString(i.amount.toString()) })),
     total: moneyString(r.items.reduce((a, i) => a.plus(i.amount.toString()), toMoney("0"))),
   }));
@@ -344,7 +326,7 @@ export async function updateFeeStructure(ctx: AuthContext, input: UpdateStructur
   try {
     await prisma.$transaction(async (tx) => {
       const st = await lockStructure(tx, input.id, input.version);
-      if (await isFrozen(tx, st)) {
+      if ((await invoicedStructures(tx, [st.id])).size > 0) {
         throw new ConflictError("Invoices were issued with this structure, so its amounts are fixed. Copy it, change the copy and make the copy active for future invoices.");
       }
       const total = await checkItems(tx, st.academicSessionId, input.items);

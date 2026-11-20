@@ -62,3 +62,17 @@ export async function enrollmentSummary(db: Db, studentId: string, academicSessi
   const r = await db.studentEnrollment.findFirst({ where: { studentId, academicSessionId, student: { deletedAt: null } }, select: SELECT });
   return r ? shape(r) : null;
 }
+
+/**
+ * Enrollments of one class in a session for invoice generation (ACTIVE and LEFT; promoted / detained are never
+ * billed again — the caller applies the billing rules). At most `limit` rows, ordered by student.
+ */
+export async function classEnrollments(db: Db, academicSessionId: string, classId: string, limit: number): Promise<EnrollmentSummary[]> {
+  const rows = await db.studentEnrollment.findMany({
+    where: { academicSessionId, status: { in: ["ACTIVE", "LEFT"] }, section: { classId }, student: { deletedAt: null } },
+    orderBy: [{ student: { fullNameNormalized: "asc" } }, { studentId: "asc" }],
+    take: limit,
+    select: SELECT,
+  });
+  return rows.map(shape);
+}

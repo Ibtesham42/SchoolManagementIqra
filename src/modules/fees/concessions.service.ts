@@ -11,6 +11,7 @@ import { priceLines, type ConcessionInput } from "./fee-calc";
 import { billableInstallments, itemApplies, sessionGeneratesInvoices } from "./fee-rules";
 import { authorizeFeeWrite, canReadFees, holdsAll } from "./fees.policy";
 import { lockFeeSetup } from "./fees.tx";
+import { repriceUnpaidInvoicesTx } from "./invoices.service";
 import type { AddChargeInput, ConcessionRefInput, CreateConcessionInput, DecideConcessionInput, ProposeConcessionInput, UpdateConcessionInput } from "./concessions.schemas";
 
 /**
@@ -29,6 +30,7 @@ import type { AddChargeInput, ConcessionRefInput, CreateConcessionInput, DecideC
  * - The reason is personal-tier text (review 5A I4): returned only to concession managers / approvers, never audited.
  * - Charges: `fee.structure.manage`; MANUAL extras on one installment for one enrollment; removable until invoiced.
  * Writes take the fee-setup lock first (invoice generation reads concessions and charges under the same lock).
+ * Approving or revoking re-prices the student's fully unpaid invoices of the session in the same transaction (FC6).
  */
 const actorOf = (ctx: AuthContext): AuditActor => ({ userId: ctx.userId, label: ctx.username, ipHash: ctx.ipHash, requestId: ctx.requestId });
 const stale = (what: string) => new ConflictError(`This ${what} was changed by someone else. Reload the page and try again.`);
@@ -293,7 +295,7 @@ export async function proposeConcession(ctx: AuthContext, input: ProposeConcessi
 async function lockStudentConcession(tx: Tx, id: string, version: number) {
   const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM student_concession WHERE id = ${id} FOR UPDATE`;
   if (rows.length === 0) throw new NotFoundError("Concession not found.");
-  const r = await tx.studentConcession.findUniqueOrThrow({ where: { id }, select: { id: true, status: true, version: true, proposedById: true, academicSessionId: true, concession: { select: { isActive: true } } } });
+  const r = await tx.studentConcession.findUniqueOrThrow({ where: { id }, select: { id: true, status: true, version: true, proposedById: true, academicSessionId: true, studentId: true, concession: { select: { isActive: true } } } });
   if (r.version !== version) throw stale("concession");
   return r;
 }
@@ -312,14 +314,16 @@ export async function decideConcession(ctx: AuthContext, input: DecideConcession
       if (input.decision === "APPROVE" && !r.concession.isActive) throw new ConflictError("This concession template was deactivated, so it can only be rejected.");
       const status = input.decision === "APPROVE" ? "APPROVED" : "REJECTED";
       await tx.studentConcession.update({ where: { id: r.id }, data: { status, decidedById: ctx.userId, decidedAt: new Date(), version: { increment: 1 } } });
-      await audit(tx, actorOf(ctx), { action: input.decision === "APPROVE" ? "student_concession.approve" : "student_concession.reject", entityType: "StudentConcession", entityId: r.id, before: { status: r.status }, after: { status } });
+      // FC6: an approval also re-prices the student's unpaid invoices of the session (same transaction, setup lock held).
+      const repriced = status === "APPROVED" ? await repriceUnpaidInvoicesTx(tx, r.studentId, r.academicSessionId) : 0;
+      await audit(tx, actorOf(ctx), { action: input.decision === "APPROVE" ? "student_concession.approve" : "student_concession.reject", entityType: "StudentConcession", entityId: r.id, before: { status: r.status }, after: { status, invoicesRepriced: repriced } });
     });
   } catch (e) {
     mapErrors(e, "concession");
   }
 }
 
-/** Withdraw an approved concession for future invoices (issued invoices keep theirs). */
+/** Withdraw an approved concession: future invoices and the student's fully unpaid invoices lose it (FC6). */
 export async function revokeConcession(ctx: AuthContext, input: ConcessionRefInput) {
   authorizeFeeWrite(ctx, "fee.concession.approve");
   try {
@@ -329,7 +333,8 @@ export async function revokeConcession(ctx: AuthContext, input: ConcessionRefInp
       if (r.status !== "APPROVED") throw new ConflictError("Only an approved concession can be revoked.");
       await writableSession(tx, r.academicSessionId);
       await tx.studentConcession.update({ where: { id: r.id }, data: { status: "REVOKED", version: { increment: 1 } } });
-      await audit(tx, actorOf(ctx), { action: "student_concession.revoke", entityType: "StudentConcession", entityId: r.id, before: { status: r.status }, after: { status: "REVOKED" } });
+      const repriced = await repriceUnpaidInvoicesTx(tx, r.studentId, r.academicSessionId);
+      await audit(tx, actorOf(ctx), { action: "student_concession.revoke", entityType: "StudentConcession", entityId: r.id, before: { status: r.status }, after: { status: "REVOKED", invoicesRepriced: repriced } });
     });
   } catch (e) {
     mapErrors(e, "concession");
@@ -389,6 +394,9 @@ export async function addCharge(ctx: AuthContext, input: AddChargeInput) {
       // Review L5: same enrollment rules as billing — otherwise the charge would never reach an invoice.
       if (e.status === "PROMOTED" || e.status === "DETAINED") throw new ConflictError("This enrollment is closed (promoted or detained).");
       if (billableInstallments(e, [{ id: inst.id, dueOn: iso(inst.dueOn) }]).length === 0) throw new ConflictError("The student isn't billed for this installment (joined after it, or left before it).");
+      // Review 5A-M4 M3: a charge for an installment already invoiced would never be billed.
+      const invoiced = await tx.feeInvoice.count({ where: { studentId: input.studentId, academicSessionId: input.academicSessionId, installmentId: inst.id, kind: "INSTALLMENT", deletedAt: null } });
+      if (invoiced > 0) throw new ConflictError("This student's invoice for that installment is already issued. Add the charge to a later installment, or cancel and re-issue the invoice.");
       const row = await tx.studentFeeCharge.create({
         data: { studentId: input.studentId, academicSessionId: input.academicSessionId, installmentId: input.installmentId, categoryId: input.categoryId, amount: input.amount, note: input.note, createdById: ctx.userId },
         select: { id: true },

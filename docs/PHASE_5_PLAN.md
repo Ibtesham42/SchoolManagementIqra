@@ -1,6 +1,6 @@
 # Phase 5 — Fee and finance management: assessment and implementation plan
 
-**Status: decisions FC1–FC26 APPROVED as recommended (owner, 2026-11-20).** Catalog change FC6 / FC13 made and synced to development and Test (86 / 13 / 312). 5A-M1 done: migration `20261124000000` applied to development and Test 2026-11-20. 5A-M2 (setup services and screens) built 2026-11-20. 5A-M3 (concessions, charges) built 2026-11-20; re-pricing of unpaid invoices moves to 5A-M4 (needs invoices). The §9 questions for the school are still open (they shape setup data and screens, not the schema). Like Phases 3 and 4, Phase 5 is split (FC1): **5A** fee setup and billing · **5B** counter collection, receipts and cancellation · **5C** reports, reconciliation and opening-balance import. Online payments are designed here but deferred to Phase 6 (FC16).
+**Status: decisions FC1–FC26 APPROVED as recommended (owner, 2026-11-20).** Catalog change FC6 / FC13 made and synced to development and Test (86 / 13 / 312). 5A-M1 done: migration `20261124000000` applied to development and Test 2026-11-20. 5A-M2 (setup services and screens) built 2026-11-20. 5A-M3 (concessions, charges) built 2026-11-20. 5A-M4 (invoice generation, cancel, re-pricing, ledger) built 2026-11-20; migration `20261125000000` drafted. The §9 questions for the school are still open (they shape setup data and screens, not the schema). Like Phases 3 and 4, Phase 5 is split (FC1): **5A** fee setup and billing · **5B** counter collection, receipts and cancellation · **5C** reports, reconciliation and opening-balance import. Online payments are designed here but deferred to Phase 6 (FC16).
 
 Drafted by the architect agent (read-only) from the code; key claims spot-checked (no user ↔ student link, `lib/money.ts` missing, `students.policy` refuses CHILDREN / SELF).
 
@@ -252,3 +252,9 @@ Fixed: M1 (every fee write right counts at ALL scope only — `fees.policy.autho
 - **Accepted (L7):** the student search term is in the URL of an authenticated, same-origin page (browser history / server logs). Revisit with the collection screen (5B), which should POST its search.
 - **5A-M4:** when a concession is approved or revoked, re-price the student's unpaid open invoices in the same transaction (FC6); stacked concessions on one invoice follow fee-calc (percents add, capped at 100 %).
 - Proposals for LEFT enrollments stay allowed (unpaid dues may still be reduced).
+
+## 13. Security review 5A-M4 — carried forward (2026-11-20)
+
+Fixed: M1 (cancel only while the session generates invoices, so a cancelled invoice can always be re-issued; the invoices list flags cancelled invoices not issued again), M2 (refusal tests for every invoice function incl. narrow-scope custom roles), M3 (a charge for an installment already invoiced is refused), L1 (re-pricing locks with the full "unpaid" predicate), L2 (fixed line order), L3 (issue checks the previewed count, total and structure), L4 (settings row FOR SHARE during numbering; format / amount failures are fixed messages; invoice-number collisions named), L5 (re-created charges re-checked for billability; ids audited).
+- **5B:** collection takes the per-student lock and must also take it before re-pricing touches the student's invoices (order: fee setup → student → invoice rows → sequence).
+- **5C reports:** a "cancelled and not re-issued" register (cancelled invoices with no live replacement) next to the concession register (R4).

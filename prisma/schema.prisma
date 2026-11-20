@@ -2144,6 +2144,7 @@ model FeeStructure {
   academicSession AcademicSession    @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
   class           SchoolClass        @relation(fields: [classId], references: [id], onDelete: Restrict)
   items           FeeStructureItem[]
+  invoices        FeeInvoice[]
 
   @@unique([id, academicSessionId])
   /// Partial unique indexes (migration 20261124000000; declared for drift checks — partialIndexes preview).
@@ -2293,6 +2294,9 @@ model FeeInvoice {
   academicSessionId String           @map("academic_session_id")
   kind              FeeInvoiceKind   @default(INSTALLMENT)
   installmentId     String?          @map("installment_id")
+  /// KI-103 (migration 20261125000000): the fee structure an INSTALLMENT invoice was made from (null for opening
+  /// balances). Freezes exactly that structure; CHECK kind INSTALLMENT ⇔ structure set.
+  structureId       String?          @map("structure_id")
   /// Snapshot of the installment's due date at issue (an installment edit never moves issued invoices).
   dueOn             DateTime         @map("due_on") @db.Date
   subtotal          Decimal          @db.Decimal(12, 2)
@@ -2313,6 +2317,7 @@ model FeeInvoice {
 
   enrollment  StudentEnrollment      @relation(fields: [studentId, academicSessionId], references: [studentId, academicSessionId], onDelete: Restrict)
   installment FeeInstallment?        @relation(fields: [installmentId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  structure   FeeStructure?          @relation(fields: [structureId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
   issuedBy    User?                  @relation("FeeInvoiceIssuedBy", fields: [issuedById], references: [id], onDelete: SetNull)
   cancelledBy User?                  @relation("FeeInvoiceCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
   items       FeeInvoiceItem[]
@@ -2325,6 +2330,7 @@ model FeeInvoice {
   @@unique([studentId, academicSessionId], map: "fee_invoice_live_opening_key", where: raw("(deleted_at IS NULL) AND (kind = 'OPENING_BALANCE'::\"FeeInvoiceKind\")"))
   @@index([studentId, status])
   @@index([academicSessionId, installmentId])
+  @@index([structureId])
   @@index([status, dueOn])
   @@map("fee_invoice")
 }

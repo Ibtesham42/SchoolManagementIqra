@@ -53,3 +53,6 @@ export function normalizeBankName(raw: string): string | null {
 
 export type PaymentMethod = "CASH" | "UPI" | "BANK_TRANSFER" | "CHEQUE" | "CARD";
 export const needsReference = (m: PaymentMethod) => m !== "CASH";
+
+/** Invoice item kinds (same values as the FeeInvoiceItemKind enum; kept here so pure code needs no Prisma import). */
+export type InvoiceItemKindLite = "STRUCTURE" | "CHARGE" | "LATE_FEE" | "OPENING_BALANCE";

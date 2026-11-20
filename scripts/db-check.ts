@@ -69,6 +69,8 @@ const PHASE_4C_CHECK_COUNT = 11;
 const PHASE_4C_TABLES = ["promotion_decision", "homework", "academic_event"];
 /** Phase 5A migration 20261124000000 (tests/unit/migration-phase5a.test.ts pins the same numbers). */
 const PHASE_5A_CHECK_COUNT = 50;
+/** Phase 5A-M4 migration 20261125000000 (tests/unit/migration-phase5a4.test.ts): +1 CHECK on fee_invoice. */
+const PHASE_5A4_CHECK = "fee_invoice_structure_kind";
 const PHASE_5A_TABLES = ["fee_category", "fee_installment", "fee_structure", "fee_structure_item", "fee_concession", "fee_concession_category", "student_concession", "late_fee_rule", "student_fee_charge", "fee_invoice", "fee_invoice_item", "fee_payment", "fee_payment_allocation"];
 const PHASE_5A_PARTIAL_INDEXES = ["fee_structure_active_key", "late_fee_rule_active_key", "student_concession_live_key", "fee_invoice_live_installment_key", "fee_invoice_live_opening_key", "fee_payment_live_utr_key", "fee_payment_live_cheque_key", "fee_payment_live_card_key", "student_fee_charge_live_source_key"];
 const PHASE_5A_TRIGGERS = ["fee_payment_immutable", "fee_payment_allocation_immutable"];
@@ -311,6 +313,13 @@ async function main() {
       if (!ok) constraintProblems++;
     }
 
+    const expected5a = PHASE_5A_CHECK_COUNT + (applied.has("20261125000000_phase5a_invoice_structure") ? 1 : 0);
+    if (applied.has("20261125000000_phase5a_invoice_structure")) {
+      const c = await client.query<{ v: boolean }>("select convalidated v from pg_constraint where conname = $1 and contype = 'c'", [PHASE_5A4_CHECK]);
+      const ok = c.rows[0]?.v === true;
+      console.log(ok ? `✓ Phase 5A-M4 invoice ↔ structure CHECK validated` : `✗ Phase 5A-M4: ${PHASE_5A4_CHECK} missing or not validated`);
+      if (!ok) constraintProblems++;
+    }
     if (applied.has("20261124000000_phase5a_fees")) {
       const c = await client.query<{ n: string; v: string }>(
         "select count(*)::text n, count(*) filter (where convalidated)::text v from pg_constraint where contype = 'c' and conrelid::regclass::text = any($1)",
@@ -320,11 +329,11 @@ async function main() {
       const partial = idx.rows.filter((r) => / WHERE /.test(r.indexdef)).length;
       const trg = await client.query<{ n: string }>("select count(*)::text n from pg_trigger where not tgisinternal and tgenabled = 'O' and tgname = any($1)", [PHASE_5A_TRIGGERS]);
       const ok =
-        c.rows[0]?.n === String(PHASE_5A_CHECK_COUNT) && c.rows[0]?.v === String(PHASE_5A_CHECK_COUNT) && partial === PHASE_5A_PARTIAL_INDEXES.length && trg.rows[0]?.n === String(PHASE_5A_TRIGGERS.length);
+        c.rows[0]?.n === String(expected5a) && c.rows[0]?.v === String(expected5a) && partial === PHASE_5A_PARTIAL_INDEXES.length && trg.rows[0]?.n === String(PHASE_5A_TRIGGERS.length);
       console.log(
         ok
-          ? `✓ ${PHASE_5A_CHECK_COUNT} Phase 5A fee CHECK constraints validated; ${PHASE_5A_PARTIAL_INDEXES.length} partial unique indexes; receipt immutability triggers enabled`
-          : `✗ Phase 5A: ${c.rows[0]?.n} CHECKs present, ${c.rows[0]?.v} validated (expected ${PHASE_5A_CHECK_COUNT}); ${partial}/${PHASE_5A_PARTIAL_INDEXES.length} partial indexes; ${trg.rows[0]?.n}/${PHASE_5A_TRIGGERS.length} triggers`,
+          ? `✓ ${expected5a} Phase 5A fee CHECK constraints validated; ${PHASE_5A_PARTIAL_INDEXES.length} partial unique indexes; receipt immutability triggers enabled`
+          : `✗ Phase 5A: ${c.rows[0]?.n} CHECKs present, ${c.rows[0]?.v} validated (expected ${expected5a}); ${partial}/${PHASE_5A_PARTIAL_INDEXES.length} partial indexes; ${trg.rows[0]?.n}/${PHASE_5A_TRIGGERS.length} triggers`,
       );
       if (!ok) constraintProblems++;
     }
