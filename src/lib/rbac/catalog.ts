@@ -87,6 +87,8 @@ export const PERMISSIONS = {
   "result.read": "View results",
   "result.publish": "Publish results",
   "reportcard.generate": "Generate report cards",
+  // Phase 4C (owner decision 2026-11-20): homework for allocated subjects.
+  "homework.manage": "Post and manage homework",
   // Library & inventory
   "library.read": "View library",
   "library.manage": "Manage library catalogue",
@@ -166,6 +168,8 @@ const TEACHER: Grant[] = [
   ["attendance.student.read", "ASSIGNED"],
   ["marks.enter", "ASSIGNED"],
   ["result.read", "ASSIGNED"],
+  // Phase 4C (owner 2026-11-20): homework for the subjects the teacher is allocated in each section.
+  ["homework.manage", "ASSIGNED"],
   "timetable.read",
   "leave.request",
   ["salary.self.read", "SELF"],
@@ -202,6 +206,8 @@ export const ROLES: RoleDefinition[] = [
       ...MY_SLIPS,
       // Phase 4 (owner decisions AC11, AC12 — 2026-11-19): exams and report cards.
       "exam.manage", "reportcard.generate",
+      // Phase 4C (owner 2026-11-20): homework for every section.
+      "homework.manage",
       "academic.read", "academic.manage", "timetable.read", "timetable.manage", "library.read", "inventory.read",
       "import.run", "export.run", "notice.read", "notification.send",
     ],

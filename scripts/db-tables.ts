@@ -69,6 +69,10 @@ export const APP_TABLES_IN_FK_ORDER = [
   "marks_sheet", // → academic_session, exam_subject, section, user
   "examination_marks", // → academic_session, marks_sheet, student_enrollment, user
   "report_card", // → academic_session, examination, student_enrollment, generated_document
+  // Phase 4C promotion, homework, calendar — migration 20261123000000 (DRAFT: awaiting SQL approval).
+  "promotion_decision", // → academic_session, student_enrollment, school_class, user
+  "homework", // → academic_session, section, class_subject, user
+  "academic_event", // → academic_session
   "audit_log",
   "notification",
   "sequence_counter",

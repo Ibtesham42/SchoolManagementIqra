@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../academic-tabs";
+import { academicTabFlags } from "../tab-flags";
 
 export const metadata = { title: "Marks" };
 
@@ -26,7 +27,7 @@ export default async function MarksPage() {
   return (
     <div className="mx-auto grid max-w-4xl gap-4">
       <PageHeader title="Marks" description="Enter marks for the subjects you teach, submit them, and approve submitted marks." />
-      <AcademicTabs current="marks" showClasses={academicAll} showSubjects={academicAll} showAttendance={hasPermission(ctx, "attendance.student.mark")} showMarks />
+      <AcademicTabs current="marks" {...academicTabFlags(ctx)} />
 
       {data.enterScope === "ASSIGNED" && (
         <Card>

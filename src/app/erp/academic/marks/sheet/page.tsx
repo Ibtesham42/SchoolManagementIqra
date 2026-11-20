@@ -16,6 +16,7 @@ import { ConfirmAction } from "@/components/erp/confirm-action";
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../../academic-tabs";
+import { academicTabFlags } from "../../tab-flags";
 import { sheetActionAction } from "../../actions";
 import { MarksGrid, type GridRow } from "./marks-grid";
 
@@ -55,7 +56,7 @@ export default async function MarksSheetPage({ searchParams }: { searchParams: P
   return (
     <div className="mx-auto grid max-w-4xl gap-4">
       <PageHeader title={`${data.subject.name} · ${data.section.code}`} description={`${data.exam.name} (${data.exam.sessionName}) · out of ${total}${data.passPercent ? ` · pass ${Number(data.passPercent)} %` : ""}`} />
-      <AcademicTabs current="marks" showClasses={academicAll} showSubjects={academicAll} showAttendance={hasPermission(ctx, "attendance.student.mark")} showMarks={hasPermission(ctx, "marks.enter") || hasPermission(ctx, "marks.approve")} />
+      <AcademicTabs current="marks" {...academicTabFlags(ctx)} />
       <p className="text-sm">
         <Link href="/erp/academic/marks" className="underline">
           Marks

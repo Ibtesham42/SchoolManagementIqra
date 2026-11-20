@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../../academic-tabs";
+import { academicTabFlags } from "../../tab-flags";
 
 export const metadata = { title: "My timetable" };
 
@@ -19,7 +20,7 @@ export default async function MyTimetablePage() {
   const header = (
     <>
       <PageHeader title="My timetable" description={session ? `Your lessons in ${session.name}.` : "Your lessons."} />
-      <AcademicTabs current="my-timetable" showClasses={academicScope === "ALL"} showSubjects={academicScope === "ALL"} showTimetable showMine />
+      <AcademicTabs current="my-timetable" {...academicTabFlags(ctx)} />
     </>
   );
   if (!session) {

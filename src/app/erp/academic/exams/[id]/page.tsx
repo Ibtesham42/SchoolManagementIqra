@@ -17,6 +17,7 @@ import { ConfirmAction } from "@/components/erp/confirm-action";
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../../academic-tabs";
+import { academicTabFlags } from "../../tab-flags";
 import { deleteExamAction, lockExamMarksAction, publishResultsAction, removeExamSubjectAction, setExamStatusAction, unlockExamMarksAction } from "../../actions";
 import { AddExamSubjectsForm, ExamForm, ExamSubjectForm } from "../exam-forms";
 
@@ -53,7 +54,7 @@ export default async function ExamPage({ params }: { params: Promise<{ id: strin
   return (
     <div className="mx-auto grid max-w-4xl gap-4">
       <PageHeader title={exam.name} description={`${exam.academicSession.name} · grading scale ${exam.gradeScale.name}`} />
-      <AcademicTabs current="exams" showClasses showSubjects showMarks={hasPermission(ctx, "marks.enter") || hasPermission(ctx, "marks.approve")} />
+      <AcademicTabs current="exams" {...academicTabFlags(ctx)} />
       <p className="text-sm">
         <Link href={`/erp/academic/exams?session=${exam.academicSession.id}`} className="underline">
           All exams

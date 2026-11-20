@@ -6,7 +6,7 @@
 
 Legend: ✓ = all records · A = assigned records only · S = own record only · C = linked children only · blank = denied
 
-Roles: 13 · Permissions: 84
+Roles: 13 · Permissions: 85
 
 | Permission | SUPER_ADMIN | SCHOOL_ADMIN | PRINCIPAL | VICE_PRINCIPAL | ACCOUNTANT | HR_MANAGER | ADMISSION_OFFICER | TEACHER | CLASS_TEACHER | TRANSPORT_MANAGER | LIBRARIAN | PARENT | STUDENT |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -79,6 +79,7 @@ Roles: 13 · Permissions: 84
 | `result.read` — View results | ✓ |  | ✓ | ✓ |  |  |  | A | A |  |  | C | S |
 | `result.publish` — Publish results | ✓ |  | ✓ | ✓ |  |  |  |  |  |  |  |  |  |
 | `reportcard.generate` — Generate report cards | ✓ | ✓ | ✓ |  |  |  |  |  | A |  |  |  |  |
+| `homework.manage` — Post and manage homework | ✓ | ✓ |  |  |  |  |  | A | A |  |  |  |  |
 | `library.read` — View library | ✓ | ✓ | ✓ | ✓ |  |  |  | ✓ | ✓ |  | ✓ |  | S |
 | `library.manage` — Manage library catalogue | ✓ |  |  |  |  |  |  |  |  |  | ✓ |  |  |
 | `library.issue` — Issue and return books | ✓ |  |  |  |  |  |  |  |  |  | ✓ |  |  |
@@ -99,15 +100,15 @@ Roles: 13 · Permissions: 84
 
 | Role | Permissions granted |
 |---|--:|
-| Super Admin (`SUPER_ADMIN`) | 84 |
-| School Admin (`SCHOOL_ADMIN`) | 44 |
+| Super Admin (`SUPER_ADMIN`) | 85 |
+| School Admin (`SCHOOL_ADMIN`) | 45 |
 | Principal (`PRINCIPAL`) | 35 |
 | Vice Principal (`VICE_PRINCIPAL`) | 25 |
 | Accountant (`ACCOUNTANT`) | 18 |
 | HR Manager (`HR_MANAGER`) | 15 |
 | Admission Officer (`ADMISSION_OFFICER`) | 19 |
-| Teacher (`TEACHER`) | 14 |
-| Class Teacher (`CLASS_TEACHER`) | 17 |
+| Teacher (`TEACHER`) | 15 |
+| Class Teacher (`CLASS_TEACHER`) | 18 |
 | Transport Manager (`TRANSPORT_MANAGER`) | 10 |
 | Librarian (`LIBRARIAN`) | 10 |
 | Parent (`PARENT`) | 7 |

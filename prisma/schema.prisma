@@ -90,6 +90,11 @@ model User {
   marksSheetsApproved     MarksSheet[]           @relation("MarksSheetApprovedBy")
   marksEntered            ExaminationMarks[]     @relation("MarksEnteredBy")
 
+  // Phase 4C
+  promotionsProposed  PromotionDecision[] @relation("PromotionProposedBy")
+  promotionsConfirmed PromotionDecision[] @relation("PromotionConfirmedBy")
+  homeworkPosted      Homework[]          @relation("HomeworkPostedBy")
+
   @@index([isActive])
   @@map("user")
 }
@@ -264,6 +269,11 @@ model AcademicSession {
   examinationMarks   ExaminationMarks[]
   reportCards        ReportCard[]
 
+  // Phase 4C
+  promotionDecisions PromotionDecision[]
+  homework           Homework[]
+  academicEvents     AcademicEvent[]
+
   @@map("academic_session")
 }
 
@@ -296,6 +306,9 @@ model SchoolClass {
   sections      Section[]
   applications  AdmissionApplication[]
   classSubjects ClassSubject[]
+
+  // Phase 4C
+  promotionTargets PromotionDecision[]
 
   @@index([isActive, displayOrder])
   @@map("school_class")
@@ -334,6 +347,9 @@ model Section {
   teacherAllocations TeacherAllocation[]
   timetableSlots     TimetableSlot[]
   marksSheets        MarksSheet[]
+
+  // Phase 4C
+  homework Homework[]
 
   @@unique([academicSessionId, classId, nameKey])
   @@unique([academicSessionId, code])
@@ -795,6 +811,10 @@ model StudentEnrollment {
   attendance      StudentAttendance[]
   marks           ExaminationMarks[]
   reportCards     ReportCard[]
+
+  // Phase 4C
+  promotionFrom PromotionDecision? @relation("PromotionFrom")
+  promotionTo   PromotionDecision? @relation("PromotionTo")
 
   @@unique([studentId, academicSessionId])
   /// Phase 4A: target of composite FKs (student subjects and attendance stay in the enrollment's session).
@@ -1557,6 +1577,9 @@ model ClassSubject {
   timetableSlots  TimetableSlot[]
   examSubjects    ExamSubject[]
 
+  // Phase 4C
+  homework Homework[]
+
   @@unique([academicSessionId, classId, subjectId])
   /// Target of composite FKs: rows that point at a class subject must be in its session (DB-enforced).
   @@unique([id, academicSessionId], map: "class_subject_id_academic_session_id_key")
@@ -1866,4 +1889,98 @@ model ReportCard {
   @@unique([examinationId, enrollmentId])
   @@index([enrollmentId])
   @@map("report_card")
+}
+
+// ───────────────────────────── Phase 4C: promotion, homework, academic calendar ─────────────────────────────
+
+enum PromotionKind {
+  PROMOTE
+  DETAIN
+  LEAVE
+}
+
+enum PromotionStatus {
+  PROPOSED
+  CONFIRMED
+}
+
+/// AC16: one decision per enrollment at session end. The class teacher (or a student.promote holder) proposes; a
+/// student.promote holder confirms in bulk, which creates the next-session enrollment (PROMOTE / DETAIN) or records the
+/// leaving (LEAVE, with the student's new status). The old enrollment only gets its end status and date (KI-080).
+model PromotionDecision {
+  id                String          @id @default(cuid(2))
+  academicSessionId String          @map("academic_session_id")
+  fromEnrollmentId  String          @map("from_enrollment_id")
+  decision          PromotionKind
+  /// PROMOTE / DETAIN: the class in the next session (DETAIN = the same class). Null for LEAVE.
+  toClassId         String?         @map("to_class_id")
+  /// LEAVE: TRANSFERRED / WITHDRAWN / GRADUATED. Null otherwise.
+  leaveAs           StudentStatus?  @map("leave_as")
+  status            PromotionStatus @default(PROPOSED)
+  proposedById      String?         @map("proposed_by_id")
+  proposedAt        DateTime        @default(now()) @map("proposed_at") @db.Timestamptz(3)
+  confirmedById     String?         @map("confirmed_by_id")
+  confirmedAt       DateTime?       @map("confirmed_at") @db.Timestamptz(3)
+  /// The enrollment created on confirmation (PROMOTE / DETAIN).
+  toEnrollmentId    String?         @unique @map("to_enrollment_id")
+  version           Int             @default(1)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession    @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  fromEnrollment  StudentEnrollment  @relation("PromotionFrom", fields: [fromEnrollmentId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  toEnrollment    StudentEnrollment? @relation("PromotionTo", fields: [toEnrollmentId], references: [id], onDelete: Restrict)
+  toClass         SchoolClass?       @relation(fields: [toClassId], references: [id], onDelete: Restrict)
+  proposedBy      User?              @relation("PromotionProposedBy", fields: [proposedById], references: [id], onDelete: SetNull)
+  confirmedBy     User?              @relation("PromotionConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+
+  /// One decision per enrollment (the enrollment fixes the session, so this is unique per enrollment).
+  @@unique([fromEnrollmentId, academicSessionId])
+  @@index([academicSessionId, status])
+  @@map("promotion_decision")
+}
+
+/// AC17: text homework for one subject of one section (no online submission; attachments later — KI-094).
+model Homework {
+  id                String    @id @default(cuid(2))
+  academicSessionId String    @map("academic_session_id")
+  sectionId         String    @map("section_id")
+  classSubjectId    String    @map("class_subject_id")
+  title             String    @db.VarChar(150)
+  details           String    @db.VarChar(4000)
+  assignedOn        DateTime  @map("assigned_on") @db.Date
+  dueOn             DateTime  @map("due_on") @db.Date
+  postedById        String?   @map("posted_by_id")
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
+  version           Int       @default(1)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  section         Section         @relation(fields: [sectionId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  classSubject    ClassSubject    @relation(fields: [classSubjectId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  postedBy        User?           @relation("HomeworkPostedBy", fields: [postedById], references: [id], onDelete: SetNull)
+
+  @@index([sectionId, dueOn])
+  @@index([classSubjectId])
+  @@map("homework")
+}
+
+/// AC18: a school-day event on the academic calendar (separate from public CMS events). Holidays and exam dates come
+/// from their own tables.
+model AcademicEvent {
+  id                String   @id @default(cuid(2))
+  academicSessionId String   @map("academic_session_id")
+  title             String   @db.VarChar(120)
+  startDate         DateTime @map("start_date") @db.Date
+  endDate           DateTime @map("end_date") @db.Date
+  details           String?  @db.VarChar(1000)
+  version           Int      @default(1)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+
+  @@index([academicSessionId, startDate])
+  @@map("academic_event")
 }

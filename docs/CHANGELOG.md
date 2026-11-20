@@ -4,6 +4,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added (Phase 4C — promotion, homework, academic calendar; needs migration 20261123000000, not yet applied)
+- **Promotion** (Academic → Promotion): at session end the class teacher marks each student Promote, Detain or Leave (transferred / withdrawn / graduated); for classes with streams the next class is chosen, never guessed. From the session's last day the School Admin confirms a section in one step: promoted and detained students get their enrollment in the next session's chosen section (section capacity checked), this session's enrollments are closed on its last day, and leavers get their new status recorded. Roll numbers are then generated in the new sections as usual.
+- **Homework** (Academic → Homework): teachers post homework (title, what to do, due date) for the subjects they teach in each section; the School Admin for any section; class teachers see all of their section's homework. Text only for now — attachments come next.
+- **Academic calendar** (Academic → Calendar): one month at a time — student holidays, exam periods and paper dates, and the school's own events, which the school office adds and edits. Separate from the public website's events.
+- New permission **Post and manage homework** (`homework.manage`) for Teacher, Class Teacher (their own subjects) and School Admin.
+- Every Academic screen now shows the same set of tabs for the user's role.
+
 ### Added (Phase 4B — examinations and results; needs migration 20261122000000, not yet applied)
 - **Exams** (Academic → Exams; School Admin and Principal): create an exam in a session with its own grading scale and optional dates, add class subjects with maximum marks per part (theory / practical / internal; 0 = not examined) and an optional pass mark, then Draft → Scheduled (the scale's bands freeze) → Marks entry. Draft exams can be deleted.
 - **Marks entry** (Academic → Marks): a teacher sees only the subjects they are allocated to teach in each section and enters marks on one phone screen — whole or half marks, AB (absent, counts 0) or EX (exempt, left out of the total). Work can be saved part-done, then submitted.

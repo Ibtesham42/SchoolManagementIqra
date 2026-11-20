@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../../academic-tabs";
+import { academicTabFlags } from "../../tab-flags";
 import { CopyDayForm, DayPlanForm } from "../timetable-forms";
 import { TimetableNav } from "../timetable-nav";
 
@@ -31,7 +32,7 @@ export default async function PeriodsPage({ searchParams }: { searchParams: Prom
   const header = (
     <>
       <PageHeader title="Periods (bell schedule)" description="The school day for each weekday of an academic session: lesson periods and breaks, with times. Leave a day empty for a weekly off." />
-      <AcademicTabs current="timetable" showClasses showSubjects showTimetable showMine={linked} />
+      <AcademicTabs current="timetable" {...academicTabFlags(ctx)} />
       <TimetableNav current="periods" showPeriods />
     </>
   );

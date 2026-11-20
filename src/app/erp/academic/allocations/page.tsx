@@ -12,6 +12,7 @@ import { ConfirmAction } from "@/components/erp/confirm-action";
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../academic-tabs";
+import { academicTabFlags } from "../tab-flags";
 import { removeAllocationAction } from "../actions";
 import { AssignTeacherForm } from "./assign-form";
 
@@ -35,7 +36,7 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
   const header = (
     <>
       <PageHeader title="Subject teachers" description="Who teaches each subject in each section. A teacher must be an active teaching staff member with a linked login." />
-      <AcademicTabs current="allocations" showClasses showSubjects />
+      <AcademicTabs current="allocations" {...academicTabFlags(ctx)} />
     </>
   );
   if (!session || !section) {

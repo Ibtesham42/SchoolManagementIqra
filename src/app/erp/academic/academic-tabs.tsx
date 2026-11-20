@@ -10,13 +10,19 @@ export function AcademicTabs({
   showMine = false,
   showAttendance = false,
   showMarks = false,
+  showHomework = false,
+  showCalendar = false,
+  showPromotion = false,
 }: {
+  showHomework?: boolean;
+  showCalendar?: boolean;
+  showPromotion?: boolean;
   showTimetable?: boolean;
   showMine?: boolean;
   showAttendance?: boolean;
   /** Marks entry / approval (marks.enter or marks.approve). */
   showMarks?: boolean;
-  current: "sections" | "classes" | "subjects" | "class-subjects" | "allocations" | "optional-subjects" | "timetable" | "my-timetable" | "attendance" | "grading" | "exams" | "marks";
+  current: "sections" | "classes" | "subjects" | "class-subjects" | "allocations" | "optional-subjects" | "timetable" | "my-timetable" | "attendance" | "grading" | "exams" | "marks" | "homework" | "calendar" | "promotion";
   showClasses: boolean;
   showSubjects?: boolean;
 }) {
@@ -30,6 +36,9 @@ export function AcademicTabs({
     ...(showSubjects ? [{ key: "grading", href: "/erp/academic/grading", label: "Grading" }] : []),
     ...(showSubjects ? [{ key: "exams", href: "/erp/academic/exams", label: "Exams" }] : []),
     ...(showMarks ? [{ key: "marks", href: "/erp/academic/marks", label: "Marks" }] : []),
+    ...(showHomework ? [{ key: "homework", href: "/erp/academic/homework", label: "Homework" }] : []),
+    ...(showCalendar ? [{ key: "calendar", href: "/erp/academic/calendar", label: "Calendar" }] : []),
+    ...(showPromotion ? [{ key: "promotion", href: "/erp/academic/promotion", label: "Promotion" }] : []),
     ...(showSubjects || showTimetable ? [{ key: "timetable", href: "/erp/academic/timetable", label: "Timetable" }] : []),
     ...(showMine ? [{ key: "my-timetable", href: "/erp/academic/timetable/mine", label: "My timetable" }] : []),
     ...(showAttendance ? [{ key: "attendance", href: "/erp/academic/attendance", label: "Attendance" }] : []),

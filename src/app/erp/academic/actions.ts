@@ -48,6 +48,12 @@ import { addExamSubjects, createExam, deleteExam, removeExamSubject, setExamStat
 import { examRefSchema, reportCardRemarkSchema, saveMarksSchema, sheetActionSchema } from "@/modules/academic/marks.schemas";
 import { lockExamMarks, saveMarks, sheetAction, unlockExamMarks } from "@/modules/academic/marks.service";
 import { publishResults, setReportCardRemark } from "@/modules/academic/results.service";
+import { createHomeworkSchema, homeworkRefSchema, updateHomeworkSchema } from "@/modules/academic/homework.schemas";
+import { createHomework, removeHomework, updateHomework } from "@/modules/academic/homework.service";
+import { createEventSchema, eventRefSchema, updateEventSchema } from "@/modules/academic/calendar.schemas";
+import { createEvent, deleteEvent, updateEvent } from "@/modules/academic/calendar.service";
+import { confirmPromotionsSchema, proposePromotionsSchema } from "@/modules/students/promotion.schemas";
+import { confirmPromotions, proposePromotions } from "@/modules/students/promotion.service";
 import {
   assignClassTeacher,
   copySectionsFromSession,
@@ -435,4 +441,77 @@ export async function publishResultsAction(_prev: ActionState, fd: FormData): Pr
 
 export async function reportCardRemarkAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return run(reportCardRemarkSchema, { ...ref(fd), remark: formString(fd, "remark") }, async (ctx, d) => (await setReportCardRemark(ctx, d), "Remark saved."));
+}
+
+// ───────────────────────────── Phase 4C-M2: homework ─────────────────────────────
+
+const homeworkFields = (fd: FormData) => ({ title: formString(fd, "title"), details: formString(fd, "details"), dueOn: formString(fd, "dueOn") });
+
+export async function createHomeworkAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(createHomeworkSchema, { sectionId: formString(fd, "sectionId"), classSubjectId: formString(fd, "classSubjectId"), ...homeworkFields(fd) }, async (ctx, d) => (await createHomework(ctx, d), "Homework posted."));
+}
+
+export async function updateHomeworkAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(updateHomeworkSchema, { ...ref(fd), ...homeworkFields(fd) }, async (ctx, d) => (await updateHomework(ctx, d), "Homework saved."));
+}
+
+export async function removeHomeworkAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(homeworkRefSchema, ref(fd), async (ctx, d) => (await removeHomework(ctx, d), "Homework removed."));
+}
+
+// ───────────────────────────── Phase 4C-M3: academic calendar ─────────────────────────────
+
+const eventFields = (fd: FormData) => ({ title: formString(fd, "title"), startDate: formString(fd, "startDate"), endDate: formString(fd, "endDate"), details: formString(fd, "details") });
+
+export async function createEventAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(createEventSchema, { academicSessionId: formString(fd, "academicSessionId"), ...eventFields(fd) }, async (ctx, d) => (await createEvent(ctx, d), "Event added to the calendar."));
+}
+
+export async function updateEventAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(updateEventSchema, { ...ref(fd), ...eventFields(fd) }, async (ctx, d) => (await updateEvent(ctx, d), "Event saved."));
+}
+
+export async function deleteEventAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(eventRefSchema, ref(fd), async (ctx, d) => (await deleteEvent(ctx, d), "Event removed."));
+}
+
+// ───────────────────────────── Phase 4C-M1: promotion ─────────────────────────────
+
+/** Rows arrive as enr=<id> plus dec:/cls:/leave:/ver:<id>. */
+export async function proposePromotionsAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const ids = fd.getAll("enr").filter((v): v is string => typeof v === "string").slice(0, 201);
+  const raw = {
+    sectionId: formString(fd, "sectionId"),
+    entries: ids.map((id) => {
+      const v = formString(fd, `ver:${id}`);
+      return { enrollmentId: id, decision: formString(fd, `dec:${id}`), toClassId: formString(fd, `cls:${id}`), leaveAs: formString(fd, `leave:${id}`), version: v === "" ? null : v };
+    }),
+  };
+  const ctx = await requireAuth();
+  const parsed = proposePromotionsSchema.safeParse(raw);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    const state = fromZod(parsed.error);
+    return first?.path[0] === "entries" ? { ...state, error: first.message } : state;
+  }
+  try {
+    const r = await proposePromotions(ctx, parsed.data);
+    refresh();
+    return { ok: true, message: `Proposals saved: ${r.created} new, ${r.changed} changed.` };
+  } catch (e) {
+    return fromError(e);
+  }
+}
+
+export async function confirmPromotionsAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const targets = fd
+    .getAll("targetClass")
+    .filter((v): v is string => typeof v === "string")
+    .slice(0, 21)
+    .map((classId) => ({ classId, sectionId: formString(fd, `target:${classId}`) }))
+    .filter((t) => t.sectionId !== "");
+  return run(confirmPromotionsSchema, { sectionId: formString(fd, "sectionId"), targetSessionId: formString(fd, "targetSessionId"), targets }, async (ctx, d) => {
+    const r = await confirmPromotions(ctx, d);
+    return `Confirmed: ${r.promoted} promoted, ${r.detained} detained, ${r.left} left. Generate roll numbers in the new session's sections next.`;
+  });
 }

@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../academic-tabs";
+import { academicTabFlags } from "../tab-flags";
 import { ExamForm } from "./exam-forms";
 
 export const metadata = { title: "Exams" };
@@ -33,7 +34,7 @@ export default async function ExamsPage({ searchParams }: { searchParams: Promis
   return (
     <div className="mx-auto grid max-w-4xl gap-4">
       <PageHeader title="Exams" description="Each exam has its own subjects, maximum marks, grading scale and report cards." />
-      <AcademicTabs current="exams" showClasses showSubjects showMarks={hasPermission(ctx, "marks.enter") || hasPermission(ctx, "marks.approve")} />
+      <AcademicTabs current="exams" {...academicTabFlags(ctx)} />
       {sessions.length > 1 && (
         <form method="get" className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[1fr_auto] sm:items-end">
           <label className="grid gap-1.5 text-sm font-medium" htmlFor="ex-session">

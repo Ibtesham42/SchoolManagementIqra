@@ -53,3 +53,5 @@ AcademicSession 1─< Section >─1 SchoolClass
 | StudentAttendance.markedById → User | SetNull (actor reference) |
 | GradeBand → GradeScale; Examination → AcademicSession / GradeScale; ExamSubject → Examination / ClassSubject; MarksSheet → ExamSubject / Section; ExaminationMarks → MarksSheet / StudentEnrollment; ReportCard → Examination / StudentEnrollment / GeneratedDocument (all composite with the session) | Restrict (Phase 4B draft: results history is never hard-deleted) |
 | Examination.publishedById; MarksSheet.submittedById / approvedById; ExaminationMarks.enteredById → User | SetNull (actor references) |
+| PromotionDecision → StudentEnrollment (from: composite with the session; to: the next-session enrollment) / SchoolClass; Homework → Section / ClassSubject (composite with the session); AcademicEvent → AcademicSession | Restrict (Phase 4C draft) |
+| PromotionDecision.proposedById / confirmedById; Homework.postedById → User | SetNull (actor references) |

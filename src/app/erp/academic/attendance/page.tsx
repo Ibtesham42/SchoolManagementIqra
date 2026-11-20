@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../academic-tabs";
+import { academicTabFlags } from "../tab-flags";
 import { StudentDayForm, type StudentRow } from "./student-day-form";
 
 export const metadata = { title: "Student attendance" };
@@ -40,15 +41,7 @@ export default async function StudentAttendancePage({ searchParams }: { searchPa
   const header = (
     <>
       <PageHeader title="Student attendance" description="Daily attendance by section. Everyone starts as present — tap the exceptions and save once." />
-      <AcademicTabs
-        current="attendance"
-        showClasses={academicScope === "ALL"}
-        showSubjects={academicScope === "ALL"}
-        showTimetable={hasPermission(ctx, "timetable.read")}
-        showMine={linked && hasPermission(ctx, "timetable.read")}
-        showAttendance
-        showMarks={hasPermission(ctx, "marks.enter") || hasPermission(ctx, "marks.approve")}
-      />
+      <AcademicTabs current="attendance" {...academicTabFlags(ctx)} />
     </>
   );
   if (!session || !section) {

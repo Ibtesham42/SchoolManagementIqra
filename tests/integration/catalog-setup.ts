@@ -1,6 +1,6 @@
 /**
- * Shared integration-test precondition (KI-044): the full RBAC catalog — 84 permissions, 13 roles,
- * 305 grants — via the transactional seed core, catalog only (no Super Admin, no user).
+ * Shared integration-test precondition (KI-044): the full RBAC catalog — 85 permissions, 13 roles,
+ * 309 grants — via the transactional seed core, catalog only (no Super Admin, no user).
  *
  * Replaces the per-suite row-by-row upsert loops (~350 sequential round trips, which exceeded hook
  * timeouts against remote Neon). One batched transaction instead, and a stronger guarantee: after
@@ -12,14 +12,14 @@
  * The seed CLI's target guard (ADR-032) is for `npm run db:seed`; here the target is the test
  * branch, already gated by the integration opt-in and the pre-run identity check (G5).
  */
-export const CATALOG_COUNTS = { permissions: 84, roles: 13, grants: 305 } as const;
+export const CATALOG_COUNTS = { permissions: 85, roles: 13, grants: 309 } as const;
 
 export async function ensureCatalog(): Promise<void> {
   const { prisma } = await import("@/lib/db");
   const core = await import("../../prisma/seed-core");
   const plan = core.planSeed();
   if (plan.permissions.length !== CATALOG_COUNTS.permissions || plan.roles.length !== CATALOG_COUNTS.roles || plan.totalGrants !== CATALOG_COUNTS.grants) {
-    throw new Error("Catalog plan does not match the expected 84 / 13 / 305");
+    throw new Error("Catalog plan does not match the expected 85 / 13 / 309");
   }
   await prisma.$transaction(
     async (tx) => {

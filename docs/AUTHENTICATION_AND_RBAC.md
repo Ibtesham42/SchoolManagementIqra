@@ -113,7 +113,7 @@ Note: a user may hold several roles (e.g. Teacher + Class Teacher); grants union
 
 **Own salary slips (Phase 3C decision Q, 2026-11-19):** `salary.self.read` (SELF only) is also granted to School Admin, Principal and Vice Principal, so every staff role can see its own slips (catalog 84 / 13 / 300).
 
-**Exams and report cards (Phase 4 decisions AC11, AC12, 2026-11-19):** `exam.manage` and `reportcard.generate` for School Admin and Principal; `reportcard.generate` at ASSIGNED (own section) for Class Teacher. Catalog 84 / 13 / 305. ASSIGNED for `reportcard.generate` is honoured by the 4B report-card service (academic policy); until then nothing uses the permission.
+**Exams and report cards (Phase 4 decisions AC11, AC12, 2026-11-19):** `exam.manage` and `reportcard.generate` for School Admin and Principal; `reportcard.generate` at ASSIGNED (own section) for Class Teacher. Catalog 84 / 13 / 305 at the time (85 / 13 / 309 after 4C added `homework.manage`). ASSIGNED for `reportcard.generate` is honoured by the 4B report-card service (own class-teacher section).
 
 `ALLOWED_SCOPES` in `src/lib/rbac/catalog.ts`: every permission can be granted for **all records**; a narrower scope only where the catalog's default roles use it (the owning module implements it or, for portal scopes not built yet, refuses it) — today `student.read`, `student.update`, `academic.read`, `discipline.manage`, `attendance.student.*`, `attendance.employee.read` (SELF = own linked staff record, 3B-M4), `marks.enter`, `result.read`, `fee.read`, `fee.pay.online`, `timetable.read`, `library.read`; `salary.self.read` is **SELF only**. The editor shows only these; `setRolePermissions` refuses a new or changed grant outside them (an unchanged older grant is left alone). A module that starts honouring a new scope must be added there with its policy and tests. Class-teacher (ASSIGNED) access ends when the section's session is CLOSED (S-02) and when the user loses the TEACHER / CLASS_TEACHER role (S-09).
 
@@ -126,6 +126,12 @@ Note: a user may hold several roles (e.g. Teacher + Class Teacher); grants union
 - Class teachers (H4): new assignments need the user's account linked to an ACTIVE, TEACHING employee; existing assignments are unaffected.
 - Delegated administration with the SELF grants (review M3b, Info): `assertCanModifyUser` requires the actor to cover every permission of the target. A custom role with `user.manage` but without `employee.read` / `employee.personal.read` therefore can no longer modify or assign Teacher, Class Teacher, Accountant, Admission Officer, Transport Manager, Vice Principal or Librarian accounts (they now hold those permissions at SELF). Correct anti-escalation; no default role is affected (only Super Admin holds `user.manage`).
 - Re-saving an existing class-teacher assignment whose teacher no longer meets H4 now returns a validation message instead of doing nothing (the H4 check runs first, under the employee lock).
+
+### Promotion, homework and calendar (Phase 4C, AC16–AC18; `homework.manage` owner decision 2026-11-20)
+- **Catalog 85 / 13 / 309:** new `homework.manage` — Teacher and Class Teacher at ASSIGNED (only the subject they are allocated in that section, open session; same rule as marks entry), School Admin at ALL, Super Admin. Database sync with KI-073.
+- **Promotion:** propose — the section's class teacher (`academic.read` ASSIGNED, own open section) or a `student.promote` holder; confirm — `student.promote` only (School Admin), from the session's last day.
+- **Homework read:** `academic.read` ALL, the section's class teacher, or the allocated teacher (own subject).
+- **Academic calendar:** read at staff scopes (`academic.read` / `timetable.read` ALL or ASSIGNED); events by `academic.manage`. Parents / students: with the portal (AC20).
 
 ### Examinations, marks and results (Phase 4B, AC11–AC13, AC20 — 2026-11-20)
 - **Exams and grading scales** (`exam.manage`): Super Admin, School Admin, Principal. School-wide `academic.read` holders read them.

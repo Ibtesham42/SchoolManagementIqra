@@ -13,6 +13,7 @@ import { SelectField } from "@/components/erp/form";
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../academic-tabs";
+import { academicTabFlags } from "../tab-flags";
 import { deleteSectionAction, setSectionActiveAction, unassignClassTeacherAction } from "../actions";
 import { AddSectionsForm, AssignTeacherForm, CopySectionsForm, EditSectionForm } from "./section-forms";
 
@@ -99,7 +100,7 @@ export default async function SectionsPage({ searchParams }: { searchParams: Pro
         title="Sections"
         description={scope === "ALL" ? "Sections belong to one academic session. Capacity is the most students a section can hold." : "The section(s) you are class teacher of."}
       />
-      <AcademicTabs current="sections" showClasses={scope === "ALL"} showSubjects={scope === "ALL"} showTimetable={hasPermission(ctx, "timetable.read")} showMine={hasPermission(ctx, "timetable.read") && typeof ctx.employeeId === "string" && ctx.employeeId !== ""} showAttendance={hasPermission(ctx, "attendance.student.mark") || hasPermission(ctx, "attendance.student.read") || canManage} />
+      <AcademicTabs current="sections" {...academicTabFlags(ctx)} />
     </>
   );
   if (!session) {

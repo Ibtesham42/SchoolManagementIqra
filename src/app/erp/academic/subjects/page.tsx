@@ -8,6 +8,7 @@ import { ConfirmAction } from "@/components/erp/confirm-action";
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../academic-tabs";
+import { academicTabFlags } from "../tab-flags";
 import { setSubjectActiveAction } from "../actions";
 import { SubjectForm } from "./subject-form";
 
@@ -56,7 +57,7 @@ export default async function SubjectsPage() {
         title="Subjects"
         description="The subjects the school teaches, in any language. They are added to classes per academic session. Never deleted — deactivate one that is no longer taught."
       />
-      <AcademicTabs current="subjects" showClasses showSubjects />
+      <AcademicTabs current="subjects" {...academicTabFlags(ctx)} />
       {canManage && (
         <Card>
           <CardHeader>

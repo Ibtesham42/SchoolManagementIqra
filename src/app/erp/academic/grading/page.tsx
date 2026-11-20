@@ -7,6 +7,7 @@ import { ConfirmAction } from "@/components/erp/confirm-action";
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../academic-tabs";
+import { academicTabFlags } from "../tab-flags";
 import { setScaleActiveAction } from "../actions";
 import { ScaleForm } from "./scale-form";
 import { TemplateButton } from "./template-button";
@@ -50,7 +51,7 @@ export default async function GradingPage() {
         title="Grading scales"
         description="How percentages become grades on results and report cards. Nothing is pre-filled: define your school's scale, or start from a template and edit it."
       />
-      <AcademicTabs current="grading" showClasses showSubjects />
+      <AcademicTabs current="grading" {...academicTabFlags(ctx)} />
       {access.manage && (
         <Card>
           <CardHeader>

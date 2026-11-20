@@ -9,6 +9,7 @@ import { ConfirmAction } from "@/components/erp/confirm-action";
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../academic-tabs";
+import { academicTabFlags } from "../tab-flags";
 import { setClassActiveAction } from "../actions";
 import { ClassForm } from "./class-form";
 
@@ -81,7 +82,7 @@ export default async function ClassesPage() {
   return (
     <div className="mx-auto grid max-w-4xl gap-4">
       <PageHeader title="Classes" description="The school's classes, used in every academic session. Streams are separate classes, e.g. Class 11 Science and Class 11 Commerce. Classes are never deleted — deactivate one that is no longer offered." />
-      <AcademicTabs current="classes" showClasses showSubjects />
+      <AcademicTabs current="classes" {...academicTabFlags(ctx)} />
 
       <Card>
         <CardHeader>

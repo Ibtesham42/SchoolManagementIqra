@@ -14,6 +14,7 @@ import { ConfirmAction } from "@/components/erp/confirm-action";
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../academic-tabs";
+import { academicTabFlags } from "../tab-flags";
 import { removeClassSubjectAction } from "../actions";
 import { AddClassSubjectsForm, CopyClassSubjectsForm, EditClassSubjectForm } from "./class-subject-forms";
 
@@ -36,7 +37,7 @@ export default async function ClassSubjectsPage({ searchParams }: { searchParams
   const header = (
     <>
       <PageHeader title="Class subjects" description="What each class studies in an academic session. Optional subjects are chosen per student." />
-      <AcademicTabs current="class-subjects" showClasses showSubjects />
+      <AcademicTabs current="class-subjects" {...academicTabFlags(ctx)} />
     </>
   );
   if (!session || !cls) {

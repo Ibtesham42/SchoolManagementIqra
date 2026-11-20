@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../academic-tabs";
+import { academicTabFlags } from "../tab-flags";
 import { SlotForm } from "./timetable-forms";
 import { DAY_SHORT, TimetableNav } from "./timetable-nav";
 
@@ -38,7 +39,7 @@ export default async function TimetablePage({ searchParams }: { searchParams: Pr
   const header = (
     <>
       <PageHeader title="Timetable" description="Each section's week, period by period. The teacher of a lesson is the subject's allocated teacher in that section." />
-      <AcademicTabs current="timetable" showClasses={academicScope === "ALL"} showSubjects={academicScope === "ALL"} showTimetable showMine={linked} />
+      <AcademicTabs current="timetable" {...academicTabFlags(ctx)} />
       <TimetableNav current="section" showPeriods={canManage || academicScope === "ALL"} />
     </>
   );

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../../../academic-tabs";
+import { academicTabFlags } from "../../../tab-flags";
 import { RemarkForm } from "./remark-form";
 
 export const metadata = { title: "Results" };
@@ -37,7 +38,7 @@ export default async function ResultsPage({ params, searchParams }: { params: Pr
   return (
     <div className="mx-auto grid max-w-4xl gap-4">
       <PageHeader title={`Results · ${exam.name}`} description={`${exam.sessionName} · ${EXAM_STATUS_LABEL[exam.status as ExamStatus]}`} />
-      <AcademicTabs current={academicAll ? "exams" : "marks"} showClasses={academicAll} showSubjects={academicAll} showAttendance={hasPermission(ctx, "attendance.student.mark")} showMarks={hasPermission(ctx, "marks.enter") || hasPermission(ctx, "marks.approve")} />
+      <AcademicTabs current={academicAll ? "exams" : "marks"} {...academicTabFlags(ctx)} />
       {academicAll && (
         <p className="text-sm">
           <Link href={`/erp/academic/exams/${exam.id}`} className="underline">

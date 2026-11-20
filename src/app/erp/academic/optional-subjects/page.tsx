@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { AcademicTabs } from "../academic-tabs";
+import { academicTabFlags } from "../tab-flags";
 import { SubjectChoicesForm } from "./choices-form";
 
 export const metadata = { title: "Optional subjects" };
@@ -32,7 +33,7 @@ export default async function OptionalSubjectsPage({ searchParams }: { searchPar
   const header = (
     <>
       <PageHeader title="Optional subjects" description="Which students take each optional subject, section by section." />
-      <AcademicTabs current="optional-subjects" showClasses showSubjects />
+      <AcademicTabs current="optional-subjects" {...academicTabFlags(ctx)} />
     </>
   );
   if (!session || !section) {

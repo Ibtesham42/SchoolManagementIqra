@@ -53,3 +53,41 @@ export function targetClass(
   if (chosenClassId === null) return { ok: false, reason: "choose_class" };
   return next.classIds.includes(chosenClassId) ? { ok: true, classId: chosenClassId } : { ok: false, reason: "invalid_choice" };
 }
+
+const REASON: Record<"choose_class" | "invalid_choice" | "no_next_class" | "completes" | "class_inactive", string> = {
+  choose_class: "Choose which class (stream) the student moves to.",
+  invalid_choice: "That class isn't the next class for this student.",
+  no_next_class: "No active class exists at the next level. Create it first.",
+  completes: "This is the highest class: choose Leave (graduated) instead of Promote.",
+  class_inactive: "This class is inactive, so the student can't be detained in it.",
+};
+
+/** A proposal's problem (user-facing), or the target class (null for LEAVE). */
+export function decisionProblem(
+  classes: readonly ClassOption[],
+  current: ClassOption,
+  entry: { decision: PromotionDecision; toClassId: string | null; leaveAs: string | null },
+): { ok: true; classId: string | null } | { ok: false; message: string } {
+  if (entry.decision === "LEAVE") {
+    if (!entry.leaveAs) return { ok: false, message: "Say why the student leaves: transferred, withdrawn or graduated." };
+    return { ok: true, classId: null };
+  }
+  if (entry.leaveAs) return { ok: false, message: "A leaving status only goes with Leave." };
+  const t = targetClass(classes, current, entry.decision, entry.decision === "DETAIN" ? null : entry.toClassId);
+  return t.ok ? t : { ok: false, message: REASON[t.reason] };
+}
+
+/**
+ * Confirmation turns the old enrollments into PROMOTED / DETAINED / LEFT, which takes students off this session's
+ * rosters (marks, attendance). So it is allowed only from the session's last day (school-local ISO dates).
+ */
+export function confirmTimingProblem(today: string, sessionEnd: string): string | null {
+  return today < sessionEnd ? `Promotions can be confirmed from the session's last day (${sessionEnd}).` : null;
+}
+
+/** The next session must start after the current one ends and still be open. */
+export function targetSessionProblem(source: { endDate: string }, target: { startDate: string; status: string }): string | null {
+  if (target.status === "CLOSED") return "The next session is closed.";
+  if (target.startDate <= source.endDate) return "Choose a session that starts after this one ends.";
+  return null;
+}

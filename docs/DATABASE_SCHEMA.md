@@ -174,6 +174,14 @@ Legend: **PK** primary key · **U** unique · **IX** index · **FK** foreign key
 | ReportCard | examinationId + session, enrollmentId + session, snapshot JSON, remark?, documentId? → GeneratedDocument, publishedAt | U(exam, enrollment); U(documentId); snapshot is an object (AC15) |
 | SchoolSetting (+) | showRank (default false) | AC14 |
 
+**Phase 4C — migration `20261123000000_phase4c_promotion_homework_calendar` (DRAFT: awaiting the owner's SQL approval; not applied; depends on 20261122000000).** Design: PHASE_4_PLAN.md AC16–AC18. Offline diff + hand edits: one transaction, `lock_timeout`, 11 CHECKs. Expand-only: no existing table changes.
+
+| Model | Key fields | Constraints |
+|---|---|---|
+| PromotionDecision | fromEnrollmentId + session, decision (PROMOTE/DETAIN/LEAVE), toClassId?, leaveAs? (TRANSFERRED/WITHDRAWN/GRADUATED), status (PROPOSED/CONFIRMED), proposed / confirmed by + at, toEnrollmentId?, version | U(fromEnrollment, session); U(toEnrollmentId); LEAVE ⇔ leaveAs and no class; confirmed fields iff CONFIRMED; next enrollment iff confirmed and not LEAVE (AC16) |
+| Homework | sectionId + session, classSubjectId + session, title (≤150), details (≤4000), assignedOn, dueOn, postedById?, deletedAt? | due ≥ assigned; trimmed text (AC17; text only — KI-094) |
+| AcademicEvent | academicSessionId, title (≤120), startDate, endDate, details? | dates in order (AC18) |
+
 ## 11. Library & inventory
 
 | Model | Key fields | Constraints |

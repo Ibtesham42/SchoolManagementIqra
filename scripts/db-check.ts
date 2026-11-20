@@ -64,6 +64,9 @@ const PHASE_4A_TABLES = ["subject", "class_subject", "student_subject", "teacher
 /** Phase 4B migration 20261122000000 (tests/unit/migration-phase4b.test.ts pins the same number). */
 const PHASE_4B_CHECK_COUNT = 26;
 const PHASE_4B_TABLES = ["grade_scale", "grade_band", "examination", "exam_subject", "marks_sheet", "examination_marks", "report_card"];
+/** Phase 4C migration 20261123000000 (tests/unit/migration-phase4c.test.ts pins the same number). */
+const PHASE_4C_CHECK_COUNT = 11;
+const PHASE_4C_TABLES = ["promotion_decision", "homework", "academic_event"];
 const PHASE_3C_PARTIAL_INDEXES = ["employee_salary_one_pending_key", "employee_salary_one_approved_per_month_key", "salary_payment_method_reference_key"];
 
 const HR_CHECKS = [
@@ -290,6 +293,16 @@ async function main() {
       );
       const ok = c.rows[0]?.n === String(PHASE_4B_CHECK_COUNT) && c.rows[0]?.v === String(PHASE_4B_CHECK_COUNT);
       console.log(ok ? `✓ ${PHASE_4B_CHECK_COUNT} Phase 4B examination CHECK constraints validated` : `✗ Phase 4B: ${c.rows[0]?.n} CHECKs present, ${c.rows[0]?.v} validated (expected ${PHASE_4B_CHECK_COUNT})`);
+      if (!ok) constraintProblems++;
+    }
+
+    if (applied.has("20261123000000_phase4c_promotion_homework_calendar")) {
+      const c = await client.query<{ n: string; v: string }>(
+        "select count(*)::text n, count(*) filter (where convalidated)::text v from pg_constraint where contype = 'c' and conrelid::regclass::text = any($1)",
+        [PHASE_4C_TABLES],
+      );
+      const ok = c.rows[0]?.n === String(PHASE_4C_CHECK_COUNT) && c.rows[0]?.v === String(PHASE_4C_CHECK_COUNT);
+      console.log(ok ? `✓ ${PHASE_4C_CHECK_COUNT} Phase 4C promotion / homework / calendar CHECK constraints validated` : `✗ Phase 4C: ${c.rows[0]?.n} CHECKs present, ${c.rows[0]?.v} validated (expected ${PHASE_4C_CHECK_COUNT})`);
       if (!ok) constraintProblems++;
     }
 
