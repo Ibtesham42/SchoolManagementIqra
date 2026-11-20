@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-/** Offline review guard for migration 20261124000000 (Phase 5A fees, incl. security-review fixes M1 / M2 / M4, DRAFT — awaiting the owner's SQL approval; not applied). */
+/** Offline review guard for migration 20261124000000 (Phase 5A fees, incl. security-review fixes M1 / M2 / M4; SQL approved and applied to development and Test 2026-11-20). */
 const sql = readFileSync(new URL("../../prisma/migrations/20261124000000_phase5a_fees/migration.sql", import.meta.url), "utf8");
 const code = sql
   .split("\n")

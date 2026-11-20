@@ -1,6 +1,6 @@
 # Phase 5 — Fee and finance management: assessment and implementation plan
 
-**Status: decisions FC1–FC26 APPROVED as recommended (owner, 2026-11-20).** Catalog change FC6 / FC13 made in code (86 / 13 / 312; database sync pending approval). 5A-M1 in progress. The §9 questions for the school are still open (they shape setup data and screens, not the schema). Like Phases 3 and 4, Phase 5 is split (FC1): **5A** fee setup and billing · **5B** counter collection, receipts and cancellation · **5C** reports, reconciliation and opening-balance import. Online payments are designed here but deferred to Phase 6 (FC16).
+**Status: decisions FC1–FC26 APPROVED as recommended (owner, 2026-11-20).** Catalog change FC6 / FC13 made and synced to development and Test (86 / 13 / 312). 5A-M1 done: migration `20261124000000` applied to development and Test 2026-11-20. The §9 questions for the school are still open (they shape setup data and screens, not the schema). Like Phases 3 and 4, Phase 5 is split (FC1): **5A** fee setup and billing · **5B** counter collection, receipts and cancellation · **5C** reports, reconciliation and opening-balance import. Online payments are designed here but deferred to Phase 6 (FC16).
 
 Drafted by the architect agent (read-only) from the code; key claims spot-checked (no user ↔ student link, `lib/money.ts` missing, `students.policy` refuses CHILDREN / SELF).
 

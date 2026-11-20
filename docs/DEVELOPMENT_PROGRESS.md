@@ -10,6 +10,13 @@
 
 ## Log
 
+### 2026-11-20 — Migration 5A applied (development, Test); Phase 5 catalog synced (owner-approved)
+- Header marked "SQL approved by the owner 2026-11-20" before applying (never edited after).
+- **Development** (`ep-quiet-river`): `env:check` PASSED; only `20261124000000` pending; `migrate deploy` 12:50:18–12:50:40Z. The first drift check listed the 9 partial unique indexes as "removed" — they were in the database but not declared in `schema.prisma`; read their definitions read-only and declared them with `where: raw(...)` (partialIndexes preview, as for Section / AdmissionGuardian) → drift **"No difference detected"**; `db:check` ✓ (50 CHECKs validated, 9 partial indexes, both triggers enabled).
+- **Test** (`ep-quiet-brook`, `DOTENV_PATH=.env.test` for the commands only): `migrate deploy` 12:52:35–12:52:53Z; host confirmed by `migrate status` (the status filter had hidden the host line before the deploy — checked right after: Test endpoint, up to date); drift "No difference detected"; `db:check` ✓ (15.2 MB).
+- **Catalog sync** (scratchpad `grant-sync-5a.mts dev|test dry|apply`, same guarded procedure as KI-073): `fee.concession.approve` permission row + exactly 3 grants (Super Admin + Principal `fee.concession.approve`, Principal `fee.refund`), 2 `role.grants_add` audit rows each, all 13 roles verified exact, 309 → **312** / 86 permissions. Development dry 12:54:02Z, apply 12:54:20Z; Test dry 12:54:24Z, apply 12:54:43Z.
+- Production never connected; no seed, no other data written.
+
 ### 2026-11-20 — Phase 5 decisions approved; 5A-M1 (catalog, pure fee modules, schema draft) — committed
 - Owner (2026-11-20): FC1–FC26 approved as recommended. PHASE_5_PLAN.md status updated; roadmap §7 In Progress.
 - **Catalog 86 / 13 / 312** (FC6, FC13): new `fee.concession.approve` (Principal + Super Admin); Principal also gets `fee.refund`. RBAC_MATRIX regenerated; count tests updated; the finance-roles invariant now allows the Principal's `fee.refund` explicitly, plus new role-level maker-checker invariants (approvers don't propose; the Principal cancels but never collects). Database sync not done (needs approval, KI-101).

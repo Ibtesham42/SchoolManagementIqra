@@ -128,7 +128,7 @@ Note: a user may hold several roles (e.g. Teacher + Class Teacher); grants union
 - Re-saving an existing class-teacher assignment whose teacher no longer meets H4 now returns a validation message instead of doing nothing (the H4 check runs first, under the employee lock).
 
 ### Fees (Phase 5, decisions FC6, FC13, FC17; owner 2026-11-20)
-- **Catalog 86 / 13 / 312:** new `fee.concession.approve` — Principal (+ Super Admin). Principal also gets `fee.refund`. Database sync pending (owner approval, KI-073 procedure).
+- **Catalog 86 / 13 / 312:** new `fee.concession.approve` — Principal (+ Super Admin). Principal also gets `fee.refund`. **Synced to development and Test 2026-11-20** (owner-approved; dry run, one guarded transaction each, 309 → 312, all 13 roles exact).
 - **Maker-checker:** concessions are proposed with `fee.concession.manage` (Accountant) and approved with `fee.concession.approve`; approver ≠ proposer, Super Admin included. Receipt cancellation (`fee.refund`) is refused for the person who collected that payment. Role-level invariants in `tests/unit/rbac-matrix.test.ts`.
 - **Parent CHILDREN / Student SELF** (`fee.read`, `fee.pay.online`): refused by `fees.policy` until the Phase 6 guardian / student link exists; no catalog change.
 - **Delegated administration side effect:** a non–Super Admin user manager who doesn't hold `fee.concession.approve` and `fee.refund` can no longer modify or assign Principal accounts (`assertCanModifyUser` / `actorCovers`) — intended.

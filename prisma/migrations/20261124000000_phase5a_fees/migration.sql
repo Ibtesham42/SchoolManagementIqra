@@ -6,7 +6,7 @@
 -- Expand-only: 12 enums and 13 new tables. No existing table or column is changed (new foreign keys point AT
 -- academic_session, school_class, student, student_enrollment and user). Per-student rows reference the enrollment by
 -- (student_id, academic_session_id), which is already unique on student_enrollment. Nothing is dropped or renamed.
--- Review status: DRAFT — awaiting the owner's SQL approval. NOT applied to any database.
+-- Review status: SQL approved by the owner 2026-11-20.
 --
 -- Rollback (comment only — development/Test, only while the new tables are empty):
 --   DROP TABLE "fee_payment_allocation", "fee_payment", "fee_invoice_item", "fee_invoice", "student_fee_charge",

@@ -131,7 +131,7 @@ Legend: **PK** primary key · **U** unique · **IX** index · **FK** foreign key
 
 ## 8. Fees
 
-**Phase 5A — migration `20261124000000_phase5a_fees` (DRAFT: awaiting the owner's SQL approval; not applied).** Design: PHASE_5_PLAN.md FC1–FC26 (approved 2026-11-20). Offline diff + hand edits: one transaction, `lock_timeout`, 9 partial unique indexes, 50 CHECKs, 2 immutability triggers (security review 5A M1). Expand-only: 12 enums, 13 new tables, no existing table changed. Money `Decimal(12,2)`. Per-student rows reference the enrollment by (studentId, academicSessionId) — already unique on student_enrollment — so a row can't name a student and an enrollment that disagree. Replaces the early draft (installmentPlan JSON, FeeReceipt table, PaymentGatewayEvent → Phase 6).
+**Phase 5A — migration `20261124000000_phase5a_fees` (**applied** to development and Test 2026-11-20, owner-approved; drift exit 0 on both; partial indexes declared in `schema.prisma` with `where: raw(...)`).** Design: PHASE_5_PLAN.md FC1–FC26 (approved 2026-11-20). Offline diff + hand edits: one transaction, `lock_timeout`, 9 partial unique indexes, 50 CHECKs, 2 immutability triggers (security review 5A M1). Expand-only: 12 enums, 13 new tables, no existing table changed. Money `Decimal(12,2)`. Per-student rows reference the enrollment by (studentId, academicSessionId) — already unique on student_enrollment — so a row can't name a student and an enrollment that disagree. Replaces the early draft (installmentPlan JSON, FeeReceipt table, PaymentGatewayEvent → Phase 6).
 
 | Model | Key fields | Constraints |
 |---|---|---|

@@ -2146,6 +2146,8 @@ model FeeStructure {
   items           FeeStructureItem[]
 
   @@unique([id, academicSessionId])
+  /// Partial unique indexes (migration 20261124000000; declared for drift checks — partialIndexes preview).
+  @@unique([academicSessionId, classId], map: "fee_structure_active_key", where: raw("is_active"))
   @@index([academicSessionId, classId])
   @@map("fee_structure")
 }
@@ -2223,6 +2225,8 @@ model StudentConcession {
   proposedBy User?             @relation("ConcessionProposedBy", fields: [proposedById], references: [id], onDelete: SetNull)
   decidedBy  User?             @relation("ConcessionDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
 
+  /// Partial unique indexes (migration 20261124000000; declared for drift checks — partialIndexes preview).
+  @@unique([studentId, academicSessionId, concessionId], map: "student_concession_live_key", where: raw("status = ANY (ARRAY['PROPOSED'::\"StudentConcessionStatus\", 'APPROVED'::\"StudentConcessionStatus\"])"))
   @@index([studentId, academicSessionId])
   @@index([status])
   @@map("student_concession")
@@ -2243,6 +2247,8 @@ model LateFeeRule {
 
   academicSession AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
 
+  /// Partial unique indexes (migration 20261124000000; declared for drift checks — partialIndexes preview).
+  @@unique([academicSessionId], map: "late_fee_rule_active_key", where: raw("is_active"))
   @@index([academicSessionId])
   @@map("late_fee_rule")
 }
@@ -2271,6 +2277,8 @@ model StudentFeeCharge {
   createdBy   User?             @relation("FeeChargeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   invoiceItem FeeInvoiceItem?
 
+  /// Partial unique indexes (migration 20261124000000; declared for drift checks — partialIndexes preview).
+  @@unique([studentId, academicSessionId, installmentId, sourceRef], map: "student_fee_charge_live_source_key", where: raw("(source = 'TRANSPORT'::\"FeeChargeSource\") AND (deleted_at IS NULL)"))
   @@index([studentId, academicSessionId, installmentId])
   @@map("student_fee_charge")
 }
@@ -2312,6 +2320,9 @@ model FeeInvoice {
 
   /// Review 5A M2: target of the allocation's (invoice, student) key.
   @@unique([id, studentId])
+  /// Partial unique indexes (migration 20261124000000; declared for drift checks — partialIndexes preview).
+  @@unique([studentId, academicSessionId, installmentId], map: "fee_invoice_live_installment_key", where: raw("(deleted_at IS NULL) AND (kind = 'INSTALLMENT'::\"FeeInvoiceKind\")"))
+  @@unique([studentId, academicSessionId], map: "fee_invoice_live_opening_key", where: raw("(deleted_at IS NULL) AND (kind = 'OPENING_BALANCE'::\"FeeInvoiceKind\")"))
   @@index([studentId, status])
   @@index([academicSessionId, installmentId])
   @@index([status, dueOn])
@@ -2374,6 +2385,10 @@ model FeePayment {
 
   /// Review 5A M2: target of the allocation's (payment, student) key.
   @@unique([id, studentId])
+  /// Partial unique indexes (migration 20261124000000; declared for drift checks — partialIndexes preview).
+  @@unique([transactionRef], map: "fee_payment_live_utr_key", where: raw("(method = ANY (ARRAY['UPI'::\"FeePaymentMethod\", 'BANK_TRANSFER'::\"FeePaymentMethod\"])) AND (status = 'SUCCESS'::\"FeePaymentStatus\")"))
+  @@unique([transactionRef, bankName, instrumentDate], map: "fee_payment_live_cheque_key", where: raw("(method = 'CHEQUE'::\"FeePaymentMethod\") AND (status = 'SUCCESS'::\"FeePaymentStatus\")"))
+  @@unique([transactionRef], map: "fee_payment_live_card_key", where: raw("(method = 'CARD'::\"FeePaymentMethod\") AND (status = 'SUCCESS'::\"FeePaymentStatus\")"))
   @@index([studentId, paidOn])
   @@index([paidOn, method])
   @@index([collectedById, paidOn])
