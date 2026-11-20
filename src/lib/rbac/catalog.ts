@@ -69,6 +69,8 @@ export const PERMISSIONS = {
   "fee.read": "View fees and invoices",
   "fee.collect": "Collect fee payments",
   "fee.concession.manage": "Manage concessions and scholarships",
+  // Phase 5 (FC6, owner 2026-11-20): maker-checker — the approver never approves their own proposal.
+  "fee.concession.approve": "Approve concessions and scholarships",
   "fee.refund": "Cancel receipts and refund payments",
   "fee.report": "View fee reports",
   "fee.pay.online": "Pay fees online",
@@ -226,6 +228,8 @@ export const ROLES: RoleDefinition[] = [
       ...MY_SLIPS,
       // Phase 4 (AC11, AC12): exams and report cards.
       "exam.manage", "reportcard.generate",
+      // Phase 5 (FC6, FC13, owner 2026-11-20): approves concessions; cancels receipts (never their own collection).
+      "fee.concession.approve", "fee.refund",
     ],
   },
   {

@@ -269,8 +269,8 @@ describe("runDrill ordering and refusals", () => {
     expect(writesIn(r.target.queries)).toEqual([]);
   });
   it("refuses a source table the drill does not cover — nothing written", async () => {
-    // "fee_invoice": a future table (Phase 5) that the drill does not cover yet.
-    const r = drillDeps({ source: fakeDb({ identity: { branch: DEV.branch, endpoint: DEV.ep }, readOnly: "on", extraTable: "fee_invoice" }) });
+    // "transport_route": a future table (Phase 7) that the drill does not cover yet.
+    const r = drillDeps({ source: fakeDb({ identity: { branch: DEV.branch, endpoint: DEV.ep }, readOnly: "on", extraTable: "transport_route" }) });
     await expect(runDrill([], r.deps)).rejects.toThrow(/not covered/);
     expect(writesIn(r.target.queries)).toEqual([]);
   });

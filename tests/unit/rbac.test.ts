@@ -61,7 +61,7 @@ describe("authorize", () => {
     ["backup.manage", ["SUPER_ADMIN"]],
     ["chatbot.manage", ["SUPER_ADMIN"]],
     ["rollnumber.finalize", ["SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL"]],
-    ["fee.refund", ["SUPER_ADMIN", "ACCOUNTANT"]],
+    ["fee.refund", ["SUPER_ADMIN", "ACCOUNTANT", "PRINCIPAL"]], // Principal: Phase 5 FC13 (owner 2026-11-20)
     ["settings.manage", ["SUPER_ADMIN", "SCHOOL_ADMIN"]],
     ["session.manage", ["SUPER_ADMIN", "SCHOOL_ADMIN"]],
     ["template.manage", ["SUPER_ADMIN"]],

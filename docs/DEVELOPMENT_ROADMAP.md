@@ -95,7 +95,7 @@
 - **Tests:** grade calculation vs configured scale; timetable clash prevention; promotion creates next-session enrollments; marks-entry RBAC.
 - **Completion criteria:** a full term simulated end-to-end on the `test` branch.
 
-## 7. Phase 5 — Fee and Finance Management · **Pending**
+## 7. Phase 5 — Fee and Finance Management · **In Progress** (PHASE_5_PLAN.md; decisions FC1–FC26 approved 2026-11-20; 5A-M1 started)
 - **Objectives:** correct fees, no duplicate payments, immutable receipts.
 - **Features:** fee categories & structures, invoices per period, concessions/scholarships/discounts, late fees, installments, counter collection (cash/UPI/bank), receipts (PDF), pending-fee & defaulter reports, financial reports; online payments (optional gateway, server-verified webhooks).
 - **Dependencies:** Phase 2; Phase 7's transport fees join later.

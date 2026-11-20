@@ -131,20 +131,24 @@ Legend: **PK** primary key · **U** unique · **IX** index · **FK** foreign key
 
 ## 8. Fees
 
+**Phase 5A — migration `20261124000000_phase5a_fees` (DRAFT: awaiting the owner's SQL approval; not applied).** Design: PHASE_5_PLAN.md FC1–FC26 (approved 2026-11-20). Offline diff + hand edits: one transaction, `lock_timeout`, 9 partial unique indexes, 50 CHECKs, 2 immutability triggers (security review 5A M1). Expand-only: 12 enums, 13 new tables, no existing table changed. Money `Decimal(12,2)`. Per-student rows reference the enrollment by (studentId, academicSessionId) — already unique on student_enrollment — so a row can't name a student and an enrollment that disagree. Replaces the early draft (installmentPlan JSON, FeeReceipt table, PaymentGatewayEvent → Phase 6).
+
 | Model | Key fields | Constraints |
 |---|---|---|
-| FeeCategory | code, name (Admission/Tuition/Annual/Transport/Hostel/Lab/Other), isRecurring | U(code) |
-| FeeStructure | academicSessionId, classId, name, isActive | U(session, class, name) |
-| FeeStructureItem | feeStructureId, feeCategoryId, amount, frequency (ONE_TIME/MONTHLY/QUARTERLY/ANNUAL), installmentPlan JSON | U(structure, category) |
-| FeeConcession | name, type (PERCENT/FIXED), value, appliesToCategoryIds, kind (CONCESSION/SCHOLARSHIP/DISCOUNT) | U(name) |
-| StudentConcession | studentId, concessionId, academicSessionId, approvedById, reason | U(student, concession, session) |
-| LateFeeRule | academicSessionId, graceDays, type (FLAT/PER_DAY/PERCENT), value, cap? | — |
-| FeeInvoice (SD) | invoiceNo, studentId, academicSessionId, period (e.g. 2026-07), dueDate, subtotal, concessionTotal, lateFee, total, paidAmount, status (DRAFT/ISSUED/PARTIAL/PAID/CANCELLED/WAIVED) | U(invoiceNo), U(studentId, academicSessionId, period), IX(status, dueDate) |
-| FeeInvoiceItem | invoiceId, feeCategoryId, description, amount, concessionAmount | IX(invoiceId) |
-| FeePayment | paymentNo, studentId, amount, method (CASH/UPI/BANK_TRANSFER/CHEQUE/ONLINE/OTHER), status (PENDING/SUCCESS/FAILED/REFUNDED), transactionRef?, gateway?, gatewayOrderId?, gatewayPaymentId?, idempotencyKey, collectedById?, paidAt | U(paymentNo), U(idempotencyKey), U(gateway, gatewayPaymentId) partial, U(method, transactionRef) partial where not null |
-| FeePaymentAllocation | paymentId, invoiceId, amount | PK(paymentId, invoiceId) |
-| FeeReceipt | receiptNo, paymentId (1:1), fileId?, issuedAt, cancelledAt?, cancelReason? | U(receiptNo), U(paymentId) |
-| PaymentGatewayEvent | gateway, eventId, type, payload JSON, signatureValid, processedAt? | U(gateway, eventId) — webhook idempotency |
+| FeeCategory | code, name, nameKey, kind (REGULAR/ONE_TIME/TRANSPORT/LATE_FEE/OPENING_BALANCE/OTHER), appliesTo (ALL/NEW_ADMISSION/EXISTING), isActive, version | U(code), U(nameKey); code format; school-defined, nothing seeded (FC2) |
+| FeeInstallment | academicSessionId, name, nameKey, dueOn (date), sortOrder | U(session, nameKey); U(id, session) (FC3) |
+| FeeStructure | academicSessionId, classId, name, isActive, version | **Partial** U(session, class) WHERE is_active; frozen once used (FC5, service) |
+| FeeStructureItem | structureId + session, categoryId, installmentId + session, amount | U(structure, category, installment); amount ≥ 0; Cascade from its structure only |
+| FeeConcession / FeeConcessionCategory | code, name, kind (CONCESSION/SCHOLARSHIP/DISCOUNT/WAIVER), calc (PERCENT/FIXED), value · (concession, category) | value > 0, percent ≤ 100 |
+| StudentConcession | (studentId, session) → enrollment, concessionId, status (PROPOSED/APPROVED/REJECTED/REVOKED), reason (personal tier, never audited), proposedBy/At, decidedBy/At | **Partial** U(student, session, concession) WHERE PROPOSED/APPROVED; decided ⇔ not PROPOSED; decider ≠ proposer when both are known (FC6) |
+| LateFeeRule | academicSessionId, graceDays (0–365), calc (FLAT/PER_DAY/PERCENT), value, cap? (required for PER_DAY) | **Partial** U(session) WHERE is_active (FC7) |
+| StudentFeeCharge | (studentId, session) → enrollment, installmentId + session, categoryId, amount > 0, source (MANUAL/TRANSPORT), sourceRef?, note, deletedAt? | **Partial** U(student, session, installment, sourceRef) WHERE TRANSPORT and live (FC18 hook) |
+| FeeInvoice (SD) | invoiceNo, (studentId, session) → enrollment, kind (INSTALLMENT/OPENING_BALANCE), installmentId?, dueOn (snapshot), subtotal, concessionTotal, lateFee, total, paidAmount, status (ISSUED/PARTIAL/PAID/WAIVED/CANCELLED), issued / cancelled by + at, cancelReason, deletedAt | U(invoiceNo); **partial** U(student, session, installment) and U(student, session) for opening balances WHERE deleted_at IS NULL; total = subtotal − concession + late fee; paid ≤ total; status ⇔ amounts; cancelled ⇔ deleted, unpaid, with reason |
+| FeeInvoiceItem | invoiceId, categoryId, kind (STRUCTURE/CHARGE/LATE_FEE/OPENING_BALANCE), description (snapshot), amount, concessionAmount, paidAmount, sortOrder, chargeId? | 0 ≤ concession ≤ amount; 0 ≤ paid ≤ amount − concession; CHARGE ⇔ chargeId; U(chargeId) |
+| FeePayment (= receipt) | receiptNo, studentId, amount > 0, method (CASH/UPI/BANK_TRANSFER/CHEQUE/CARD), transactionRef?, instrumentDate?, bankName?, paidOn, idempotencyKey, collectedById?, receiptSnapshot JSON, status (SUCCESS/CANCELLED), cancelled by / at / reason, printCount | U(receiptNo), U(idempotencyKey); among SUCCESS payments **partial** U(transactionRef) for UPI + bank transfer together (one UTR space), U(ref, bankName, instrumentDate) for cheques, U(ref) for cards; cash ⇔ no reference; reference starts with a letter / digit; cheque ⇒ bank + date; canceller ≠ collector; cancelled ⇔ who / when / why (FC10–FC15). **Trigger:** only cancellation (once), print count (grows), version and actor SET NULL may change; never deleted |
+| FeePaymentAllocation | paymentId, invoiceItemId, invoiceId, studentId, amount > 0, reversedAt? | PK(payment, item); composite FKs (item, invoice) → item, (payment, student) → payment, (invoice, student) → invoice, so a receipt can only pay its own student's invoices (review M2). **Trigger:** only reversedAt NULL → time; never deleted. Σ = payment (service + reconciliation report) |
+
+Online payments (PENDING payments, gateway columns, PaymentGatewayEvent U(gateway, eventId)) are designed in PHASE_5_PLAN.md FC16 and come with Phase 6.
 
 ## 9. Transport
 

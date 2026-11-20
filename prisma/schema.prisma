@@ -91,9 +91,17 @@ model User {
   marksEntered            ExaminationMarks[]     @relation("MarksEnteredBy")
 
   // Phase 4C
-  promotionsProposed  PromotionDecision[] @relation("PromotionProposedBy")
-  promotionsConfirmed PromotionDecision[] @relation("PromotionConfirmedBy")
-  homeworkPosted      Homework[]          @relation("HomeworkPostedBy")
+  promotionsProposed     PromotionDecision[] @relation("PromotionProposedBy")
+  promotionsConfirmed    PromotionDecision[] @relation("PromotionConfirmedBy")
+  homeworkPosted         Homework[]          @relation("HomeworkPostedBy")
+  // Phase 5A fees (actor references, SetNull)
+  feeConcessionsProposed StudentConcession[] @relation("ConcessionProposedBy")
+  feeConcessionsDecided  StudentConcession[] @relation("ConcessionDecidedBy")
+  feeChargesCreated      StudentFeeCharge[]  @relation("FeeChargeCreatedBy")
+  feeInvoicesIssued      FeeInvoice[]        @relation("FeeInvoiceIssuedBy")
+  feeInvoicesCancelled   FeeInvoice[]        @relation("FeeInvoiceCancelledBy")
+  feePaymentsCollected   FeePayment[]        @relation("FeePaymentCollectedBy")
+  feePaymentsCancelled   FeePayment[]        @relation("FeePaymentCancelledBy")
 
   @@index([isActive])
   @@map("user")
@@ -273,6 +281,9 @@ model AcademicSession {
   promotionDecisions PromotionDecision[]
   homework           Homework[]
   academicEvents     AcademicEvent[]
+  feeInstallments    FeeInstallment[]
+  feeStructures      FeeStructure[]
+  lateFeeRules       LateFeeRule[]
 
   @@map("academic_session")
 }
@@ -309,6 +320,7 @@ model SchoolClass {
 
   // Phase 4C
   promotionTargets PromotionDecision[]
+  feeStructures    FeeStructure[]
 
   @@index([isActive, displayOrder])
   @@map("school_class")
@@ -714,6 +726,7 @@ model Student {
   enrollments     StudentEnrollment[]
   documents       StudentDocument[]
   statusChanges   StudentStatusChange[]
+  feePayments     FeePayment[]
 
   @@index([fullNameNormalized, dob])
   @@index([status])
@@ -813,8 +826,12 @@ model StudentEnrollment {
   reportCards     ReportCard[]
 
   // Phase 4C
-  promotionFrom PromotionDecision? @relation("PromotionFrom")
-  promotionTo   PromotionDecision? @relation("PromotionTo")
+  promotionFrom  PromotionDecision?  @relation("PromotionFrom")
+  promotionTo    PromotionDecision?  @relation("PromotionTo")
+  // Phase 5A fees: billed per enrollment, referenced by (studentId, academicSessionId).
+  feeConcessions StudentConcession[]
+  feeCharges     StudentFeeCharge[]
+  feeInvoices    FeeInvoice[]
 
   @@unique([studentId, academicSessionId])
   /// Phase 4A: target of composite FKs (student subjects and attendance stay in the enrollment's session).
@@ -1983,4 +2000,404 @@ model AcademicEvent {
 
   @@index([academicSessionId, startDate])
   @@map("academic_event")
+}
+
+// ───────────────────────────── Phase 5A — fees (PHASE_5_PLAN.md; migration 20261124000000) ─────────────────────────────
+// Money Decimal(12,2) (rule 7). Every per-student row points at the enrollment by (student_id, academic_session_id) —
+// unique on student_enrollment — so a row can't name a student and an enrollment that disagree. Partial unique
+// indexes and CHECKs are hand-written in the migration (commented there).
+
+enum FeeCategoryKind {
+  REGULAR
+  ONE_TIME
+  TRANSPORT
+  LATE_FEE
+  OPENING_BALANCE
+  OTHER
+}
+
+enum FeeAppliesTo {
+  ALL
+  NEW_ADMISSION
+  EXISTING
+}
+
+enum FeeConcessionKind {
+  CONCESSION
+  SCHOLARSHIP
+  DISCOUNT
+  WAIVER
+}
+
+enum FeeCalc {
+  PERCENT
+  FIXED
+}
+
+enum StudentConcessionStatus {
+  PROPOSED
+  APPROVED
+  REJECTED
+  REVOKED
+}
+
+enum LateFeeCalc {
+  FLAT
+  PER_DAY
+  PERCENT
+}
+
+enum FeeChargeSource {
+  MANUAL
+  TRANSPORT
+}
+
+enum FeeInvoiceKind {
+  INSTALLMENT
+  OPENING_BALANCE
+}
+
+enum FeeInvoiceStatus {
+  ISSUED
+  PARTIAL
+  PAID
+  WAIVED
+  CANCELLED
+}
+
+enum FeeInvoiceItemKind {
+  STRUCTURE
+  CHARGE
+  LATE_FEE
+  OPENING_BALANCE
+}
+
+enum FeePaymentMethod {
+  CASH
+  UPI
+  BANK_TRANSFER
+  CHEQUE
+  CARD
+}
+
+enum FeePaymentStatus {
+  SUCCESS
+  CANCELLED
+}
+
+/// FC2: school-defined fee heads (no seeded names or amounts). Deactivate, never delete.
+model FeeCategory {
+  id        String          @id @default(cuid(2))
+  code      String          @unique @db.VarChar(20)
+  name      String          @db.VarChar(80)
+  nameKey   String          @unique @map("name_key") @db.VarChar(80)
+  kind      FeeCategoryKind @default(REGULAR)
+  appliesTo FeeAppliesTo    @default(ALL) @map("applies_to")
+  isActive  Boolean         @default(true) @map("is_active")
+  version   Int             @default(1)
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  structureItems FeeStructureItem[]
+  concessions    FeeConcessionCategory[]
+  charges        StudentFeeCharge[]
+  invoiceItems   FeeInvoiceItem[]
+
+  @@map("fee_category")
+}
+
+/// FC3: the school's own schedule per session (monthly, quarterly or terms).
+model FeeInstallment {
+  id                String   @id @default(cuid(2))
+  academicSessionId String   @map("academic_session_id")
+  name              String   @db.VarChar(60)
+  nameKey           String   @map("name_key") @db.VarChar(60)
+  dueOn             DateTime @map("due_on") @db.Date
+  sortOrder         Int      @default(0) @map("sort_order")
+  version           Int      @default(1)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession    @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  structureItems  FeeStructureItem[]
+  charges         StudentFeeCharge[]
+  invoices        FeeInvoice[]
+
+  @@unique([academicSessionId, nameKey])
+  @@unique([id, academicSessionId])
+  @@index([academicSessionId, dueOn])
+  @@map("fee_installment")
+}
+
+/// FC3 / FC5: amounts per class per session; at most one ACTIVE structure per (session, class) — partial unique in SQL.
+/// Frozen once an invoice uses it (service); a change is a new structure.
+model FeeStructure {
+  id                String   @id @default(cuid(2))
+  academicSessionId String   @map("academic_session_id")
+  classId           String   @map("class_id")
+  name              String   @db.VarChar(80)
+  isActive          Boolean  @default(true) @map("is_active")
+  version           Int      @default(1)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession    @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  class           SchoolClass        @relation(fields: [classId], references: [id], onDelete: Restrict)
+  items           FeeStructureItem[]
+
+  @@unique([id, academicSessionId])
+  @@index([academicSessionId, classId])
+  @@map("fee_structure")
+}
+
+model FeeStructureItem {
+  id                String  @id @default(cuid(2))
+  structureId       String  @map("structure_id")
+  academicSessionId String  @map("academic_session_id")
+  categoryId        String  @map("category_id")
+  installmentId     String  @map("installment_id")
+  amount            Decimal @db.Decimal(12, 2)
+
+  structure   FeeStructure   @relation(fields: [structureId, academicSessionId], references: [id, academicSessionId], onDelete: Cascade)
+  category    FeeCategory    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  installment FeeInstallment @relation(fields: [installmentId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+
+  @@unique([structureId, categoryId, installmentId])
+  @@index([installmentId])
+  @@map("fee_structure_item")
+}
+
+/// FC6: a concession / scholarship template; applies to the listed categories.
+model FeeConcession {
+  id        String            @id @default(cuid(2))
+  code      String            @unique @db.VarChar(20)
+  name      String            @db.VarChar(80)
+  nameKey   String            @unique @map("name_key") @db.VarChar(80)
+  kind      FeeConcessionKind @default(CONCESSION)
+  calc      FeeCalc
+  /// Percent 0–100 (PERCENT) or rupees (FIXED, per invoice).
+  value     Decimal           @db.Decimal(12, 2)
+  isActive  Boolean           @default(true) @map("is_active")
+  version   Int               @default(1)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  categories FeeConcessionCategory[]
+  students   StudentConcession[]
+
+  @@map("fee_concession")
+}
+
+model FeeConcessionCategory {
+  concessionId String @map("concession_id")
+  categoryId   String @map("category_id")
+
+  concession FeeConcession @relation(fields: [concessionId], references: [id], onDelete: Cascade)
+  category   FeeCategory   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@id([concessionId, categoryId])
+  @@index([categoryId])
+  @@map("fee_concession_category")
+}
+
+/// FC6 maker-checker: proposed with fee.concession.manage, decided with fee.concession.approve (approver ≠ proposer).
+/// At most one PROPOSED / APPROVED row per (enrollment, concession) — partial unique in SQL. The reason is
+/// personal-tier text: shown to fee staff, never audited.
+model StudentConcession {
+  id                String                  @id @default(cuid(2))
+  studentId         String                  @map("student_id")
+  academicSessionId String                  @map("academic_session_id")
+  concessionId      String                  @map("concession_id")
+  status            StudentConcessionStatus @default(PROPOSED)
+  reason            String                  @db.VarChar(500)
+  proposedById      String?                 @map("proposed_by_id")
+  proposedAt        DateTime                @default(now()) @map("proposed_at") @db.Timestamptz(3)
+  decidedById       String?                 @map("decided_by_id")
+  decidedAt         DateTime?               @map("decided_at") @db.Timestamptz(3)
+  version           Int                     @default(1)
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  enrollment StudentEnrollment @relation(fields: [studentId, academicSessionId], references: [studentId, academicSessionId], onDelete: Restrict)
+  concession FeeConcession     @relation(fields: [concessionId], references: [id], onDelete: Restrict)
+  proposedBy User?             @relation("ConcessionProposedBy", fields: [proposedById], references: [id], onDelete: SetNull)
+  decidedBy  User?             @relation("ConcessionDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([studentId, academicSessionId])
+  @@index([status])
+  @@map("student_concession")
+}
+
+/// FC7: at most one active rule per session (partial unique in SQL).
+model LateFeeRule {
+  id                String      @id @default(cuid(2))
+  academicSessionId String      @map("academic_session_id")
+  graceDays         Int         @map("grace_days")
+  calc              LateFeeCalc
+  value             Decimal     @db.Decimal(12, 2)
+  cap               Decimal?    @db.Decimal(12, 2)
+  isActive          Boolean     @default(true) @map("is_active")
+  version           Int         @default(1)
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+
+  @@index([academicSessionId])
+  @@map("late_fee_rule")
+}
+
+/// FC18: per-student extras picked up by invoice generation — MANUAL (hostel, activity, cheque bounce) or TRANSPORT
+/// (written by the Phase 7 transport service through a fees function). `invoiceItem` set once billed.
+model StudentFeeCharge {
+  id                String          @id @default(cuid(2))
+  studentId         String          @map("student_id")
+  academicSessionId String          @map("academic_session_id")
+  installmentId     String          @map("installment_id")
+  categoryId        String          @map("category_id")
+  amount            Decimal         @db.Decimal(12, 2)
+  source            FeeChargeSource @default(MANUAL)
+  sourceRef         String?         @map("source_ref") @db.VarChar(64)
+  note              String          @db.VarChar(200)
+  createdById       String?         @map("created_by_id")
+  deletedAt         DateTime?       @map("deleted_at") @db.Timestamptz(3)
+  version           Int             @default(1)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  enrollment  StudentEnrollment @relation(fields: [studentId, academicSessionId], references: [studentId, academicSessionId], onDelete: Restrict)
+  installment FeeInstallment    @relation(fields: [installmentId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  category    FeeCategory       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  createdBy   User?             @relation("FeeChargeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  invoiceItem FeeInvoiceItem?
+
+  @@index([studentId, academicSessionId, installmentId])
+  @@map("student_fee_charge")
+}
+
+/// FC4 / FC5: one live invoice per (student, session, installment) and one live opening-balance invoice per
+/// (student, session) — partial uniques WHERE deleted_at IS NULL. Cancelling = status CANCELLED + deletedAt (only
+/// without payments; service). Number from lib/sequence at issue.
+model FeeInvoice {
+  id                String           @id @default(cuid(2))
+  invoiceNo         String           @unique @map("invoice_no") @db.VarChar(40)
+  studentId         String           @map("student_id")
+  academicSessionId String           @map("academic_session_id")
+  kind              FeeInvoiceKind   @default(INSTALLMENT)
+  installmentId     String?          @map("installment_id")
+  /// Snapshot of the installment's due date at issue (an installment edit never moves issued invoices).
+  dueOn             DateTime         @map("due_on") @db.Date
+  subtotal          Decimal          @db.Decimal(12, 2)
+  concessionTotal   Decimal          @default(0) @map("concession_total") @db.Decimal(12, 2)
+  lateFee           Decimal          @default(0) @map("late_fee") @db.Decimal(12, 2)
+  total             Decimal          @db.Decimal(12, 2)
+  paidAmount        Decimal          @default(0) @map("paid_amount") @db.Decimal(12, 2)
+  status            FeeInvoiceStatus @default(ISSUED)
+  issuedById        String?          @map("issued_by_id")
+  issuedAt          DateTime         @default(now()) @map("issued_at") @db.Timestamptz(3)
+  cancelledById     String?          @map("cancelled_by_id")
+  cancelledAt       DateTime?        @map("cancelled_at") @db.Timestamptz(3)
+  cancelReason      String?          @map("cancel_reason") @db.VarChar(500)
+  deletedAt         DateTime?        @map("deleted_at") @db.Timestamptz(3)
+  version           Int              @default(1)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  enrollment  StudentEnrollment      @relation(fields: [studentId, academicSessionId], references: [studentId, academicSessionId], onDelete: Restrict)
+  installment FeeInstallment?        @relation(fields: [installmentId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+  issuedBy    User?                  @relation("FeeInvoiceIssuedBy", fields: [issuedById], references: [id], onDelete: SetNull)
+  cancelledBy User?                  @relation("FeeInvoiceCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  items       FeeInvoiceItem[]
+  allocations FeePaymentAllocation[]
+
+  /// Review 5A M2: target of the allocation's (invoice, student) key.
+  @@unique([id, studentId])
+  @@index([studentId, status])
+  @@index([academicSessionId, installmentId])
+  @@index([status, dueOn])
+  @@map("fee_invoice")
+}
+
+model FeeInvoiceItem {
+  id               String             @id @default(cuid(2))
+  invoiceId        String             @map("invoice_id")
+  categoryId       String             @map("category_id")
+  kind             FeeInvoiceItemKind
+  /// Snapshot of the category name (later renames never change an issued invoice or receipt).
+  description      String             @db.VarChar(120)
+  amount           Decimal            @db.Decimal(12, 2)
+  concessionAmount Decimal            @default(0) @map("concession_amount") @db.Decimal(12, 2)
+  paidAmount       Decimal            @default(0) @map("paid_amount") @db.Decimal(12, 2)
+  sortOrder        Int                @default(0) @map("sort_order")
+  chargeId         String?            @unique @map("charge_id")
+
+  invoice     FeeInvoice             @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  category    FeeCategory            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  charge      StudentFeeCharge?      @relation(fields: [chargeId], references: [id], onDelete: Restrict)
+  allocations FeePaymentAllocation[]
+
+  /// Review 5A M2: target of the allocation's (item, invoice) key.
+  @@unique([id, invoiceId])
+  @@index([invoiceId])
+  @@map("fee_invoice_item")
+}
+
+/// FC10–FC15: a payment IS its receipt (one row). Number from lib/sequence only on success; never reused; cancelled
+/// receipts keep their number. U(idempotencyKey) stops double submits; a non-cash reference is unique per method
+/// among SUCCESS payments (partial unique in SQL). The snapshot is what the receipt PDF prints.
+model FeePayment {
+  id              String           @id @default(cuid(2))
+  receiptNo       String           @unique @map("receipt_no") @db.VarChar(40)
+  studentId       String           @map("student_id")
+  amount          Decimal          @db.Decimal(12, 2)
+  method          FeePaymentMethod
+  transactionRef  String?          @map("transaction_ref") @db.VarChar(40)
+  instrumentDate  DateTime?        @map("instrument_date") @db.Date
+  bankName        String?          @map("bank_name") @db.VarChar(80)
+  paidOn          DateTime         @map("paid_on") @db.Date
+  idempotencyKey  String           @unique @map("idempotency_key") @db.VarChar(64)
+  collectedById   String?          @map("collected_by_id")
+  receiptSnapshot Json             @map("receipt_snapshot")
+  status          FeePaymentStatus @default(SUCCESS)
+  cancelledById   String?          @map("cancelled_by_id")
+  cancelledAt     DateTime?        @map("cancelled_at") @db.Timestamptz(3)
+  cancelReason    String?          @map("cancel_reason") @db.VarChar(500)
+  printCount      Int              @default(0) @map("print_count")
+  version         Int              @default(1)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  student     Student                @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  collectedBy User?                  @relation("FeePaymentCollectedBy", fields: [collectedById], references: [id], onDelete: SetNull)
+  cancelledBy User?                  @relation("FeePaymentCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  allocations FeePaymentAllocation[]
+
+  /// Review 5A M2: target of the allocation's (payment, student) key.
+  @@unique([id, studentId])
+  @@index([studentId, paidOn])
+  @@index([paidOn, method])
+  @@index([collectedById, paidOn])
+  @@map("fee_payment")
+}
+
+/// FC8: which invoice items a payment paid. Σ live allocations = payment amount (service + reconciliation report).
+/// Cancelling a receipt sets reversedAt (rows are kept; a trigger allows nothing else).
+/// Review 5A M2: composite keys tie the row together — the item belongs to the invoice, and the payment and the
+/// invoice belong to the same student — so a receipt can never credit another student's invoice.
+model FeePaymentAllocation {
+  paymentId     String    @map("payment_id")
+  invoiceItemId String    @map("invoice_item_id")
+  invoiceId     String    @map("invoice_id")
+  studentId     String    @map("student_id")
+  amount        Decimal   @db.Decimal(12, 2)
+  reversedAt    DateTime? @map("reversed_at") @db.Timestamptz(3)
+
+  payment     FeePayment     @relation(fields: [paymentId, studentId], references: [id, studentId], onDelete: Restrict)
+  invoiceItem FeeInvoiceItem @relation(fields: [invoiceItemId, invoiceId], references: [id, invoiceId], onDelete: Restrict)
+  invoice     FeeInvoice     @relation(fields: [invoiceId, studentId], references: [id, studentId], onDelete: Restrict)
+
+  @@id([paymentId, invoiceItemId])
+  @@index([invoiceItemId])
+  @@index([invoiceId])
+  @@map("fee_payment_allocation")
 }

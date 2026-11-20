@@ -18,10 +18,10 @@ function ctxFor(roleKey: string, extra: Partial<AuthContext> = {}): AuthContext 
   };
 }
 
-describe("full RBAC matrix — 13 roles × 85 permissions", () => {
-  it("catalog has 13 roles and 85 permissions", () => {
+describe("full RBAC matrix — 13 roles × 86 permissions", () => {
+  it("catalog has 13 roles and 86 permissions", () => {
     expect(ROLES).toHaveLength(13);
-    expect(ALL_PERMISSION_KEYS).toHaveLength(85);
+    expect(ALL_PERMISSION_KEYS).toHaveLength(86);
   });
 
   it("docs/RBAC_MATRIX.md is up to date with the code", () => {
@@ -29,7 +29,7 @@ describe("full RBAC matrix — 13 roles × 85 permissions", () => {
     expect(onDisk).toBe(renderMatrixMarkdown());
   });
 
-  // Every one of the 13 × 85 = 1,105 cells: authorize() must agree exactly with the declared grant.
+  // Every one of the 13 × 86 = 1,118 cells: authorize() must agree exactly with the declared grant.
   const matrix = defaultGrantMatrix();
   describe.each(ROLES.map((r) => r.key))("%s", (roleKey) => {
     const ctx = ctxFor(roleKey);
@@ -69,10 +69,19 @@ describe("data isolation invariants (permission level)", () => {
     }
   });
   it("financial write operations are limited to finance roles", () => {
-    for (const perm of ["fee.collect", "fee.refund", "fee.structure.manage", "payroll.pay", "payroll.prepare"] as const) {
+    for (const perm of ["fee.collect", "fee.structure.manage", "payroll.pay", "payroll.prepare"] as const) {
       const keys = holders(perm).map((r) => r.key);
       expect(keys.every((k) => ["SUPER_ADMIN", "ACCOUNTANT", "HR_MANAGER"].includes(k))).toBe(true);
     }
+    // Phase 5 FC13 (owner 2026-11-20): the Principal may also cancel receipts — a second person in a one-accountant school.
+    expect(holders("fee.refund").map((r) => r.key).sort()).toEqual(["ACCOUNTANT", "PRINCIPAL", "SUPER_ADMIN"]);
+  });
+  it("fee maker-checker at role level (FC6, FC13): approvers don't propose; the Principal cancels but never collects", () => {
+    expect(holders("fee.concession.approve").map((r) => r.key).sort()).toEqual(["PRINCIPAL", "SUPER_ADMIN"]);
+    for (const r of holders("fee.concession.approve")) {
+      if (r.key !== "SUPER_ADMIN") expect(ctxFor(r.key).permissions.has("fee.concession.manage"), r.key).toBe(false);
+    }
+    expect(ctxFor("PRINCIPAL").permissions.has("fee.collect")).toBe(false);
   });
   it("payroll approval cannot be held by the preparing roles (maker-checker at role level)", () => {
     for (const r of holders("payroll.prepare")) {

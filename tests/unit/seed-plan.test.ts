@@ -13,17 +13,17 @@ import { decideSuperAdmin, newPermissionGrants, PLACEHOLDER_SETTINGS, planSeed, 
  */
 describe("seed plan", () => {
   const plan = planSeed();
-  it("is exactly the catalog: 85 permissions, 13 roles, 309 grants", () => {
-    expect(plan.permissions).toHaveLength(85);
+  it("is exactly the catalog: 86 permissions, 13 roles, 312 grants", () => {
+    expect(plan.permissions).toHaveLength(86);
     expect(plan.roles).toHaveLength(13);
-    expect(plan.totalGrants).toBe(309);
+    expect(plan.totalGrants).toBe(312);
     expect(plan.permissions.map((p) => p.key)).toEqual([...ALL_PERMISSION_KEYS]);
     expect(plan.roles.map((r) => r.key)).toEqual(ROLES.map((r) => r.key));
   });
   it("is deterministic and matches docs/RBAC_MATRIX.md", () => {
     expect(planSeed()).toEqual(plan);
     const matrix = readFileSync(new URL("../../docs/RBAC_MATRIX.md", import.meta.url), "utf8");
-    expect(matrix).toContain("Roles: 13 · Permissions: 85");
+    expect(matrix).toContain("Roles: 13 · Permissions: 86");
     for (const p of plan.permissions) expect(matrix).toContain(`\`${p.key}\``);
   });
   it("SUPER_ADMIN is the only system role and holds every permission with ALL scope", () => {
@@ -172,7 +172,7 @@ describe("runGuardedSeed — nothing reaches the transaction unless every guard 
     const r = runner();
     await runGuardedSeed(r.deps);
     const opts = r.tx()!;
-    expect(opts.plan.totalGrants).toBe(309);
+    expect(opts.plan.totalGrants).toBe(312);
     expect(typeof opts.verifyIdentity).toBe("function");
   });
 });

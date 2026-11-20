@@ -73,6 +73,20 @@ export const APP_TABLES_IN_FK_ORDER = [
   "promotion_decision", // → academic_session, student_enrollment, school_class, user
   "homework", // → academic_session, section, class_subject, user
   "academic_event", // → academic_session
+  // Phase 5A fees — migration 20261124000000 (DRAFT: awaiting SQL approval).
+  "fee_category",
+  "fee_installment", // → academic_session
+  "fee_structure", // → academic_session, school_class
+  "fee_structure_item", // → fee_structure, fee_category, fee_installment
+  "fee_concession",
+  "fee_concession_category", // → fee_concession, fee_category
+  "student_concession", // → student_enrollment, fee_concession, user
+  "late_fee_rule", // → academic_session
+  "student_fee_charge", // → student_enrollment, fee_installment, fee_category, user
+  "fee_invoice", // → student_enrollment, fee_installment, user
+  "fee_invoice_item", // → fee_invoice, fee_category, student_fee_charge
+  "fee_payment", // → student, user
+  "fee_payment_allocation", // → fee_payment, fee_invoice_item, fee_invoice
   "audit_log",
   "notification",
   "sequence_counter",

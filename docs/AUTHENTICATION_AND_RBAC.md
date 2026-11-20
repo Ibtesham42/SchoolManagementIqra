@@ -60,7 +60,7 @@ The UI disables options the policy would reject (same functions), but the server
 | HR | `employee.read` (directory; **SELF** = own linked record, Phase 3A M3b) `employee.personal.read` (personal details & documents — Phase 3A, H6) `employee.manage` `employee.document.manage` (Phase 3A, H8) `employee.sensitive.read` (PAN/bank — reserved for payroll 3C) `leave.request` `leave.approve` |
 | Attendance | `attendance.student.mark` `attendance.student.read` `attendance.employee.mark` `attendance.employee.read` |
 | Payroll | `payroll.read` `payroll.prepare` `payroll.approve` `payroll.pay` `salary.structure.manage` `salary.self.read` |
-| Fees | `fee.structure.manage` `fee.read` `fee.collect` `fee.concession.manage` `fee.refund` `fee.report` |
+| Fees | `fee.structure.manage` `fee.read` `fee.collect` `fee.concession.manage` `fee.concession.approve` `fee.refund` `fee.report` `fee.pay.online` |
 | Transport | `transport.read` `transport.manage` `transport.assign` |
 | Academics | `academic.read` (view classes & sections; ASSIGNED = own class-teacher sections, ADR-034) `academic.manage` `timetable.manage` `exam.manage` `marks.enter` `marks.approve` `result.publish` `reportcard.generate` |
 | Library | `library.read` `library.manage` `library.issue` |
@@ -126,6 +126,12 @@ Note: a user may hold several roles (e.g. Teacher + Class Teacher); grants union
 - Class teachers (H4): new assignments need the user's account linked to an ACTIVE, TEACHING employee; existing assignments are unaffected.
 - Delegated administration with the SELF grants (review M3b, Info): `assertCanModifyUser` requires the actor to cover every permission of the target. A custom role with `user.manage` but without `employee.read` / `employee.personal.read` therefore can no longer modify or assign Teacher, Class Teacher, Accountant, Admission Officer, Transport Manager, Vice Principal or Librarian accounts (they now hold those permissions at SELF). Correct anti-escalation; no default role is affected (only Super Admin holds `user.manage`).
 - Re-saving an existing class-teacher assignment whose teacher no longer meets H4 now returns a validation message instead of doing nothing (the H4 check runs first, under the employee lock).
+
+### Fees (Phase 5, decisions FC6, FC13, FC17; owner 2026-11-20)
+- **Catalog 86 / 13 / 312:** new `fee.concession.approve` — Principal (+ Super Admin). Principal also gets `fee.refund`. Database sync pending (owner approval, KI-073 procedure).
+- **Maker-checker:** concessions are proposed with `fee.concession.manage` (Accountant) and approved with `fee.concession.approve`; approver ≠ proposer, Super Admin included. Receipt cancellation (`fee.refund`) is refused for the person who collected that payment. Role-level invariants in `tests/unit/rbac-matrix.test.ts`.
+- **Parent CHILDREN / Student SELF** (`fee.read`, `fee.pay.online`): refused by `fees.policy` until the Phase 6 guardian / student link exists; no catalog change.
+- **Delegated administration side effect:** a non–Super Admin user manager who doesn't hold `fee.concession.approve` and `fee.refund` can no longer modify or assign Principal accounts (`assertCanModifyUser` / `actorCovers`) — intended.
 
 ### Promotion, homework and calendar (Phase 4C, AC16–AC18; `homework.manage` owner decision 2026-11-20)
 - **Catalog 85 / 13 / 309:** new `homework.manage` — Teacher and Class Teacher at ASSIGNED (only the subject they are allocated in that section, open session; same rule as marks entry), School Admin at ALL, Super Admin. Database sync with KI-073.

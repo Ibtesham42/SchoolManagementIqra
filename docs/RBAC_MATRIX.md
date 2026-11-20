@@ -6,7 +6,7 @@
 
 Legend: ✓ = all records · A = assigned records only · S = own record only · C = linked children only · blank = denied
 
-Roles: 13 · Permissions: 85
+Roles: 13 · Permissions: 86
 
 | Permission | SUPER_ADMIN | SCHOOL_ADMIN | PRINCIPAL | VICE_PRINCIPAL | ACCOUNTANT | HR_MANAGER | ADMISSION_OFFICER | TEACHER | CLASS_TEACHER | TRANSPORT_MANAGER | LIBRARIAN | PARENT | STUDENT |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -63,7 +63,8 @@ Roles: 13 · Permissions: 85
 | `fee.read` — View fees and invoices | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |  | C | S |
 | `fee.collect` — Collect fee payments | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |  |
 | `fee.concession.manage` — Manage concessions and scholarships | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |  |
-| `fee.refund` — Cancel receipts and refund payments | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |  |
+| `fee.concession.approve` — Approve concessions and scholarships | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |
+| `fee.refund` — Cancel receipts and refund payments | ✓ |  | ✓ |  | ✓ |  |  |  |  |  |  |  |  |
 | `fee.report` — View fee reports | ✓ |  | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |
 | `fee.pay.online` — Pay fees online | ✓ |  |  |  |  |  |  |  |  |  |  | C |  |
 | `transport.read` — View transport | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  | ✓ |  |  |  |
@@ -100,9 +101,9 @@ Roles: 13 · Permissions: 85
 
 | Role | Permissions granted |
 |---|--:|
-| Super Admin (`SUPER_ADMIN`) | 85 |
+| Super Admin (`SUPER_ADMIN`) | 86 |
 | School Admin (`SCHOOL_ADMIN`) | 45 |
-| Principal (`PRINCIPAL`) | 35 |
+| Principal (`PRINCIPAL`) | 37 |
 | Vice Principal (`VICE_PRINCIPAL`) | 25 |
 | Accountant (`ACCOUNTANT`) | 18 |
 | HR Manager (`HR_MANAGER`) | 15 |
