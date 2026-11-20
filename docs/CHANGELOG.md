@@ -4,6 +4,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added (Phase 4B — examinations and results; needs migration 20261122000000, not yet applied)
+- **Exams** (Academic → Exams; School Admin and Principal): create an exam in a session with its own grading scale and optional dates, add class subjects with maximum marks per part (theory / practical / internal; 0 = not examined) and an optional pass mark, then Draft → Scheduled (the scale's bands freeze) → Marks entry. Draft exams can be deleted.
+- **Marks entry** (Academic → Marks): a teacher sees only the subjects they are allocated to teach in each section and enters marks on one phone screen — whole or half marks, AB (absent, counts 0) or EX (exempt, left out of the total). Work can be saved part-done, then submitted.
+- **Approval** (Principal, Vice Principal): approve or return submitted marks; nobody approves marks they entered or submitted. Approved marks can be corrected by an approver with a reason until results are published. **Lock marks** once every sheet is approved; reopen if needed before publication.
+- **Results**: a live preview per section while marks are entered; **Publish results** (Principal, Vice Principal) creates a fixed report card for every enrolled student — subject marks and grades, total, percentage, overall grade, pass / not passed, attendance % and, if the school turns it on (Settings → Results: rank in class), the rank in class. Class teachers add a remark and download the **report card PDF** for their own section; School Admin and Principal for every section.
+
 ### Added (Phase 3C — payroll, in progress)
 - **Payroll** (new menu item for HR Manager, Accountant, Principal and Super Admin): **salary components** — the school's own earnings and deductions, a fixed amount or a percentage of basic, reduced for unpaid days or not — and **salary structures** that group them with amounts. Nothing is pre-filled and nothing is calculated by law automatically. HR Manager edits; the Principal and Accountant view.
 - **Employee salaries** (Payroll → Employee salaries): HR proposes an employee's basic and structure from a month; the Principal approves or rejects (with a reason). Nobody proposes or approves their own salary, and the approver can't be the proposer. Approved salaries are never edited — a change is a new proposal — and months whose payroll is approved can't be changed. Amounts never appear in the audit log.

@@ -37,6 +37,18 @@ import { createSubject, setSubjectActive, updateSubject } from "@/modules/academ
 import { createScaleSchema, setScaleActiveSchema, updateScaleSchema } from "@/modules/academic/grading.schemas";
 import { createCbseStyleScale, createScale, setScaleActive, updateScale } from "@/modules/academic/grading.service";
 import {
+  addExamSubjectsSchema,
+  createExamSchema,
+  examStatusSchema,
+  examSubjectRefSchema,
+  updateExamSchema,
+  updateExamSubjectSchema,
+} from "@/modules/academic/examinations.schemas";
+import { addExamSubjects, createExam, deleteExam, removeExamSubject, setExamStatus, updateExam, updateExamSubject } from "@/modules/academic/examinations.service";
+import { examRefSchema, reportCardRemarkSchema, saveMarksSchema, sheetActionSchema } from "@/modules/academic/marks.schemas";
+import { lockExamMarks, saveMarks, sheetAction, unlockExamMarks } from "@/modules/academic/marks.service";
+import { publishResults, setReportCardRemark } from "@/modules/academic/results.service";
+import {
   assignClassTeacher,
   copySectionsFromSession,
   createSectionsBulk,
@@ -307,4 +319,120 @@ export async function setScaleActiveAction(_prev: ActionState, fd: FormData): Pr
     await setScaleActive(ctx, d);
     return d.active ? "Grading scale activated." : "Grading scale deactivated. New exams can't use it; existing exams keep it.";
   });
+}
+
+// ───────────────────────────── Phase 4B-M3: examinations ─────────────────────────────
+
+const examFields = (fd: FormData) => ({
+  name: formString(fd, "name"),
+  gradeScaleId: formString(fd, "gradeScaleId"),
+  startDate: formString(fd, "startDate"),
+  endDate: formString(fd, "endDate"),
+});
+const examSubjectFields = (fd: FormData) => ({
+  examDate: formString(fd, "examDate"),
+  maxTheory: formString(fd, "maxTheory"),
+  maxPractical: formString(fd, "maxPractical"),
+  maxInternal: formString(fd, "maxInternal"),
+  passPercent: formString(fd, "passPercent"),
+});
+
+export async function createExamAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(createExamSchema, { academicSessionId: formString(fd, "academicSessionId"), ...examFields(fd) }, async (ctx, d) => `Exam ${(await createExam(ctx, d)).name} created. Add its subjects next.`);
+}
+
+export async function updateExamAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(updateExamSchema, { ...ref(fd), ...examFields(fd) }, async (ctx, d) => (await updateExam(ctx, d), "Exam saved."));
+}
+
+const STATUS_MESSAGE: Record<string, string> = {
+  DRAFT: "Exam moved back to draft.",
+  SCHEDULED: "Exam scheduled. Its grading scale is now fixed.",
+  MARKS_ENTRY: "Marks entry is open. Teachers can now enter marks for their subjects.",
+};
+export async function setExamStatusAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(examStatusSchema, { ...ref(fd), to: formString(fd, "to") }, async (ctx, d) => (await setExamStatus(ctx, d), STATUS_MESSAGE[d.to]));
+}
+
+export async function deleteExamAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(examSubjectRefSchema, ref(fd), async (ctx, d) => (await deleteExam(ctx, d), "Draft exam deleted."));
+}
+
+export async function addExamSubjectsAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const ids = fd.getAll("classSubjectId").filter((v): v is string => typeof v === "string").slice(0, 101);
+  return run(
+    addExamSubjectsSchema,
+    { examinationId: formString(fd, "examinationId"), version: formString(fd, "version"), classSubjectIds: ids, ...examSubjectFields(fd) },
+    async (ctx, d) => `${await addExamSubjects(ctx, d)} subject(s) added.`,
+  );
+}
+
+export async function updateExamSubjectAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(updateExamSubjectSchema, { ...ref(fd), ...examSubjectFields(fd) }, async (ctx, d) => (await updateExamSubject(ctx, d), "Subject saved."));
+}
+
+export async function removeExamSubjectAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(examSubjectRefSchema, ref(fd), async (ctx, d) => (await removeExamSubject(ctx, d), "Subject removed from the exam."));
+}
+
+// ───────────────────────────── Phase 4B-M4/M5: marks ─────────────────────────────
+
+/** Grid rows arrive as enr=<id> plus st:/th:/pr:/in:/ver:<id>. */
+export async function saveMarksAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const ids = fd.getAll("enr").filter((v): v is string => typeof v === "string").slice(0, 201);
+  const sheetVersion = formString(fd, "sheetVersion");
+  const raw = {
+    examSubjectId: formString(fd, "examSubjectId"),
+    sectionId: formString(fd, "sectionId"),
+    sheetVersion: sheetVersion === "" ? null : sheetVersion,
+    reason: formString(fd, "reason"),
+    entries: ids.map((id) => {
+      const v = formString(fd, `ver:${id}`);
+      return { enrollmentId: id, status: formString(fd, `st:${id}`), theory: formString(fd, `th:${id}`), practical: formString(fd, `pr:${id}`), internal: formString(fd, `in:${id}`), version: v === "" ? null : v };
+    }),
+  };
+  const ctx = await requireAuth();
+  const parsed = saveMarksSchema.safeParse(raw);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    const state = fromZod(parsed.error);
+    return first?.path[0] === "entries" ? { ...state, error: first.message } : state;
+  }
+  try {
+    const r = await saveMarks(ctx, parsed.data);
+    refresh();
+    return { ok: true, message: r.created + r.changed === 0 ? "Nothing changed." : `Saved: ${r.created} new, ${r.changed} changed.` };
+  } catch (e) {
+    return fromError(e);
+  }
+}
+
+const SHEET_MESSAGE = { submit: "Marks submitted for approval.", return: "Marks returned to the teacher for changes.", approve: "Marks approved." } as const;
+export async function sheetActionAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(
+    sheetActionSchema,
+    { examSubjectId: formString(fd, "examSubjectId"), sectionId: formString(fd, "sectionId"), sheetVersion: formString(fd, "sheetVersion"), action: formString(fd, "action") },
+    async (ctx, d) => (await sheetAction(ctx, d), SHEET_MESSAGE[d.action]),
+  );
+}
+
+export async function lockExamMarksAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(examRefSchema, ref(fd), async (ctx, d) => (await lockExamMarks(ctx, d), "Marks locked. Results can now be published."));
+}
+
+export async function unlockExamMarksAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(examRefSchema, ref(fd), async (ctx, d) => (await unlockExamMarks(ctx, d), "Marks entry reopened."));
+}
+
+// ───────────────────────────── Phase 4B-M6: results ─────────────────────────────
+
+export async function publishResultsAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(examRefSchema, ref(fd), async (ctx, d) => {
+    const r = await publishResults(ctx, d);
+    return `Results published: ${r.reportCards} report card(s), ${r.passed} passed.`;
+  });
+}
+
+export async function reportCardRemarkAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(reportCardRemarkSchema, { ...ref(fd), remark: formString(fd, "remark") }, async (ctx, d) => (await setReportCardRemark(ctx, d), "Remark saved."));
 }

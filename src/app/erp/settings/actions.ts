@@ -15,6 +15,7 @@ import {
   updateDefaultSectionCapacity,
   updateSchoolProfile,
   updatePayrollDayBasis,
+  updateShowRank,
 } from "@/modules/settings/settings.service";
 
 const refresh = () => {
@@ -165,6 +166,20 @@ export async function updatePayrollDayBasisAction(_prev: ActionState, fd: FormDa
     await updatePayrollDayBasis(ctx, value);
     revalidatePath("/erp/settings");
     return { ok: true, message: "Payroll basis saved. Payroll runs prepared from now on use it." };
+  } catch (e) {
+    return fromError(e);
+  }
+}
+
+/** Phase 4B (AC14): rank in class on report cards. Affects only results published from now on. */
+export async function updateShowRankAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireAuth();
+  const value = formString(fd, "showRank");
+  if (value !== "true" && value !== "false") return { error: "Choose whether to show a rank." };
+  try {
+    await updateShowRank(ctx, value === "true");
+    revalidatePath("/erp/settings");
+    return { ok: true, message: value === "true" ? "Report cards published from now on show the rank in class." : "Report cards published from now on show no rank." };
   } catch (e) {
     return fromError(e);
   }

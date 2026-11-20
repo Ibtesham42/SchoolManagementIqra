@@ -47,6 +47,7 @@ export default async function StudentAttendancePage({ searchParams }: { searchPa
         showTimetable={hasPermission(ctx, "timetable.read")}
         showMine={linked && hasPermission(ctx, "timetable.read")}
         showAttendance
+        showMarks={hasPermission(ctx, "marks.enter") || hasPermission(ctx, "marks.approve")}
       />
     </>
   );

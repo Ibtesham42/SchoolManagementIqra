@@ -1,4 +1,5 @@
 import { PayrollBasisForm } from "./payroll-basis-form";
+import { updateShowRankAction } from "./actions";
 import Link from "next/link";
 import { CalendarRange, FileText, Trash2 } from "lucide-react";
 import { requireAuth } from "@/lib/auth/context";
@@ -9,6 +10,7 @@ import {
   getSchoolSettings,
   getStaffWeeklyOff,
   getStudentWeeklyOff,
+  getShowRank,
   getPayrollDayBasis,
   listAcademicSessions,
 } from "@/modules/settings/settings.service";
@@ -52,12 +54,13 @@ export default async function SettingsPage() {
   const ctx = await requireAuth();
   if (!hasPermission(ctx, "settings.read")) return <NotPermitted />;
   const canManage = hasPermission(ctx, "settings.manage");
-  const [settings, { sessions, currentId }, weeklyOff, studentWeeklyOff, payrollBasis] = await Promise.all([
+  const [settings, { sessions, currentId }, weeklyOff, studentWeeklyOff, payrollBasis, showRank] = await Promise.all([
     getSchoolSettings(ctx),
     listAcademicSessions(ctx),
     getStaffWeeklyOff(ctx),
     getStudentWeeklyOff(ctx),
     getPayrollDayBasis(ctx),
+    getShowRank(ctx),
   ]);
   const address = (settings?.address as Address) ?? null;
   const timings = (settings?.timings as Timings) ?? null;
@@ -284,6 +287,29 @@ export default async function SettingsPage() {
         {canManage && (
           <CardContent>
             <PayrollBasisForm current={payrollBasis} />
+          </CardContent>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>Results: rank in class</h2>
+          </CardTitle>
+          <CardDescription>
+            {showRank ? "On: report cards show each student's rank in their class (ties share a rank)." : "Off: report cards show no rank."} Applies to results published from now on; published report cards keep what they show.
+          </CardDescription>
+        </CardHeader>
+        {canManage && (
+          <CardContent>
+            <ConfirmAction
+              label={showRank ? "Stop showing rank" : "Show rank in class"}
+              title={showRank ? "Stop showing rank on report cards?" : "Show rank in class on report cards?"}
+              description="Only results published after this change are affected."
+              confirmLabel={showRank ? "Stop showing rank" : "Show rank"}
+              action={updateShowRankAction}
+              fields={{ showRank: showRank ? "false" : "true" }}
+            />
           </CardContent>
         )}
       </Card>

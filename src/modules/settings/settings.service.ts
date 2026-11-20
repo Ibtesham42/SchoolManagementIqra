@@ -376,6 +376,32 @@ export async function updateStudentWeeklyOff(ctx: AuthContext, value: WeeklyOff)
   });
 }
 
+/** Phase 4B (AC14): whether report cards show a rank in class. Off by default. */
+export async function getShowRank(ctx: AuthContext): Promise<boolean> {
+  authorize(ctx, "settings.read");
+  const row = await prisma.schoolSetting.findUnique({ where: { id: SETTINGS_ID }, select: { showRank: true } });
+  return row?.showRank ?? false;
+}
+
+/** For the results service, inside its publication transaction (no authorization here). */
+export async function readResultSettingsTx(tx: Tx) {
+  const row = await tx.schoolSetting.findUnique({ where: { id: SETTINGS_ID }, select: { showRank: true, timezone: true } });
+  return { showRank: row?.showRank ?? false, timezone: row?.timezone ?? null };
+}
+
+/** Changes only FUTURE publications: published report cards keep the rank (or none) in their snapshot. */
+export async function updateShowRank(ctx: AuthContext, value: boolean) {
+  authorize(ctx, "settings.manage");
+  await prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM school_setting WHERE id = ${SETTINGS_ID} FOR UPDATE`;
+    if (locked.length === 0) throw new ConflictError("Save the school profile before changing result settings.");
+    const cur = await tx.schoolSetting.findUniqueOrThrow({ where: { id: SETTINGS_ID }, select: { showRank: true } });
+    if (cur.showRank === value) return;
+    await tx.schoolSetting.update({ where: { id: SETTINGS_ID }, data: { showRank: value } });
+    await audit(tx, actorOf(ctx), { action: "settings.show_rank_update", entityType: "SchoolSetting", entityId: SETTINGS_ID, before: { showRank: cur.showRank }, after: { showRank: value } });
+  });
+}
+
 /** Phase 3C (P3): how slips are prorated — WORKING_DAYS or CALENDAR_DAYS. No default: payroll refuses until it is set. */
 export async function getPayrollDayBasis(ctx: AuthContext): Promise<"WORKING_DAYS" | "CALENDAR_DAYS" | null> {
   authorize(ctx, "settings.read");
