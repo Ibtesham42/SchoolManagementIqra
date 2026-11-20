@@ -10,6 +10,12 @@
 
 ## Log
 
+### 2026-11-20 — KI-073 grants synced on development and Test (owner-approved)
+- Script (scratchpad `grant-sync.mts dev|test dry|apply`): one transaction — `lock_timeout` 5 s, Super Admin guard lock first (rule 17), live identity check, add the `homework.manage` permission row, add EXACTLY the approved missing grants (refuses on any other difference or scope mismatch), one `role.grants_add` audit row per role (`system:grant-sync`), verify all 13 roles equal the catalog and 85 / 309, then COMMIT. `.env` files parsed privately, never printed.
+- **Development** (`ep-quiet-river`, unchanged SEED_TARGET guard): dry run 09:30:42Z, apply 09:30:57Z — 305 → **309**, +4 `homework.manage` grants (Super Admin, School Admin ALL; Teacher, Class Teacher ASSIGNED).
+- **Test** (`ep-quiet-brook`): `TEST_TARGET_*` still missing (KI-059), so the target was derived from the configuration `env:check` verifies — `.env.test` DIRECT_URL endpoint = `TEST_DATABASE_URL` endpoint, ≠ development endpoint, not forbidden; live identity on that endpoint, branch ≠ development, not forbidden. Dry run 09:31:07Z, apply 09:31:28Z — 291 → **309**, +18 grants on 10 roles (the 14 from 2026-11-19 plus the 4 homework grants).
+- Production never connected. Remaining for Phase 4 verification: KI-059 (`TEST_TARGET_*` in `.env`) for the integration suites.
+
 ### 2026-11-20 — Migrations 4B + 4C applied (development, Test); Phase 4C-M4 marks import (committed)
 - Owner (2026-11-20): commit 4C (done, `ead3e5f`), apply `20261122000000` + `20261123000000` to development and Test, approve `exceljs` / `papaparse`.
 - **Development** (`ep-quiet-river`): `migrate deploy` applied 4B and 4C only; drift `--exit-code` → 0 "No difference detected"; `db:check` ✓ (26 Phase 4B + 11 Phase 4C CHECKs validated).
