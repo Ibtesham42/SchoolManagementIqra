@@ -3,11 +3,11 @@ import { audit, type AuditActor } from "@/lib/audit";
 import { isTransactionBusy, isUniqueViolation } from "@/lib/db-errors";
 import { ConflictError, NotFoundError, ServiceBusyError, ValidationError } from "@/lib/errors";
 import { MONEY_MAX, moneyString, toMoney } from "@/lib/money";
-import { authorize, type AuthContext } from "@/lib/rbac/authorize";
+import type { AuthContext } from "@/lib/rbac/authorize";
 import { activeClassOptions, lockClassShared, lockSessionShared, sessionFacts, sessionOptions } from "@/modules/academic/academic.tx";
 import { masterNameKeyOf } from "@/modules/hr/hr.rules";
 import { sessionGeneratesInvoices } from "./fee-rules";
-import { assertFeeSetupRead } from "./fees.policy";
+import { assertFeeSetupRead, authorizeFeeWrite } from "./fees.policy";
 import { lockFeeSetup } from "./fees.tx";
 import type {
   CopyStructureInput,
@@ -87,7 +87,7 @@ export async function listFeeCategories(ctx: AuthContext, opts: { includeInactiv
 }
 
 export async function createFeeCategory(ctx: AuthContext, input: CreateCategoryInput) {
-  authorize(ctx, "fee.structure.manage");
+  authorizeFeeWrite(ctx, "fee.structure.manage");
   try {
     return await prisma.$transaction(async (tx) => {
       await lockFeeSetup(tx);
@@ -110,7 +110,7 @@ async function lockCategory(tx: Tx, id: string, version: number) {
 }
 
 export async function updateFeeCategory(ctx: AuthContext, input: UpdateCategoryInput) {
-  authorize(ctx, "fee.structure.manage");
+  authorizeFeeWrite(ctx, "fee.structure.manage");
   try {
     await prisma.$transaction(async (tx) => {
       await lockFeeSetup(tx);
@@ -125,7 +125,7 @@ export async function updateFeeCategory(ctx: AuthContext, input: UpdateCategoryI
 }
 
 export async function setFeeCategoryActive(ctx: AuthContext, input: SetActiveInput) {
-  authorize(ctx, "fee.structure.manage");
+  authorizeFeeWrite(ctx, "fee.structure.manage");
   try {
     await prisma.$transaction(async (tx) => {
       await lockFeeSetup(tx);
@@ -166,7 +166,7 @@ function assertDueInSession(dueOn: string, s: { name: string; startDate: Date; e
 }
 
 export async function createFeeInstallment(ctx: AuthContext, input: CreateInstallmentInput) {
-  authorize(ctx, "fee.structure.manage");
+  authorizeFeeWrite(ctx, "fee.structure.manage");
   try {
     return await prisma.$transaction(async (tx) => {
       const s = await lockWritableSession(tx, input.academicSessionId);
@@ -198,7 +198,7 @@ async function lockInstallment(tx: Tx, id: string, version: number) {
 
 /** Name, order and due date. Issued invoices keep their own due-date snapshot, so a later edit never moves them. */
 export async function updateFeeInstallment(ctx: AuthContext, input: UpdateInstallmentInput) {
-  authorize(ctx, "fee.structure.manage");
+  authorizeFeeWrite(ctx, "fee.structure.manage");
   try {
     await prisma.$transaction(async (tx) => {
       const { i, s } = await lockInstallment(tx, input.id, input.version);
@@ -213,7 +213,7 @@ export async function updateFeeInstallment(ctx: AuthContext, input: UpdateInstal
 }
 
 export async function deleteFeeInstallment(ctx: AuthContext, input: RefInput) {
-  authorize(ctx, "fee.structure.manage");
+  authorizeFeeWrite(ctx, "fee.structure.manage");
   try {
     await prisma.$transaction(async (tx) => {
       const { i } = await lockInstallment(tx, input.id, input.version);
@@ -310,7 +310,7 @@ async function checkItems(tx: Tx, academicSessionId: string, items: readonly { c
 }
 
 export async function createFeeStructure(ctx: AuthContext, input: CreateStructureInput) {
-  authorize(ctx, "fee.structure.manage");
+  authorizeFeeWrite(ctx, "fee.structure.manage");
   try {
     return await prisma.$transaction(async (tx) => {
       const s = await lockWritableSession(tx, input.academicSessionId);
@@ -340,7 +340,7 @@ async function lockStructure(tx: Tx, id: string, version?: number) {
 }
 
 export async function updateFeeStructure(ctx: AuthContext, input: UpdateStructureInput) {
-  authorize(ctx, "fee.structure.manage");
+  authorizeFeeWrite(ctx, "fee.structure.manage");
   try {
     await prisma.$transaction(async (tx) => {
       const st = await lockStructure(tx, input.id, input.version);
@@ -360,7 +360,7 @@ export async function updateFeeStructure(ctx: AuthContext, input: UpdateStructur
 
 /** A new, inactive structure with the same amounts (the way to change a frozen one). */
 export async function copyFeeStructure(ctx: AuthContext, input: CopyStructureInput) {
-  authorize(ctx, "fee.structure.manage");
+  authorizeFeeWrite(ctx, "fee.structure.manage");
   try {
     return await prisma.$transaction(async (tx) => {
       const st = await lockStructure(tx, input.id);
@@ -377,7 +377,7 @@ export async function copyFeeStructure(ctx: AuthContext, input: CopyStructureInp
 
 /** Activate (the class's current active structure is deactivated in the same transaction) or deactivate. */
 export async function setFeeStructureActive(ctx: AuthContext, input: SetActiveInput) {
-  authorize(ctx, "fee.structure.manage");
+  authorizeFeeWrite(ctx, "fee.structure.manage");
   try {
     await prisma.$transaction(async (tx) => {
       const st = await lockStructure(tx, input.id, input.version);
@@ -410,7 +410,7 @@ export async function getLateFeeRule(ctx: AuthContext, academicSessionId: string
 }
 
 export async function setLateFeeRule(ctx: AuthContext, input: SetLateFeeRuleInput) {
-  authorize(ctx, "fee.structure.manage");
+  authorizeFeeWrite(ctx, "fee.structure.manage");
   try {
     await prisma.$transaction(async (tx) => {
       const s = await lockWritableSession(tx, input.academicSessionId);
@@ -425,7 +425,7 @@ export async function setLateFeeRule(ctx: AuthContext, input: SetLateFeeRuleInpu
 }
 
 export async function clearLateFeeRule(ctx: AuthContext, academicSessionId: string) {
-  authorize(ctx, "fee.structure.manage");
+  authorizeFeeWrite(ctx, "fee.structure.manage");
   try {
     await prisma.$transaction(async (tx) => {
       const s = await lockWritableSession(tx, academicSessionId);

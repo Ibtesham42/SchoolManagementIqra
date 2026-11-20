@@ -1,6 +1,6 @@
 # Phase 5 — Fee and finance management: assessment and implementation plan
 
-**Status: decisions FC1–FC26 APPROVED as recommended (owner, 2026-11-20).** Catalog change FC6 / FC13 made and synced to development and Test (86 / 13 / 312). 5A-M1 done: migration `20261124000000` applied to development and Test 2026-11-20. 5A-M2 (setup services and screens) built 2026-11-20. The §9 questions for the school are still open (they shape setup data and screens, not the schema). Like Phases 3 and 4, Phase 5 is split (FC1): **5A** fee setup and billing · **5B** counter collection, receipts and cancellation · **5C** reports, reconciliation and opening-balance import. Online payments are designed here but deferred to Phase 6 (FC16).
+**Status: decisions FC1–FC26 APPROVED as recommended (owner, 2026-11-20).** Catalog change FC6 / FC13 made and synced to development and Test (86 / 13 / 312). 5A-M1 done: migration `20261124000000` applied to development and Test 2026-11-20. 5A-M2 (setup services and screens) built 2026-11-20. 5A-M3 (concessions, charges) built 2026-11-20; re-pricing of unpaid invoices moves to 5A-M4 (needs invoices). The §9 questions for the school are still open (they shape setup data and screens, not the schema). Like Phases 3 and 4, Phase 5 is split (FC1): **5A** fee setup and billing · **5B** counter collection, receipts and cancellation · **5C** reports, reconciliation and opening-balance import. Online payments are designed here but deferred to Phase 6 (FC16).
 
 Drafted by the architect agent (read-only) from the code; key claims spot-checked (no user ↔ student link, `lib/money.ts` missing, `students.policy` refuses CHILDREN / SELF).
 
@@ -245,3 +245,10 @@ Fixed in 5A-M2: M1 interim freeze (ever-active structures in invoiced classes), 
 - **5A-M4 (generation):** add `FeeInvoice.structureId` and freeze exactly the invoiced structures (KI-103); generation and invoice cancellation take `lockFeeSetup` first (I5).
 - **5B (issue / collection), L2:** render the receipt / invoice number inside the transaction and refuse with a fixed message if it exceeds 40 characters or {CODE} has no short code (the profile or session names may change after the formats were saved).
 - **KI-104 (L3) resolved:** once numbers exist, only `settings.manage` may change the formats.
+
+## 12. Security review 5A-M3 — carried forward (2026-11-20)
+
+Fixed: M1 (every fee write right counts at ALL scope only — `fees.policy.authorizeFeeWrite`, also in setup), M2 (a template's value and heads are fixed while a proposal is pending; approval refused for a deactivated template), L3 (session effect counts only billed installments and applicable heads), L4 (charge audit carries the amount; removal carries a before-state), L5 (charges refused for promoted / detained enrollments and installments outside the student's dates), L6 (active structures loaded once per register), Info (student search only for fee staff who act on students; LIKE wildcards escaped).
+- **Accepted (L7):** the student search term is in the URL of an authenticated, same-origin page (browser history / server logs). Revisit with the collection screen (5B), which should POST its search.
+- **5A-M4:** when a concession is approved or revoked, re-price the student's unpaid open invoices in the same transaction (FC6); stacked concessions on one invoice follow fee-calc (percents add, capped at 100 %).
+- Proposals for LEFT enrollments stay allowed (unpaid dues may still be reduced).

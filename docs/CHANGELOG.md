@@ -4,6 +4,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added (Phase 5A — concessions and extra charges)
+- **Concessions** (Fees → Concessions): the school's concessions and scholarships, as a percentage or a fixed amount on every installment, on chosen fee heads. The accountant proposes one for a student with a reason; the Principal (or another person with approval rights) approves or rejects it — nobody decides their own proposal. Each proposal shows its effect for the whole session. Approved concessions can be revoked for future invoices.
+- **Extra charges** (Fees → Extra charges): one-off charges for one student on one installment (hostel, an activity, a bounced-cheque charge), added to that installment's invoice.
+
 ### Added (Phase 5A — fee setup)
 - New **Fees** menu (Accountant sets up; School Admin, Principal and Vice Principal can view):
   - **Fee heads**: the school's own fee names (tuition, admission, lab…), with who pays each (everyone, new admissions only, or existing students only). Nothing is pre-filled.

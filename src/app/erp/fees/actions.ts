@@ -34,6 +34,8 @@ import {
   updateFeeStructure,
 } from "@/modules/fees/setup.service";
 import { updateFeeNumberFormats } from "@/modules/settings/settings.service";
+import { addChargeSchema, concessionRefSchema, createConcessionSchema, decideConcessionSchema, proposeConcessionSchema, updateConcessionSchema } from "@/modules/fees/concessions.schemas";
+import { addCharge, createConcession, decideConcession, proposeConcession, removeCharge, revokeConcession, setConcessionActive, updateConcession } from "@/modules/fees/concessions.service";
 
 /** Phase 5A-M2 fee setup actions: requireAuth → Zod → service → ActionState (services authorize and enforce every rule). */
 async function run<S extends z.ZodType>(schema: S, raw: unknown, call: (ctx: AuthContext, data: z.infer<S>) => Promise<string>): Promise<ActionState> {
@@ -116,4 +118,44 @@ export async function copyStructureAction(_prev: ActionState, fd: FormData): Pro
 }
 export async function setStructureActiveAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return run(setActiveSchema, active(fd), async (ctx, d) => (await setFeeStructureActive(ctx, d), d.active ? "Structure is now active for new invoices." : "Structure deactivated."));
+}
+
+// ───────────────────────────── Phase 5A-M3: concessions and charges ─────────────────────────────
+
+const ids = (fd: FormData, name: string) => fd.getAll(name).filter((v): v is string => typeof v === "string" && v !== "").slice(0, 51);
+
+export async function createConcessionAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { code: formString(fd, "code"), name: formString(fd, "name"), kind: formString(fd, "kind"), calc: formString(fd, "calc"), value: formString(fd, "value"), categoryIds: ids(fd, "categoryId") };
+  return run(createConcessionSchema, raw, async (ctx, d) => (await createConcession(ctx, d), "Concession added."));
+}
+export async function updateConcessionAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { ...ref(fd), name: formString(fd, "name"), kind: formString(fd, "kind"), calc: formString(fd, "calc"), value: formString(fd, "value"), categoryIds: ids(fd, "categoryId") };
+  return run(updateConcessionSchema, raw, async (ctx, d) => (await updateConcession(ctx, d), "Concession saved."));
+}
+export async function setConcessionActiveAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(setActiveSchema, active(fd), async (ctx, d) => (await setConcessionActive(ctx, d), d.active ? "Concession activated." : "Concession deactivated."));
+}
+export async function proposeConcessionAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = { studentId: formString(fd, "studentId"), academicSessionId: formString(fd, "academicSessionId"), concessionId: formString(fd, "concessionId"), reason: formString(fd, "reason") };
+  return run(proposeConcessionSchema, raw, async (ctx, d) => (await proposeConcession(ctx, d), "Proposed. Another person with approval rights must now approve it."));
+}
+export async function decideConcessionAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(decideConcessionSchema, { ...ref(fd), decision: formString(fd, "decision") }, async (ctx, d) => (await decideConcession(ctx, d), d.decision === "APPROVE" ? "Concession approved." : "Concession rejected."));
+}
+export async function revokeConcessionAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(concessionRefSchema, ref(fd), async (ctx, d) => (await revokeConcession(ctx, d), "Concession revoked for future invoices."));
+}
+export async function addChargeAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const raw = {
+    studentId: formString(fd, "studentId"),
+    academicSessionId: formString(fd, "academicSessionId"),
+    installmentId: formString(fd, "installmentId"),
+    categoryId: formString(fd, "categoryId"),
+    amount: formString(fd, "amount"),
+    note: formString(fd, "note"),
+  };
+  return run(addChargeSchema, raw, async (ctx, d) => (await addCharge(ctx, d), "Charge added. It goes on the student's invoice for that installment."));
+}
+export async function removeChargeAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(concessionRefSchema, ref(fd), async (ctx, d) => (await removeCharge(ctx, d), "Charge removed."));
 }

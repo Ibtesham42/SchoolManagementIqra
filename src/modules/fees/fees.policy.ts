@@ -17,14 +17,24 @@ export function assertFeeRead(ctx: AuthContext): void {
 
 /** Setup screens: readers at ALL, or the setup manager. */
 export function canReadFeeSetup(ctx: AuthContext): boolean {
-  return canReadFees(ctx) || hasPermission(ctx, "fee.structure.manage");
+  return canReadFees(ctx) || (hasPermission(ctx, "fee.structure.manage") && scopeFor(ctx, "fee.structure.manage") === "ALL");
 }
 
 export function assertFeeSetupRead(ctx: AuthContext): void {
   if (!canReadFeeSetup(ctx)) throw new ForbiddenError();
 }
 
-export const canManageFeeSetup = (ctx: AuthContext) => hasPermission(ctx, "fee.structure.manage");
+/**
+ * Review 5A-M3 M1: fee WRITE rights count only at ALL scope — a custom role given a fee write permission at CHILDREN /
+ * SELF / ASSIGNED must not get whole-school power (no scoped fee writes exist yet). Same idea as marks.approve.
+ */
+export type FeeWritePermission = "fee.structure.manage" | "fee.concession.manage" | "fee.concession.approve" | "fee.collect" | "fee.refund";
+export const holdsAll = (ctx: AuthContext, key: FeeWritePermission) => hasPermission(ctx, key) && scopeFor(ctx, key) === "ALL";
+export function authorizeFeeWrite(ctx: AuthContext, key: FeeWritePermission): void {
+  if (!holdsAll(ctx, key)) throw new ForbiddenError();
+}
+
+export const canManageFeeSetup = (ctx: AuthContext) => holdsAll(ctx, "fee.structure.manage");
 
 /** What the Fees area shows (cosmetic; every service checks again). */
 export function feeAccess(ctx: AuthContext) {
@@ -32,5 +42,8 @@ export function feeAccess(ctx: AuthContext) {
     any: canReadFeeSetup(ctx) || hasPermission(ctx, "fee.collect") || hasPermission(ctx, "fee.concession.manage") || hasPermission(ctx, "fee.concession.approve") || (hasPermission(ctx, "fee.report") && scopeFor(ctx, "fee.report") === "ALL"),
     setup: canReadFeeSetup(ctx),
     manageSetup: canManageFeeSetup(ctx),
+    concessions: canReadFees(ctx) || holdsAll(ctx, "fee.concession.manage") || holdsAll(ctx, "fee.concession.approve"),
+    proposeConcessions: holdsAll(ctx, "fee.concession.manage"),
+    approveConcessions: holdsAll(ctx, "fee.concession.approve"),
   };
 }
