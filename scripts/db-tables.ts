@@ -13,6 +13,7 @@ export const APP_TABLES_IN_FK_ORDER = [
   "user_role",
   "session",
   "password_reset_token",
+  "account_activation", // → user (Phase 6A migration 20261126000000)
   "stored_file", // → user
   "school_setting", // → stored_file (logo), academic_session
   "school_class", // migration 20261110000000
@@ -30,7 +31,8 @@ export const APP_TABLES_IN_FK_ORDER = [
   "student_roll_number", // → roll_number_batch, student_enrollment
   "student_status_change", // → student, user
   // Phase 3A HR core — migration 20261112000000 (applied to development and Test 2026-11-18).
-  // user.employee_id → employee points backwards (see DEFERRED_FK_COLUMNS).
+  // user.employee_id → employee, user.student_id → student, user.guardian_id → guardian point backwards
+  // (see DEFERRED_FK_COLUMNS).
   "department",
   "designation",
   "employee", // → department, designation, employee (reports to), user (created by)
@@ -84,8 +86,8 @@ export const APP_TABLES_IN_FK_ORDER = [
   "late_fee_rule", // → academic_session
   "student_fee_charge", // → student_enrollment, fee_installment, fee_category, user
   "fee_invoice", // → student_enrollment, fee_installment, user
-  "fee_invoice_item", // → fee_invoice, fee_category, student_fee_charge
-  "fee_payment", // → student, user
+  "fee_payment", // → student, user (before fee_invoice_item since Phase 6A: KI-105 links point at it)
+  "fee_invoice_item", // → fee_invoice, fee_category, student_fee_charge, fee_payment (waived with / frozen by), user
   "fee_payment_allocation", // → fee_payment, fee_invoice_item, fee_invoice
   "audit_log",
   "notification",
@@ -102,5 +104,5 @@ export const APP_TABLES_IN_FK_ORDER = [
  * appears, or if a column listed here stops being a backward FK.
  */
 export const DEFERRED_FK_COLUMNS: Readonly<Partial<Record<(typeof APP_TABLES_IN_FK_ORDER)[number], readonly string[]>>> = {
-  user: ["employee_id"],
+  user: ["employee_id", "student_id", "guardian_id"], // Phase 3A / Phase 6A portal links
 };

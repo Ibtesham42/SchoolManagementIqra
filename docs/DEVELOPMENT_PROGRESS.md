@@ -10,6 +10,14 @@
 
 ## Log
 
+### 2026-11-22 — Phase 6 planned; 6A-M1 schema, catalog, portal policy (uncommitted)
+- **Plan** `docs/PHASE_6_PLAN.md` (architect, read-only): 6A accounts / family link / portal shell · 6B family views · 6C notices, notifications, UPI payment intimation, student accounts. **Owner approved P1–P24 as recommended** (P19 = UPI intimation, gateway stays deferred; P14 = optional student accounts from Class 9, off by default; P15 = KI-105 fixed by migration).
+- **Migration** `20261126000000_phase6a_portal_accounts` (offline `migrate diff`, **DRAFT — awaiting the owner's SQL review**): user.student_id / guardian_id FKs (RESTRICT) + CHECK one person per account; DPDP consent columns; `student_guardian.portal_access`; `account_activation`; KI-105 waiver / frozen-by columns on `fee_invoice_item` with a backfill of existing waiver lines and 2 CHECKs; `notification.dedupe_key` + partial unique. Guard `tests/unit/migration-phase6a.test.ts` (6). `db:check` knows the 6 CHECKs and the index; backup order updated (deferred `user.student_id` / `guardian_id`; `fee_payment` before `fee_invoice_item`).
+- **Catalog 86 / 13 / 312 → 89 / 13 / 320** (P16): `homework.read`, `notice.manage`, `portal.account.manage`; Student `fee.read` removed; portal `notice.read` narrowed to CHILDREN / SELF. RBAC_MATRIX regenerated; count tests updated. **Database sync not done** (needs approval).
+- **Pure** `lib/rbac/portal-scope.ts` (ADR-044) + `settings.schemas.portalSettingsSchema` / `readPortalSettings` (features.portal: student accounts off, Class 9, 180-day leaver window, UPI details). Tests `tests/unit/portal-scope.test.ts` (12: truth table, catalog invariants, settings).
+- Nothing applied to any database.
+
+
 ### 2026-11-22 — Phase 5C-M3: previous dues (opening-balance import) (uncommitted)
 - **No migration** (5A schema: `FeeInvoiceKind.OPENING_BALANCE`, item kind, partial unique `fee_invoice_live_opening_key`, reserved head code).
 - **Pure** `fees/opening-import.rules.ts`: header matching (template + variants), amounts ("Rs.", "₹", Indian / western commas; blank / 0 = none; > ₹10,00,000 = problem), match by Student ID with a loose name check (shifted rows), duplicates, students already with previous dues skipped; all-or-nothing.

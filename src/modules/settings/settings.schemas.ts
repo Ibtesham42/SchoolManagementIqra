@@ -99,3 +99,33 @@ export type AcademicSessionInput = z.infer<typeof academicSessionSchema>;
 
 export const updateAcademicSessionSchema = academicSessionSchema.extend({ id: z.string().min(1).max(64) }).strict();
 export const sessionIdSchema = z.object({ id: z.string().min(1).max(64) }).strict();
+
+/**
+ * Phase 6A (PHASE_6_PLAN.md §5, P14, P17, P19): the portal block of `school_setting.features` (JSON, no migration).
+ * Read through `readPortalSettings`: a missing or invalid block means the safe defaults (student accounts off,
+ * 180-day leaver window, no UPI details).
+ */
+export const UPI_VPA_RE = /^[a-z0-9._-]{2,256}@[a-z][a-z0-9.-]{1,63}$/i;
+export const portalSettingsSchema = z
+  .object({
+    studentAccounts: z.boolean().default(false),
+    studentMinClassLevel: z.coerce.number().int().min(1).max(12).default(9),
+    leaverAccessDays: z.coerce.number().int().min(0).max(365).default(180),
+    upi: z
+      .object({
+        payeeName: z.string().trim().min(2).max(80),
+        vpa: z.string().trim().toLowerCase().regex(UPI_VPA_RE, "Enter a UPI ID like school@bank."),
+      })
+      .strict()
+      .nullable()
+      .default(null),
+    privacyNoticeVersion: z.string().trim().min(1).max(20).nullable().default(null),
+  })
+  .strict();
+export type PortalSettings = z.infer<typeof portalSettingsSchema>;
+
+export function readPortalSettings(features: unknown): PortalSettings {
+  const block = features && typeof features === "object" ? (features as Record<string, unknown>).portal : undefined;
+  const parsed = portalSettingsSchema.safeParse(block ?? {});
+  return parsed.success ? parsed.data : portalSettingsSchema.parse({});
+}

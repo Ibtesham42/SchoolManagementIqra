@@ -19,6 +19,16 @@ AcademicSession 1─< Section >─1 SchoolClass
        └─< TeacherAllocation >─ Employee, Section, Subject
 ```
 
+### Phase 6A portal links (ADR-045)
+
+```
+User 0..1─1 Guardian   (user.guardian_id, unique, RESTRICT)  — one portal account per guardian; siblings via StudentGuardian
+User 0..1─1 Student    (user.student_id, unique, RESTRICT)   — optional student account (P14)
+User 1─< AccountActivation (CASCADE)
+StudentGuardian.portal_access — per (student, guardian) custody block
+FeeInvoiceItem >─0..1 FeePayment (waived_with / frozen_by, RESTRICT) — KI-105
+```
+
 ## Rules
 
 1. **Student is session-independent; StudentEnrollment is per session.** Class/section/roll number always come from the enrollment for the session in question. Promotion = new enrollment in the next session (old one → PROMOTED). This keeps history intact.

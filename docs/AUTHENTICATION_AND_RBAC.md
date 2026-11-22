@@ -127,6 +127,11 @@ Note: a user may hold several roles (e.g. Teacher + Class Teacher); grants union
 - Delegated administration with the SELF grants (review M3b, Info): `assertCanModifyUser` requires the actor to cover every permission of the target. A custom role with `user.manage` but without `employee.read` / `employee.personal.read` therefore can no longer modify or assign Teacher, Class Teacher, Accountant, Admission Officer, Transport Manager, Vice Principal or Librarian accounts (they now hold those permissions at SELF). Correct anti-escalation; no default role is affected (only Super Admin holds `user.manage`).
 - Re-saving an existing class-teacher assignment whose teacher no longer meets H4 now returns a validation message instead of doing nothing (the H4 check runs first, under the employee lock).
 
+### Portal (Phase 6, decisions P1–P24; owner 2026-11-22)
+- **Catalog 89 / 13 / 320** (from 86 / 13 / 312): new `homework.read` (Parent CHILDREN, Student SELF), `notice.manage` (School Admin, Principal, Class Teacher ASSIGNED), `portal.account.manage` (School Admin); Student loses `fee.read` SELF (P16); Parent / Student `notice.read` narrowed from ALL to CHILDREN / SELF (no portal role holds an ALL grant). Super Admin gets the new permissions automatically. **Database sync pending** (owner approval, KI-062 / KI-073 procedure).
+- Portal reads go through `lib/rbac/portal-scope.portalCanSee` (ADR-044). Portal accounts are exclusive (ADR-045).
+- Anti-escalation: assigning the Parent role through the generic user editor now also needs `homework.read`; portal accounts are provisioned through `portal.account.manage` (6A-M3), never `/erp/users`.
+
 ### Fees (Phase 5, decisions FC6, FC13, FC17; owner 2026-11-20)
 - **Catalog 86 / 13 / 312:** new `fee.concession.approve` — Principal (+ Super Admin). Principal also gets `fee.refund`. **Synced to development and Test 2026-11-20** (owner-approved; dry run, one guarded transaction each, 309 → 312, all 13 roles exact).
 - **Maker-checker:** concessions are proposed with `fee.concession.manage` (Accountant) and approved with `fee.concession.approve`; approver ≠ proposer, Super Admin included. Receipt cancellation (`fee.refund`) is refused for the person who collected that payment. Role-level invariants in `tests/unit/rbac-matrix.test.ts`.

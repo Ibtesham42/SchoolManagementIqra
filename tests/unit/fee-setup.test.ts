@@ -29,7 +29,8 @@ describe("fee access (FC17)", () => {
     expect(readers).toEqual(["ACCOUNTANT", "PRINCIPAL", "SCHOOL_ADMIN", "SUPER_ADMIN", "VICE_PRINCIPAL"]);
     for (const key of ["PARENT", "STUDENT"]) {
       const ctx = roleCtx(key);
-      expect(hasPermission(ctx, "fee.read"), key).toBe(true);
+      // Phase 6 (P16): the Parent holds fee.read at CHILDREN (portal ledger, 6B-M3); the Student no longer holds it.
+      expect(hasPermission(ctx, "fee.read"), key).toBe(key === "PARENT");
       expect(canReadFees(ctx), key).toBe(false);
       expect(canReadFeeSetup(ctx), key).toBe(false);
     }

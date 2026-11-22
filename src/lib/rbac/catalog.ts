@@ -91,6 +91,8 @@ export const PERMISSIONS = {
   "reportcard.generate": "Generate report cards",
   // Phase 4C (owner decision 2026-11-20): homework for allocated subjects.
   "homework.manage": "Post and manage homework",
+  // Phase 6 (P12, P16): families read homework for their children / students their own.
+  "homework.read": "View homework",
   // Library & inventory
   "library.read": "View library",
   "library.manage": "Manage library catalogue",
@@ -103,8 +105,11 @@ export const PERMISSIONS = {
   // Chatbot
   "chatbot.manage": "Manage chatbot knowledge and settings",
   "chatbot.analytics": "View chatbot analytics",
-  // Notices for portal users
-  "notice.read": "View internal notices",
+  // Notices (Phase 6C, P21–P22)
+  "notice.read": "View notices",
+  "notice.manage": "Write, publish and withdraw notices",
+  // Phase 6A (P4, P6, P24): parent and student portal accounts (provision, reset, block, deactivate).
+  "portal.account.manage": "Manage parent and student portal accounts",
   // System
   "audit.read": "View audit logs",
   "backup.manage": "Manage backups",
@@ -212,6 +217,8 @@ export const ROLES: RoleDefinition[] = [
       "homework.manage",
       "academic.read", "academic.manage", "timetable.read", "timetable.manage", "library.read", "inventory.read",
       "import.run", "export.run", "notice.read", "notification.send",
+      // Phase 6 (P16, P22): portal accounts and notices.
+      "portal.account.manage", "notice.manage",
     ],
   },
   {
@@ -230,6 +237,8 @@ export const ROLES: RoleDefinition[] = [
       "exam.manage", "reportcard.generate",
       // Phase 5 (FC6, FC13, owner 2026-11-20): approves concessions; cancels receipts (never their own collection).
       "fee.concession.approve", "fee.refund",
+      // Phase 6 (P22): notices to the whole school, a class or a section.
+      "notice.manage",
     ],
   },
   {
@@ -285,7 +294,8 @@ export const ROLES: RoleDefinition[] = [
     name: "Class Teacher",
     description: "Teacher with responsibility for a section.",
     // Phase 4 (AC12): report cards for the own section only (ASSIGNED — academic policy).
-    grants: [...TEACHER, ["discipline.manage", "ASSIGNED"], ["student.update", "ASSIGNED"], ["reportcard.generate", "ASSIGNED"]],
+    // Phase 6 (P22): notices to the own section's families only (ASSIGNED).
+    grants: [...TEACHER, ["discipline.manage", "ASSIGNED"], ["student.update", "ASSIGNED"], ["reportcard.generate", "ASSIGNED"], ["notice.manage", "ASSIGNED"]],
   },
   {
     key: "TRANSPORT_MANAGER",
@@ -310,8 +320,10 @@ export const ROLES: RoleDefinition[] = [
     name: "Parent",
     description: "Access to linked children's records only.",
     grants: [
+      // Phase 6 (P16): no portal role holds an ALL grant — notices are read for the children's audiences only.
       ["student.read", "CHILDREN"], ["attendance.student.read", "CHILDREN"], ["fee.read", "CHILDREN"],
-      ["fee.pay.online", "CHILDREN"], ["result.read", "CHILDREN"], ["timetable.read", "CHILDREN"], "notice.read",
+      ["fee.pay.online", "CHILDREN"], ["result.read", "CHILDREN"], ["timetable.read", "CHILDREN"], ["notice.read", "CHILDREN"],
+      ["homework.read", "CHILDREN"],
     ],
   },
   {
@@ -319,8 +331,9 @@ export const ROLES: RoleDefinition[] = [
     name: "Student",
     description: "Access to own records only.",
     grants: [
+      // Phase 6 (P14, P16): own records; no fees (fee.read SELF removed); notices of the own section only.
       ["student.read", "SELF"], ["attendance.student.read", "SELF"], ["result.read", "SELF"],
-      ["timetable.read", "SELF"], ["library.read", "SELF"], ["fee.read", "SELF"], "notice.read",
+      ["timetable.read", "SELF"], ["library.read", "SELF"], ["notice.read", "SELF"], ["homework.read", "SELF"],
     ],
   },
 ];

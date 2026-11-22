@@ -87,7 +87,8 @@ describe("anti-escalation for delegated administrators", () => {
   it("can assign roles fully covered by their own permissions", () => {
     // Parent role: student.read [CHILDREN] etc. — School Admin holds student.read ALL, fee.read ALL… but not fee.pay.online.
     expect(() => assertCanAssignRoles(delegatedAdmin, target([]), ["PARENT"], rolesByKey)).toThrow();
-    const covering = ctx(["SCHOOL_ADMIN"], [["user.manage", "ALL"], ["fee.pay.online", "ALL"], ["result.read", "ALL"]]);
+    // Phase 6: the Parent role also holds homework.read (CHILDREN), which School Admin doesn't hold (it has homework.manage).
+    const covering = ctx(["SCHOOL_ADMIN"], [["user.manage", "ALL"], ["fee.pay.online", "ALL"], ["result.read", "ALL"], ["homework.read", "ALL"]]);
     expect(() => assertCanAssignRoles(covering, target([]), ["PARENT"], rolesByKey)).not.toThrow();
   });
   it("scope matters: ASSIGNED does not cover ALL", () => {

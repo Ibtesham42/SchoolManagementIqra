@@ -95,7 +95,7 @@
 - **Tests:** grade calculation vs configured scale; timetable clash prevention; promotion creates next-session enrollments; marks-entry RBAC.
 - **Completion criteria:** a full term simulated end-to-end on the `test` branch.
 
-## 7. Phase 5 — Fee and Finance Management · **In Progress** (PHASE_5_PLAN.md; decisions FC1–FC26 approved 2026-11-20; 5A-M1 started)
+## 7. Phase 5 — Fee and Finance Management · **Built — verification pending** (PHASE_5_PLAN.md; decisions FC1–FC26 approved 2026-11-20; 5A, 5B-M1–M3, 5C-M1–M3 built and committed 2026-11-22; 5B-M4 / 5C-M4 verification on Test waits for KI-059)
 - **Objectives:** correct fees, no duplicate payments, immutable receipts.
 - **Features:** fee categories & structures, invoices per period, concessions/scholarships/discounts, late fees, installments, counter collection (cash/UPI/bank), receipts (PDF), pending-fee & defaulter reports, financial reports; online payments (optional gateway, server-verified webhooks).
 - **Dependencies:** Phase 2; Phase 7's transport fees join later.
@@ -104,7 +104,7 @@
 - **Tests:** concession/late-fee math, partial payments, duplicate prevention, webhook replay, reconciliation.
 - **Completion criteria:** reconciliation report matches payments on the `test` branch.
 
-## 8. Phase 6 — Parent and Student Portals · **Pending**
+## 8. Phase 6 — Parent and Student Portals · **In Progress** (PHASE_6_PLAN.md; decisions P1–P24 approved 2026-11-22; 6A-M1 started)
 - **Objectives:** self-service access for families without exposing other students' data.
 - **Features:** parent & student login (long sessions, mobile-first), student information, attendance, results, notices, fee status/payment, communication (messages/notifications).
 - **Dependencies:** Phases 2, 4, 5.

@@ -35,10 +35,12 @@ describe("APP_TABLES_IN_FK_ORDER", () => {
     // Every backward FK is restored in a second step; nothing else may be listed.
     const listed = Object.entries(deferred).flatMap(([t, cols]) => (cols ?? []).map((c) => `${t}.${c}`));
     expect(backward.sort()).toEqual(listed.sort());
-    expect(listed).toEqual(["user.employee_id"]);
+    expect(listed).toEqual(["user.employee_id", "user.guardian_id", "user.student_id"]); // sorted above
   });
 
   it("deferred columns are nullable in the schema (a restore inserts them as NULL first)", () => {
     expect(schema).toMatch(/model User \{[^}]*\n\s+employeeId\s+String\?\s/);
+    expect(schema).toMatch(/model User \{[^}]*\n\s+studentId\s+String\?\s/);
+    expect(schema).toMatch(/model User \{[^}]*\n\s+guardianId\s+String\?\s/);
   });
 });

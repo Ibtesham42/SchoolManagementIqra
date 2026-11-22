@@ -6,7 +6,7 @@
 
 Legend: ✓ = all records · A = assigned records only · S = own record only · C = linked children only · blank = denied
 
-Roles: 13 · Permissions: 86
+Roles: 13 · Permissions: 89
 
 | Permission | SUPER_ADMIN | SCHOOL_ADMIN | PRINCIPAL | VICE_PRINCIPAL | ACCOUNTANT | HR_MANAGER | ADMISSION_OFFICER | TEACHER | CLASS_TEACHER | TRANSPORT_MANAGER | LIBRARIAN | PARENT | STUDENT |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -60,7 +60,7 @@ Roles: 13 · Permissions: 86
 | `salary.structure.manage` — Manage salary structures | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |
 | `salary.self.read` — View own salary slips | ✓ | S | S | S | S | S | S | S | S | S | S |  |  |
 | `fee.structure.manage` — Manage fee structures and generate invoices | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |  |
-| `fee.read` — View fees and invoices | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |  | C | S |
+| `fee.read` — View fees and invoices | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |  | C |  |
 | `fee.collect` — Collect fee payments | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |  |
 | `fee.concession.manage` — Manage concessions and scholarships | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |  |
 | `fee.concession.approve` — Approve concessions and scholarships | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |
@@ -81,6 +81,7 @@ Roles: 13 · Permissions: 86
 | `result.publish` — Publish results | ✓ |  | ✓ | ✓ |  |  |  |  |  |  |  |  |  |
 | `reportcard.generate` — Generate report cards | ✓ | ✓ | ✓ |  |  |  |  |  | A |  |  |  |  |
 | `homework.manage` — Post and manage homework | ✓ | ✓ |  |  |  |  |  | A | A |  |  |  |  |
+| `homework.read` — View homework | ✓ |  |  |  |  |  |  |  |  |  |  | C | S |
 | `library.read` — View library | ✓ | ✓ | ✓ | ✓ |  |  |  | ✓ | ✓ |  | ✓ |  | S |
 | `library.manage` — Manage library catalogue | ✓ |  |  |  |  |  |  |  |  |  | ✓ |  |  |
 | `library.issue` — Issue and return books | ✓ |  |  |  |  |  |  |  |  |  | ✓ |  |  |
@@ -90,7 +91,9 @@ Roles: 13 · Permissions: 86
 | `export.run` — Run data exports | ✓ | ✓ |  |  | ✓ | ✓ |  |  |  |  |  |  |  |
 | `chatbot.manage` — Manage chatbot knowledge and settings | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |
 | `chatbot.analytics` — View chatbot analytics | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |
-| `notice.read` — View internal notices | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `notice.read` — View notices | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | C | S |
+| `notice.manage` — Write, publish and withdraw notices | ✓ | ✓ | ✓ |  |  |  |  |  | A |  |  |  |  |
+| `portal.account.manage` — Manage parent and student portal accounts | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |
 | `audit.read` — View audit logs | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |
 | `backup.manage` — Manage backups | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |
 | `integration.manage` — Configure integrations | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |
@@ -101,16 +104,16 @@ Roles: 13 · Permissions: 86
 
 | Role | Permissions granted |
 |---|--:|
-| Super Admin (`SUPER_ADMIN`) | 86 |
-| School Admin (`SCHOOL_ADMIN`) | 45 |
-| Principal (`PRINCIPAL`) | 37 |
+| Super Admin (`SUPER_ADMIN`) | 89 |
+| School Admin (`SCHOOL_ADMIN`) | 47 |
+| Principal (`PRINCIPAL`) | 38 |
 | Vice Principal (`VICE_PRINCIPAL`) | 25 |
 | Accountant (`ACCOUNTANT`) | 18 |
 | HR Manager (`HR_MANAGER`) | 15 |
 | Admission Officer (`ADMISSION_OFFICER`) | 19 |
 | Teacher (`TEACHER`) | 15 |
-| Class Teacher (`CLASS_TEACHER`) | 18 |
+| Class Teacher (`CLASS_TEACHER`) | 19 |
 | Transport Manager (`TRANSPORT_MANAGER`) | 10 |
 | Librarian (`LIBRARIAN`) | 10 |
-| Parent (`PARENT`) | 7 |
+| Parent (`PARENT`) | 8 |
 | Student (`STUDENT`) | 7 |

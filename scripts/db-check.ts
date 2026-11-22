@@ -71,6 +71,12 @@ const PHASE_4C_TABLES = ["promotion_decision", "homework", "academic_event"];
 const PHASE_5A_CHECK_COUNT = 50;
 /** Phase 5A-M4 migration 20261125000000 (tests/unit/migration-phase5a4.test.ts): +1 CHECK on fee_invoice. */
 const PHASE_5A4_CHECK = "fee_invoice_structure_kind";
+// Phase 6A-M1 (migration 20261126000000): six named CHECKs (two of them on fee_invoice_item, counted with 5A) and the
+// notification de-duplication partial unique index.
+const PHASE_6A_MIGRATION = "20261126000000_phase6a_portal_accounts";
+const PHASE_6A_CHECKS = ["user_one_person", "user_privacy_consent_pair", "account_activation_expiry", "account_activation_failed_attempts", "fee_invoice_item_waiver", "fee_invoice_item_frozen_kind"];
+const PHASE_6A_FEE_CHECKS = 2;
+const PHASE_6A_PARTIAL_INDEX = "notification_user_dedupe_key";
 const PHASE_5A_TABLES = ["fee_category", "fee_installment", "fee_structure", "fee_structure_item", "fee_concession", "fee_concession_category", "student_concession", "late_fee_rule", "student_fee_charge", "fee_invoice", "fee_invoice_item", "fee_payment", "fee_payment_allocation"];
 const PHASE_5A_PARTIAL_INDEXES = ["fee_structure_active_key", "late_fee_rule_active_key", "student_concession_live_key", "fee_invoice_live_installment_key", "fee_invoice_live_opening_key", "fee_payment_live_utr_key", "fee_payment_live_cheque_key", "fee_payment_live_card_key", "student_fee_charge_live_source_key"];
 const PHASE_5A_TRIGGERS = ["fee_payment_immutable", "fee_payment_allocation_immutable"];
@@ -313,7 +319,7 @@ async function main() {
       if (!ok) constraintProblems++;
     }
 
-    const expected5a = PHASE_5A_CHECK_COUNT + (applied.has("20261125000000_phase5a_invoice_structure") ? 1 : 0);
+    const expected5a = PHASE_5A_CHECK_COUNT + (applied.has("20261125000000_phase5a_invoice_structure") ? 1 : 0) + (applied.has(PHASE_6A_MIGRATION) ? PHASE_6A_FEE_CHECKS : 0);
     if (applied.has("20261125000000_phase5a_invoice_structure")) {
       const c = await client.query<{ v: boolean }>("select convalidated v from pg_constraint where conname = $1 and contype = 'c'", [PHASE_5A4_CHECK]);
       const ok = c.rows[0]?.v === true;
@@ -335,6 +341,14 @@ async function main() {
           ? `✓ ${expected5a} Phase 5A fee CHECK constraints validated; ${PHASE_5A_PARTIAL_INDEXES.length} partial unique indexes; receipt immutability triggers enabled`
           : `✗ Phase 5A: ${c.rows[0]?.n} CHECKs present, ${c.rows[0]?.v} validated (expected ${expected5a}); ${partial}/${PHASE_5A_PARTIAL_INDEXES.length} partial indexes; ${trg.rows[0]?.n}/${PHASE_5A_TRIGGERS.length} triggers`,
       );
+      if (!ok) constraintProblems++;
+    }
+
+    if (applied.has(PHASE_6A_MIGRATION)) {
+      const c = await client.query<{ n: string; v: string }>("select count(*)::text n, count(*) filter (where convalidated)::text v from pg_constraint where contype = 'c' and conname = any($1)", [PHASE_6A_CHECKS]);
+      const idx = await client.query<{ indexdef: string }>("select indexdef from pg_indexes where schemaname = 'public' and indexname = $1", [PHASE_6A_PARTIAL_INDEX]);
+      const ok = c.rows[0]?.n === String(PHASE_6A_CHECKS.length) && c.rows[0]?.v === String(PHASE_6A_CHECKS.length) && / WHERE /.test(idx.rows[0]?.indexdef ?? "");
+      console.log(ok ? `✓ ${PHASE_6A_CHECKS.length} Phase 6A portal CHECK constraints validated; notification de-duplication index` : `✗ Phase 6A: ${c.rows[0]?.n}/${PHASE_6A_CHECKS.length} CHECKs present, ${c.rows[0]?.v} validated; dedupe index ${idx.rows.length ? "present" : "missing"}`);
       if (!ok) constraintProblems++;
     }
 

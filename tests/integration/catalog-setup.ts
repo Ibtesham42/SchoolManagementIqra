@@ -12,7 +12,7 @@
  * The seed CLI's target guard (ADR-032) is for `npm run db:seed`; here the target is the test
  * branch, already gated by the integration opt-in and the pre-run identity check (G5).
  */
-export const CATALOG_COUNTS = { permissions: 86, roles: 13, grants: 312 } as const;
+export const CATALOG_COUNTS = { permissions: 89, roles: 13, grants: 320 } as const;
 
 export async function ensureCatalog(): Promise<void> {
   const { prisma } = await import("@/lib/db");

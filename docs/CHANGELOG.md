@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed (Phase 6 — portal preparation)
+- Permissions for the coming parent / student portal: homework for families, notices for staff to write, and portal-account management for the School Admin. Students will not see fees. (No screens yet.)
+
 ### Added (Phase 5C — fee reports)
 - **Previous dues** (Fees → Previous dues): bring in each student's unpaid fees from the old system, one class at a time — download the template, fill in the amounts, upload, check the preview, choose the due date and confirm. Each student gets one "Previous dues" invoice; running it again skips students who already have one.
 - **Reconciliation** (Fees → Reports → Reconciliation checks): one button checks that every receipt matches what it paid, every invoice matches its lines, the collection totals match the money on invoices, and receipt and invoice numbers have no gaps. Problems are listed by receipt or invoice number.
