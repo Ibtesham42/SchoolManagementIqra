@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /** Server-rendered sub-navigation of the fees area (Phase 5A-M2: setup screens). */
-export function FeesTabs({ current, session }: { current: "heads" | "schedule" | "structures" | "concessions" | "charges" | "invoices" | "collect" | "receipts" | "reports"; session?: string }) {
+export function FeesTabs({ current, session }: { current: "heads" | "schedule" | "structures" | "concessions" | "charges" | "invoices" | "collect" | "receipts" | "reports" | "opening"; session?: string }) {
   const q = session ? `?session=${encodeURIComponent(session)}` : "";
   const tabs = [
     { key: "collect", href: "/erp/fees/collect", label: "Collect" },
@@ -13,6 +13,7 @@ export function FeesTabs({ current, session }: { current: "heads" | "schedule" |
     { key: "concessions", href: `/erp/fees/concessions${q}`, label: "Concessions" },
     { key: "charges", href: `/erp/fees/charges${q}`, label: "Extra charges" },
     { key: "invoices", href: `/erp/fees/invoices${q}`, label: "Invoices" },
+    { key: "opening", href: `/erp/fees/opening-balances${q}`, label: "Previous dues" },
     { key: "reports", href: "/erp/fees/reports", label: "Reports" },
   ];
   return (

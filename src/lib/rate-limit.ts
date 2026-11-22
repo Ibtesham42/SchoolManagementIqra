@@ -36,6 +36,8 @@ export const RULES = {
   receiptPdf: { name: "receipt-pdf", limit: 60, windowSeconds: 10 * 60 },
   // Phase 5C-M2: fee reconciliation runs (each scans the fee tables), per signed-in user.
   feeReconciliation: { name: "fee-recon", limit: 10, windowSeconds: 10 * 60 },
+  // Phase 5C-M3: previous-dues (opening balance) templates, per signed-in user.
+  feeTemplate: { name: "fee-template", limit: 30, windowSeconds: 10 * 60 },
   // Public file route (S-04), per client IP — IN-PROCESS only (hitLocal): it must not touch the database.
   filesPerIp: { name: "files:ip", limit: 120, windowSeconds: 60 },
 } satisfies Record<string, RateLimitRule>;

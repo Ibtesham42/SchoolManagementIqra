@@ -68,3 +68,11 @@ export const FEE_REPORT_EXPORT_MESSAGES: Record<ExportCode, string> = {
   forbidden: "You don't have permission to export fee reports, or the request didn't come from this site.",
   invalid: "The report filters weren't valid. Choose them again and retry.",
 };
+
+/** Phase 5C-M3: previous-dues template downloads. */
+export const OPENING_TEMPLATE_MESSAGES: Record<ExportCode, string> = {
+  ...EXPORT_MESSAGES,
+  too_many: "This class has too many students for one template. Ask for the import to be split by section.",
+  forbidden: "You don't have permission to import previous dues, or the request didn't come from this site.",
+  invalid: "Choose the academic session and the class again, then download the template.",
+};
