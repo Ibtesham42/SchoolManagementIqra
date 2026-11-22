@@ -32,6 +32,8 @@ export const RULES = {
   export: { name: "export", limit: 10, windowSeconds: 10 * 60 },
   // Phase 4C-M4: marks import templates, per signed-in user — own bucket so templates don't use up personal-data exports.
   marksTemplate: { name: "marks-template", limit: 30, windowSeconds: 10 * 60 },
+  // Phase 5B-M2: fee receipt PDFs, per signed-in user (each render is CPU work and bumps the print count; cf. S-21).
+  receiptPdf: { name: "receipt-pdf", limit: 60, windowSeconds: 10 * 60 },
   // Public file route (S-04), per client IP — IN-PROCESS only (hitLocal): it must not touch the database.
   filesPerIp: { name: "files:ip", limit: 120, windowSeconds: 60 },
 } satisfies Record<string, RateLimitRule>;

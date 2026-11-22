@@ -11,7 +11,7 @@ import { readFeeSettingsTx } from "@/modules/settings/settings.service";
 import { latestEnrollment, searchStudentsAnySession } from "@/modules/students/enrollment-reads.tx";
 import { AllocationError, allocatePayment, type OpenInvoice } from "./allocation";
 import { lateFeeFor, type LateFeeRule } from "./fee-calc";
-import { normalizeBankName, normalizeReferenceFor } from "./fee-rules";
+import { lateFeeFrozen, normalizeBankName, normalizeReferenceFor } from "./fee-rules";
 import { authorizeFeeWrite, holdsAll } from "./fees.policy";
 import { lockFeeStudent } from "./fees.tx";
 import type { CollectInput } from "./collection.schemas";
@@ -78,7 +78,7 @@ async function openInvoicesOf(db: Db, studentId: string, asOf: string, onlyIds?:
   return invoices.map((i) => {
     // A frozen late fee (amount > 0) or a waiver (zero, never allocated) stops the live late fee. A zero line WITH
     // allocation history was voided by a receipt cancellation (review 5B-M3 M1) and doesn't count.
-    const hasLate = i.items.some((it) => it.kind === "LATE_FEE" && (it.amount.gt(0) || it._count.allocations === 0));
+    const hasLate = lateFeeFrozen(i.items.map((it) => ({ kind: it.kind, amount: it.amount.toString(), allocationCount: it._count.allocations })));
     const balance = i.total.minus(i.paidAmount);
     const liveLate = hasLate ? "0.00" : lateFeeFor(rules.get(i.academicSessionId) ?? null, iso(i.dueOn), asOf, moneyString(balance.toString()));
     return {

@@ -214,6 +214,43 @@ describe.skipIf(!enabled)("receipt cancellation (integration)", () => {
     expect(JSON.stringify(rows)).not.toMatch(/"amount"|10\.00|private reason/);
   });
 
+  it("review M2: an Accountant cancels only today's receipts; a closed session's receipt needs a Super Admin", async () => {
+    const r = (await m.collectPayment(accountant, cash("10.00")))!;
+    // Make the receipt yesterday's: created_at is immutable by trigger, so the test lifts it in this transaction only.
+    await m.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`ALTER TABLE fee_payment DISABLE TRIGGER fee_payment_immutable`;
+      await tx.$executeRaw`UPDATE fee_payment SET created_at = created_at - interval '1 day' WHERE id = ${r.id}`;
+      await tx.$executeRaw`ALTER TABLE fee_payment ENABLE TRIGGER fee_payment_immutable`;
+    });
+    await expect(m.cancelReceipt(accountant2, { id: r.id, version: await version(r.id), reason: "Entered twice" })).rejects.toThrow(/before today/);
+    expect((await m.getReceipt(accountant2, r.id)).cancelBlockedReason).toMatch(/before today/);
+    await m.prisma.academicSession.update({ where: { id: sessionId }, data: { status: "CLOSED" } });
+    try {
+      await expect(m.cancelReceipt(principal, { id: r.id, version: await version(r.id), reason: "Entered twice" })).rejects.toThrow(/closed academic session/);
+    } finally {
+      await m.prisma.academicSession.update({ where: { id: sessionId }, data: { status: "ACTIVE" } });
+    }
+    await m.cancelReceipt(principal, { id: r.id, version: await version(r.id), reason: "Entered twice" });
+  });
+
+  it("5B-M2: collector prints count (original, then DUPLICATE) without bumping the version; others get an uncounted office copy", async () => {
+    const r = (await m.collectPayment(accountant, cash("10.00")))!;
+    const v = await version(r.id);
+    const office = await m.renderReceiptPdf(principal, r.id); // fee.refund without fee.collect: not counted (review L2)
+    expect(office.pdf.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(office.fileName).toMatch(/^fee-receipt-[A-Za-z0-9-]+\.pdf$/);
+    expect((await m.prisma.feePayment.findUniqueOrThrow({ where: { id: r.id }, select: { printCount: true } })).printCount).toBe(0);
+    await m.renderReceiptPdf(accountant, r.id);
+    await m.renderReceiptPdf(accountant2, r.id);
+    const row = await m.prisma.feePayment.findUniqueOrThrow({ where: { id: r.id }, select: { printCount: true, version: true } });
+    expect(row).toEqual({ printCount: 2, version: v });
+    expect((await m.getReceipt(accountant, r.id)).printCount).toBe(2);
+    const audits = await m.prisma.auditLog.findMany({ where: { action: "fee_payment.print", entityId: r.id }, orderBy: { id: "asc" }, select: { after: true } });
+    expect(audits.map((a) => (a.after as { copy: number | string }).copy)).toEqual(["view", 1, 2]);
+    await expect(m.prisma.feePayment.update({ where: { id: r.id }, data: { printCount: 0 } })).rejects.toThrow(); // only grows
+    await m.cancelReceipt(principal, { id: r.id, version: v, reason: "Clean up test" }); // a print didn't make the form stale
+  });
+
   it("FC8 invariant: live allocations equal every SUCCESS payment; item paid amounts equal their live allocations", async () => {
     const pays = await m.prisma.feePayment.findMany({ where: { studentId }, select: { amount: true, status: true, allocations: { where: { reversedAt: null }, select: { amount: true } } } });
     for (const p of pays) {

@@ -84,7 +84,9 @@ export async function classEnrollments(db: Db, academicSessionId: string, classI
 export async function searchStudentsAnySession(db: Db, query: string): Promise<EnrollmentSummary[]> {
   const q = query.normalize("NFKC").trim().slice(0, 100);
   if (q.length < 2) return [];
-  const lower = normalizeName(q).replace(/[\%_]/g, (c) => `\${c}`);
+  // Same escaping as searchEnrollments: a backslash before LIKE wildcards (5C fix — the replacement was the literal
+  // text "${c}", so a name search containing % or _ never matched).
+  const lower = normalizeName(q).replace(/[\\%_]/g, (c) => `\\${c}`);
   const rows = await db.studentEnrollment.findMany({
     where: { student: { deletedAt: null, OR: [{ studentCode: { equals: q.toUpperCase() } }, { admissionNo: { equals: q.toUpperCase() } }, { fullNameNormalized: { contains: lower } }] } },
     orderBy: [{ studentId: "asc" }, { academicSession: { startDate: "desc" } }],
@@ -99,4 +101,30 @@ export async function searchStudentsAnySession(db: Db, query: string): Promise<E
 export async function latestEnrollment(db: Db, studentId: string): Promise<EnrollmentSummary | null> {
   const r = await db.studentEnrollment.findFirst({ where: { studentId, student: { deletedAt: null } }, orderBy: { academicSession: { startDate: "desc" } }, select: SELECT });
   return r ? shape(r) : null;
+}
+
+/**
+ * Fee reports (Phase 5C): the enrollments of the given students in one session (ANY status — a report must name a
+ * student who left), keyed by student id, with the class level for ordering. Same fields and exclusions as above.
+ */
+export async function sessionEnrollmentsOf(db: Db, academicSessionId: string, studentIds: readonly string[]): Promise<Map<string, EnrollmentSummary & { classLevel: number }>> {
+  const out = new Map<string, EnrollmentSummary & { classLevel: number }>();
+  for (let i = 0; i < studentIds.length; i += 1000) {
+    const rows = await db.studentEnrollment.findMany({
+      where: { academicSessionId, studentId: { in: studentIds.slice(i, i + 1000) }, student: { deletedAt: null } },
+      select: { ...SELECT, section: { select: { code: true, classId: true, class: { select: { name: true, numericLevel: true } } } } },
+    });
+    for (const r of rows) out.set(r.studentId, { ...shape(r), classLevel: r.section.class.numericLevel });
+  }
+  return out;
+}
+
+/** Fee reports (Phase 5C): student ID and name for the given students (any session), keyed by id. Removed students are absent. */
+export async function studentLabels(db: Db, studentIds: readonly string[]): Promise<Map<string, { studentCode: string; fullName: string }>> {
+  const out = new Map<string, { studentCode: string; fullName: string }>();
+  for (let i = 0; i < studentIds.length; i += 1000) {
+    const rows = await db.student.findMany({ where: { id: { in: studentIds.slice(i, i + 1000) }, deletedAt: null }, select: { id: true, studentCode: true, fullName: true } });
+    for (const r of rows) out.set(r.id, { studentCode: r.studentCode, fullName: r.fullName });
+  }
+  return out;
 }

@@ -66,6 +66,13 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
           {r.amountInWords && <CardDescription>{r.amountInWords}</CardDescription>}
         </CardHeader>
         <CardContent className="grid gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* A plain link (no prefetch): every open counts a print. */}
+            <a href={`/api/v1/fees/receipts/${r.id}/pdf`} target="_blank" rel="noopener" className="inline-flex min-h-11 items-center rounded-lg border px-4 font-medium hover:bg-muted">
+              {!r.printCounts ? "View office copy (PDF)" : r.printCount === 0 ? "Print receipt (PDF)" : "Print duplicate (PDF)"}
+            </a>
+            <span className="text-muted-foreground">{r.printCount === 0 ? "Not printed yet." : `Printed ${r.printCount} time${r.printCount === 1 ? "" : "s"}; further copies say DUPLICATE.`}</span>
+          </div>
           <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[auto_1fr]">
             <dt className="text-muted-foreground">Paid on</dt>
             <dd>{dateOf(r.paidOn)}</dd>

@@ -1,10 +1,18 @@
-import { prisma } from "@/lib/db";
+import { createElement } from "react";
+import { prisma, type Tx } from "@/lib/db";
 import { audit, type AuditActor } from "@/lib/audit";
 import { isTransactionBusy } from "@/lib/db-errors";
 import { ConflictError, ForbiddenError, NotFoundError, ServiceBusyError } from "@/lib/errors";
+import { formatDateOnly, todayInTimeZone } from "@/lib/format";
+import { renderPdf } from "@/lib/pdf/render";
 import { moneyString, sumMoney, toMoney } from "@/lib/money";
 import type { AuthContext } from "@/lib/rbac/authorize";
 import { assertReceiptRead, authorizeFeeWrite, holdsAll, receiptCancelRefusal, type ReceiptCancelRefusal } from "./fees.policy";
+import { lockSessionShared } from "@/modules/academic/academic.tx";
+import { loadBranding } from "@/modules/documents/documents.service";
+import { FeeReceiptDocument, type ReceiptCopy } from "@/modules/documents/templates/fee-receipt";
+import { getSchoolTimezone } from "@/modules/settings/settings.public";
+import { readFeeSettingsTx } from "@/modules/settings/settings.service";
 import { lockFeeStudent } from "./fees.tx";
 import type { CancelReceiptInput, ReceiptLookupInput } from "./receipts.schemas";
 
@@ -14,7 +22,8 @@ import type { CancelReceiptInput, ReceiptLookupInput } from "./receipts.schemas"
  * - Read: `fee.read`, `fee.collect` or `fee.refund` at ALL. The receipt is shown from its stored `receiptSnapshot`
  *   (never from current structures). The cancel reason is shown only to `fee.refund` holders (I4).
  * - Cancel (`fee.refund` ALL): never by the collector (also a database CHECK), a receipt whose collector is no longer a
- *   user only by a Super Admin; reason required; nothing is deleted. Lock order as collection: per-student lock → the
+ *   user only by a Super Admin; a canceller who also collects (Accountant) only on the day it was recorded; a closed
+ *   session's receipt only by a Super Admin (review M2, owner 2026-11-22); reason required; nothing is deleted. Lock order as collection: per-student lock → the
  *   payment row → the invoices it paid (ORDER BY id). Live allocations are marked reversed, item and invoice paid
  *   amounts go down, invoices go back to ISSUED / PARTIAL. The receipt keeps its number; its reference is free again
  *   (the partial unique indexes count SUCCESS payments only).
@@ -37,7 +46,19 @@ const REFUSAL_MESSAGE: Record<ReceiptCancelRefusal, string> = {
   ALREADY_CANCELLED: "This receipt is already cancelled.",
   OWN_COLLECTION: "You collected this payment, so someone else must cancel it.",
   COLLECTOR_UNKNOWN: "The person who collected this payment is no longer a user; only a Super Admin can cancel it.",
+  NOT_SAME_DAY: "This receipt was recorded before today. Ask the Principal (or a Super Admin) to cancel it.",
+  SESSION_CLOSED: "This receipt paid fees of a closed academic session; only a Super Admin can cancel it.",
 };
+
+/** Review 5B-M3 M2: the receipt's school-local recording day vs today. */
+const recordedToday = (createdAt: Date, tz: string | undefined) => todayInTimeZone(tz, createdAt) === todayInTimeZone(tz);
+
+/** Sessions of the invoices a payment still pays (live allocations). */
+async function sessionIdsOf(db: Tx | typeof prisma, invoiceIds: string[]): Promise<string[]> {
+  if (invoiceIds.length === 0) return [];
+  const rows = await db.feeInvoice.findMany({ where: { id: { in: invoiceIds } }, select: { academicSessionId: true } });
+  return [...new Set(rows.map((r) => r.academicSessionId))].sort();
+}
 
 /** Newest receipts first, one page (page/pageSize, never unbounded). */
 export async function listReceipts(ctx: AuthContext, page: number) {
@@ -131,13 +152,18 @@ export async function getReceipt(ctx: AuthContext, id: string) {
       collectedById: true,
       createdAt: true,
       receiptSnapshot: true,
+      printCount: true,
       cancelledAt: true,
       cancelReason: canSeeReason,
       cancelledBy: { select: { displayName: true } },
+      allocations: { where: { reversedAt: null }, select: { invoiceId: true } },
     },
   });
   if (!p) throw new NotFoundError("Receipt not found.");
-  const refusal = receiptCancelRefusal(ctx, { status: p.status, collectedById: p.collectedById });
+  const tz = (await getSchoolTimezone()) ?? undefined;
+  const sessionIds = await sessionIdsOf(prisma, [...new Set(p.allocations.map((a) => a.invoiceId))]);
+  const closed = sessionIds.length > 0 && (await prisma.academicSession.count({ where: { id: { in: sessionIds }, status: "CLOSED" } })) > 0;
+  const refusal = receiptCancelRefusal(ctx, { status: p.status, collectedById: p.collectedById, recordedToday: recordedToday(p.createdAt, tz), closedSession: closed });
   return {
     id: p.id,
     receiptNo: p.receiptNo,
@@ -146,6 +172,9 @@ export async function getReceipt(ctx: AuthContext, id: string) {
     paidOn: iso(p.paidOn),
     recordedAt: p.createdAt.toISOString(),
     version: p.version,
+    printCount: p.printCount,
+    /** Review 5B-M2 L2: this user's prints count (ORIGINAL / DUPLICATE); others get a non-counting office copy. */
+    printCounts: holdsAll(ctx, "fee.collect"),
     cancelled: p.status === "CANCELLED",
     cancelledAt: p.cancelledAt?.toISOString() ?? null,
     cancelledBy: p.cancelledBy?.displayName ?? null,
@@ -163,22 +192,32 @@ export async function cancelReceipt(ctx: AuthContext, input: CancelReceiptInput)
   try {
     return await prisma.$transaction(
       async (tx) => {
-        const head = await tx.feePayment.findUnique({ where: { id: input.id }, select: { studentId: true } });
+        const head = await tx.feePayment.findUnique({ where: { id: input.id }, select: { studentId: true, allocations: { where: { reversedAt: null }, select: { invoiceId: true } } } });
         if (!head) throw new NotFoundError("Receipt not found.");
+        // Review 5B-M2 L1: sessions FOR SHARE FIRST (a concurrent close waits) — the same order as concession approval
+        // (session → student). A payment's live allocations only ever shrink and an invoice's session never changes, so
+        // the sessions read here cover every invoice still paid once the payment row is locked.
+        const statusOf = new Map<string, string>();
+        for (const sid of await sessionIdsOf(tx, [...new Set(head.allocations.map((a) => a.invoiceId))])) statusOf.set(sid, await lockSessionShared(tx, sid));
         await lockFeeStudent(tx, head.studentId);
         await tx.$queryRaw`SELECT id FROM fee_payment WHERE id = ${input.id} FOR UPDATE`;
         const p = await tx.feePayment.findUniqueOrThrow({
           where: { id: input.id },
-          select: { receiptNo: true, amount: true, status: true, version: true, collectedById: true, allocations: { where: { reversedAt: null }, select: { invoiceId: true, invoiceItemId: true, amount: true } } },
+          select: { receiptNo: true, amount: true, status: true, version: true, collectedById: true, createdAt: true, allocations: { where: { reversedAt: null }, select: { invoiceId: true, invoiceItemId: true, amount: true } } },
         });
         if (p.version !== input.version) throw new ConflictError("This receipt was changed by someone else. Reload the page and try again.");
-        const refusal = receiptCancelRefusal(ctx, { status: p.status, collectedById: p.collectedById });
-        if (refusal === "ALREADY_CANCELLED") throw new ConflictError(REFUSAL_MESSAGE[refusal]);
-        if (refusal) throw new ForbiddenError(REFUSAL_MESSAGE[refusal]);
         // Invariant (FC8): Σ live allocations = the payment. Anything else is data damage — stop, change nothing.
-        if (!sumMoney(p.allocations.map((a) => a.amount.toString())).eq(toMoney(p.amount.toString()))) throw new Error("fee_payment allocations do not add up to the payment");
+        if (p.status === "SUCCESS" && !sumMoney(p.allocations.map((a) => a.amount.toString())).eq(toMoney(p.amount.toString()))) throw new Error("fee_payment allocations do not add up to the payment");
         const invoiceIds = [...new Set(p.allocations.map((a) => a.invoiceId))].sort();
         if (invoiceIds.length > 0) await tx.$queryRaw`SELECT id FROM fee_invoice WHERE id = ANY(${invoiceIds}) ORDER BY id FOR UPDATE`;
+        // Review M2: the same-day / closed-session rules (sessions locked above).
+        const sessionIds = await sessionIdsOf(tx, invoiceIds);
+        if (sessionIds.some((sid) => !statusOf.has(sid))) throw new ConflictError("This receipt was changed by someone else. Reload the page and try again.");
+        const closed = sessionIds.some((sid) => statusOf.get(sid) === "CLOSED");
+        const tz = (await readFeeSettingsTx(tx)).timezone ?? undefined;
+        const refusal = receiptCancelRefusal(ctx, { status: p.status, collectedById: p.collectedById, recordedToday: recordedToday(p.createdAt, tz), closedSession: closed });
+        if (refusal === "ALREADY_CANCELLED") throw new ConflictError(REFUSAL_MESSAGE[refusal]);
+        if (refusal) throw new ForbiddenError(REFUSAL_MESSAGE[refusal]);
         const now = new Date();
         await tx.feePaymentAllocation.updateMany({ where: { paymentId: input.id, reversedAt: null }, data: { reversedAt: now } });
         for (const a of p.allocations) await tx.feeInvoiceItem.update({ where: { id: a.invoiceItemId }, data: { paidAmount: { decrement: a.amount } } });
@@ -216,4 +255,69 @@ export async function cancelReceipt(ctx: AuthContext, input: CancelReceiptInput)
     if (isTransactionBusy(e)) throw new ServiceBusyError();
     throw e;
   }
+}
+
+/**
+ * Phase 5B-M2 (FC14): the receipt PDF, from its snapshot. Readers of receipts only.
+ * - Review 5B-M2 L2: only people who hand receipts over (`fee.collect`) count prints — their first print is the
+ *   ORIGINAL, later ones say DUPLICATE. Other readers (Principal, School Admin) get a non-counting COPY, still audited.
+ * - Review L3: rendered FIRST (CPU work outside any transaction), then the print is counted under the student lock
+ *   (review 5B-M3 L2) only if the count and status are what the render used; otherwise it renders again — a failed
+ *   render never uses up the ORIGINAL. print_count only grows (trigger); the version is NOT bumped (a print must not
+ *   make an open cancel form stale).
+ */
+export async function renderReceiptPdf(ctx: AuthContext, id: string): Promise<{ pdf: Buffer; fileName: string }> {
+  assertReceiptRead(ctx);
+  const counts = holdsAll(ctx, "fee.collect");
+  const branding = await loadBranding();
+  const dateText = (s: string | null) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? formatDateOnly(new Date(`${s}T00:00:00.000Z`)) : s);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const p = await prisma.feePayment.findUnique({ where: { id }, select: { studentId: true, receiptNo: true, amount: true, paidOn: true, status: true, printCount: true, receiptSnapshot: true } });
+    if (!p) throw new NotFoundError("Receipt not found.");
+    const copy: ReceiptCopy = !counts ? "COPY" : p.printCount > 0 ? "DUPLICATE" : "ORIGINAL";
+    const snap = readSnapshot(p.receiptSnapshot);
+    const pdf = await renderPdf(
+      createElement(FeeReceiptDocument, {
+        branding,
+        receipt: {
+          receiptNo: p.receiptNo,
+          paidOn: dateText(iso(p.paidOn)) ?? "",
+          student: snap.student,
+          method: snap.method,
+          reference: snap.reference,
+          bankName: snap.bankName,
+          instrumentDate: dateText(snap.instrumentDate),
+          lines: snap.lines,
+          amount: moneyString(p.amount.toString()),
+          amountInWords: snap.amountInWords,
+          collectedBy: snap.collectedBy,
+        },
+        copy,
+        cancelled: p.status === "CANCELLED",
+        generatedAt: new Date(),
+      }),
+    );
+    const recorded = await prisma
+      .$transaction(
+        async (tx) => {
+          await lockFeeStudent(tx, p.studentId);
+          const n = counts
+            ? await tx.$executeRaw`UPDATE fee_payment SET print_count = print_count + 1 WHERE id = ${id} AND print_count = ${p.printCount} AND status = ${p.status}::"FeePaymentStatus"`
+            : (await tx.feePayment.count({ where: { id, status: p.status } }));
+          if (n === 0) return false; // printed or cancelled meanwhile: render again with the right stamp
+          await audit(tx, actorOf(ctx), { action: "fee_payment.print", entityType: "FeePayment", entityId: id, after: { receiptNo: p.receiptNo, copy: counts ? p.printCount + 1 : "view" } });
+          return true;
+        },
+        { timeout: 10_000 },
+      )
+      .catch((e: unknown) => {
+        if (isTransactionBusy(e)) throw new ServiceBusyError();
+        throw e;
+      });
+    if (recorded) {
+      const safe = p.receiptNo.replace(/[^A-Za-z0-9-]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "receipt";
+      return { pdf, fileName: `fee-receipt-${safe}.pdf` };
+    }
+  }
+  throw new ServiceBusyError();
 }

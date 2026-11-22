@@ -60,3 +60,11 @@ export const MARKS_TEMPLATE_MESSAGES: Record<ExportCode, string> = {
   invalid: "The template request wasn't valid. Reload the page and try again.",
   rate_limited: "Too many downloads in a short time. Please wait a few minutes.",
 };
+
+/** Phase 5C-M1: fee report exports — same fixed codes, fee wording. */
+export const FEE_REPORT_EXPORT_MESSAGES: Record<ExportCode, string> = {
+  ...EXPORT_MESSAGES,
+  too_many: "This report has more than 5,000 rows. Narrow the filters and try again.",
+  forbidden: "You don't have permission to export fee reports, or the request didn't come from this site.",
+  invalid: "The report filters weren't valid. Choose them again and retry.",
+};

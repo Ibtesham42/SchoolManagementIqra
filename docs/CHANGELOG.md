@@ -4,8 +4,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added (Phase 5C — fee reports)
+- **Reports** (Fees → Reports): money collected by day, payment method, collector or fee head; what is still due by class and section or by installment; defaulters with how long they are overdue and the primary guardian's name and phone; the concession register (who proposed and who approved, plus late-fee waivers); cancelled receipts; and cancelled invoices that were never issued again. Every report can be exported as a CSV file (staff with export rights); guardian phone numbers are left out of downloads unless you may also export student records.
+
+### Fixed
+- Searching for a student at the fee counter with a % or _ in the name now works.
+
 ### Added (Phase 5B — fee collection at the counter)
-- **Receipts** (Fees → Receipts): every receipt, newest first, and a lookup by receipt number. A receipt can be **cancelled** with a reason (bounced cheque, wrong student, entered twice) by someone allowed to cancel receipts — never the person who collected it. The receipt keeps its number and is marked cancelled, the amount becomes due again on its invoices, and its UPI / bank / cheque reference can be used again. A late fee fixed by the cancelled payment stays on the invoice.
+- **Printable receipts**: every receipt can be printed as a PDF with the school letterhead, the amount in figures and words and what it paid for. The accountant's first print is the original; later prints are marked DUPLICATE, other staff see an office copy, and cancelled receipts are marked CANCELLED.
+- **Receipts** (Fees → Receipts): every receipt, newest first, and a lookup by receipt number. A receipt can be **cancelled** with a reason (bounced cheque, wrong student, entered twice) by someone allowed to cancel receipts — never the person who collected it. The accountant can cancel only receipts recorded the same day; older ones need the Principal, and receipts of a closed session need the Super Admin. The receipt keeps its number and is marked cancelled, the amount becomes due again on its invoices, and its UPI / bank / cheque reference can be used again. A late fee fixed by the cancelled payment stays on the invoice.
 - **Collect** (Fees → Collect): find a student (from any session, so earlier dues can be collected), see what is due today oldest first with today's late fees, and record a payment by cash, UPI, bank transfer, cheque or card. The payment goes to the oldest dues first (or the invoices you choose), the late fee is fixed on the invoice when paid, and a receipt number is given. Submitting the same form twice gives one receipt; the counter also lists the student's receipts of the last 24 hours. Payment dates can go back at most 7 days. Late fees can be waived (with a reason) by staff allowed to give concessions.
 
 ### Added (Phase 5A — invoices)

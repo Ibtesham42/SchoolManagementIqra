@@ -67,3 +67,12 @@ export const needsReference = (m: PaymentMethod) => m !== "CASH";
 
 /** Invoice item kinds (same values as the FeeInvoiceItemKind enum; kept here so pure code needs no Prisma import). */
 export type InvoiceItemKindLite = "STRUCTURE" | "CHARGE" | "LATE_FEE" | "OPENING_BALANCE";
+
+/**
+ * Review 5B-M3 M1: is an invoice's late fee already fixed? A charged LATE_FEE line (amount > 0) or a waiver (zero,
+ * never allocated) fixes it; a zero line WITH allocation history was voided by a receipt cancellation and doesn't — so
+ * the late fee is worked out again (a PER_DAY fee keeps growing from the due date). Pure — unit tested.
+ */
+export function lateFeeFrozen(items: readonly { kind: InvoiceItemKindLite; amount: string; allocationCount: number }[]): boolean {
+  return items.some((it) => it.kind === "LATE_FEE" && (Number(it.amount) > 0 || it.allocationCount === 0));
+}
