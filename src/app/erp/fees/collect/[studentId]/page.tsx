@@ -80,7 +80,18 @@ export default async function CollectStudentPage({ params }: { params: Promise<{
         <Alert>
           <AlertDescription>
             Receipts for this student in the last 24 hours:{" "}
-            {view.recentReceipts.map((r) => `${r.receiptNo} (₹${formatIndianMoney(r.amount)}, ${r.method}${r.collectedBy ? `, ${r.collectedBy}` : ""}${r.cancelled ? ", cancelled" : ""})`).join("; ")}. Check you are not collecting the same money twice.
+            {view.recentReceipts.map((r, i) => (
+              <span key={r.id}>
+                {i > 0 && "; "}
+                <Link href={`/erp/fees/receipts/${r.id}`} className="underline">
+                  {r.receiptNo}
+                </Link>{" "}
+                (₹{formatIndianMoney(r.amount)}, {r.method}
+                {r.collectedBy ? `, ${r.collectedBy}` : ""}
+                {r.cancelled ? ", cancelled" : ""})
+              </span>
+            ))}
+            . Check you are not collecting the same money twice.
           </AlertDescription>
         </Alert>
       )}

@@ -198,13 +198,14 @@ export async function cancelInvoice(ctx: AuthContext, input: CancelInvoiceInput)
       if (rows.length === 0) throw new NotFoundError("Invoice not found.");
       const inv = await tx.feeInvoice.findUniqueOrThrow({
         where: { id: input.id },
-        select: { version: true, paidAmount: true, status: true, academicSessionId: true, installmentId: true, _count: { select: { allocations: true } }, items: { where: { kind: "CHARGE" }, select: { charge: true } } },
+        select: { version: true, paidAmount: true, status: true, academicSessionId: true, installmentId: true, _count: { select: { allocations: { where: { reversedAt: null } } } }, items: { where: { kind: "CHARGE" }, select: { charge: true } } },
       });
       if (inv.version !== input.version) throw new ConflictError("This invoice was changed by someone else. Reload the page and try again.");
       // Review 5A-M4 M1: only while the session still generates invoices, so a cancelled invoice can always be re-issued
       // (a cancel in a closed session would be an unapproved 100 % waiver).
       const sessionStatus = await lockSessionShared(tx, inv.academicSessionId);
       if (!sessionGeneratesInvoices(sessionStatus)) throw new ConflictError("This academic session is closed, so its invoices can't be cancelled (they could never be issued again). Use a concession instead.");
+      // Review 5B-M3 Info: only LIVE allocations count — an invoice whose receipts were all cancelled can be cancelled.
       if (inv._count.allocations > 0 || !inv.paidAmount.isZero()) throw new ConflictError("Payments were received on this invoice, so it can't be cancelled. Use a concession or waiver instead.");
       await tx.feeInvoice.update({ where: { id: input.id }, data: { status: "CANCELLED", deletedAt: new Date(), cancelledAt: new Date(), cancelledById: ctx.userId, cancelReason: input.reason, version: { increment: 1 } } });
       // Review L5: re-create the extra charges only while the student is still billed for the installment; ids audited.

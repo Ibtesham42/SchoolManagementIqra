@@ -36,14 +36,38 @@ export function authorizeFeeWrite(ctx: AuthContext, key: FeeWritePermission): vo
 
 export const canManageFeeSetup = (ctx: AuthContext) => holdsAll(ctx, "fee.structure.manage");
 
+/**
+ * Phase 5B-M3: receipts are read by fee readers, collectors and cancellers (the Principal holds `fee.refund` but not
+ * `fee.read`), all at ALL scope.
+ */
+export const canReadReceipts = (ctx: AuthContext) => canReadFees(ctx) || holdsAll(ctx, "fee.collect") || holdsAll(ctx, "fee.refund");
+export function assertReceiptRead(ctx: AuthContext): void {
+  if (!canReadReceipts(ctx)) throw new ForbiddenError();
+}
+
+export type ReceiptCancelRefusal = "NOT_PERMITTED" | "ALREADY_CANCELLED" | "OWN_COLLECTION" | "COLLECTOR_UNKNOWN";
+
+/**
+ * FC13 + review 5A L5: who may cancel a receipt. `fee.refund` at ALL; never the collector (two people — also a database
+ * CHECK); a receipt whose collector is no longer a user only by a Super Admin. Returns null when allowed.
+ */
+export function receiptCancelRefusal(ctx: AuthContext, p: { status: "SUCCESS" | "CANCELLED"; collectedById: string | null }): ReceiptCancelRefusal | null {
+  if (!holdsAll(ctx, "fee.refund")) return "NOT_PERMITTED";
+  if (p.status === "CANCELLED") return "ALREADY_CANCELLED";
+  if (p.collectedById === ctx.userId) return "OWN_COLLECTION";
+  if (p.collectedById === null && !ctx.isSuperAdmin) return "COLLECTOR_UNKNOWN";
+  return null;
+}
+
 /** What the Fees area shows (cosmetic; every service checks again). */
 export function feeAccess(ctx: AuthContext) {
   return {
-    any: canReadFeeSetup(ctx) || hasPermission(ctx, "fee.collect") || hasPermission(ctx, "fee.concession.manage") || hasPermission(ctx, "fee.concession.approve") || (hasPermission(ctx, "fee.report") && scopeFor(ctx, "fee.report") === "ALL"),
+    any: canReadFeeSetup(ctx) || canReadReceipts(ctx) || hasPermission(ctx, "fee.collect") || hasPermission(ctx, "fee.concession.manage") || hasPermission(ctx, "fee.concession.approve") || (hasPermission(ctx, "fee.report") && scopeFor(ctx, "fee.report") === "ALL"),
     setup: canReadFeeSetup(ctx),
     manageSetup: canManageFeeSetup(ctx),
     concessions: canReadFees(ctx) || holdsAll(ctx, "fee.concession.manage") || holdsAll(ctx, "fee.concession.approve"),
     proposeConcessions: holdsAll(ctx, "fee.concession.manage"),
     approveConcessions: holdsAll(ctx, "fee.concession.approve"),
+    receipts: canReadReceipts(ctx),
   };
 }

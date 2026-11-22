@@ -14,6 +14,8 @@ export async function lockFeeSetup(tx: Tx): Promise<void> {
 /**
  * Per-student advisory lock (5B): collection takes it first; re-pricing takes it AFTER the fee-setup lock (review 5B-M1
  * L3). Order everywhere: fee setup → student → invoice rows → sequence. Collection never takes the setup lock.
+ * Review 5B-M3 L2: a `fee_payment` row is locked only AFTER this student lock (cancellation: student → payment row →
+ * invoice rows ORDER BY id); later payment writes (print count, refunds) must keep that order.
  */
 export async function lockFeeStudent(tx: Tx, studentId: string): Promise<void> {
   await tx.$queryRaw`SELECT set_config('lock_timeout', '5s', true) AS lock_timeout`;

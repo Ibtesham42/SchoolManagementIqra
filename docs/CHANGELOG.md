@@ -5,6 +5,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [Unreleased]
 
 ### Added (Phase 5B — fee collection at the counter)
+- **Receipts** (Fees → Receipts): every receipt, newest first, and a lookup by receipt number. A receipt can be **cancelled** with a reason (bounced cheque, wrong student, entered twice) by someone allowed to cancel receipts — never the person who collected it. The receipt keeps its number and is marked cancelled, the amount becomes due again on its invoices, and its UPI / bank / cheque reference can be used again. A late fee fixed by the cancelled payment stays on the invoice.
 - **Collect** (Fees → Collect): find a student (from any session, so earlier dues can be collected), see what is due today oldest first with today's late fees, and record a payment by cash, UPI, bank transfer, cheque or card. The payment goes to the oldest dues first (or the invoices you choose), the late fee is fixed on the invoice when paid, and a receipt number is given. Submitting the same form twice gives one receipt; the counter also lists the student's receipts of the last 24 hours. Payment dates can go back at most 7 days. Late fees can be waived (with a reason) by staff allowed to give concessions.
 
 ### Added (Phase 5A — invoices)

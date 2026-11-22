@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import type { z } from "zod";
 import { requireAuth } from "@/lib/auth/context";
 import { formString, fromError, fromZod, type ActionState } from "@/lib/action-state";
@@ -38,6 +39,8 @@ import { collectSchema, collectionSearchSchema } from "@/modules/fees/collection
 import { collectPayment, searchForCollection } from "@/modules/fees/collection.service";
 import { cancelInvoiceSchema, generateInvoicesSchema } from "@/modules/fees/invoices.schemas";
 import { cancelInvoice, issueInvoices } from "@/modules/fees/invoices.service";
+import { cancelReceiptSchema, receiptLookupSchema } from "@/modules/fees/receipts.schemas";
+import { cancelReceipt, findReceiptId } from "@/modules/fees/receipts.service";
 import { addChargeSchema, concessionRefSchema, createConcessionSchema, decideConcessionSchema, proposeConcessionSchema, updateConcessionSchema } from "@/modules/fees/concessions.schemas";
 import { addCharge, createConcession, decideConcession, proposeConcession, removeCharge, revokeConcession, setConcessionActive, updateConcession } from "@/modules/fees/concessions.service";
 
@@ -218,5 +221,29 @@ export async function collectPaymentAction(_prev: ActionState, fd: FormData): Pr
     const r = await collectPayment(ctx, d);
     if (r?.replay) return r.cancelled ? `This form was already used: receipt ${r.receiptNo}, since cancelled.` : `Already recorded: receipt ${r.receiptNo}.`;
     return `Payment recorded. Receipt ${r?.receiptNo}.`;
+  });
+}
+
+// ───────────────────────────── Phase 5B-M3: receipts ─────────────────────────────
+
+/** POSTed lookup by exact receipt number → the receipt page (or a "not found" message). */
+export async function findReceiptAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireAuth();
+  const parsed = receiptLookupSchema.safeParse({ receiptNo: formString(fd, "receiptNo") });
+  if (!parsed.success) return fromZod(parsed.error);
+  let id: string | null;
+  try {
+    id = await findReceiptId(ctx, parsed.data);
+  } catch (e) {
+    return fromError(e);
+  }
+  if (!id) return { error: "No receipt with that number." };
+  redirect(`/erp/fees/receipts/${id}`);
+}
+
+export async function cancelReceiptAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return run(cancelReceiptSchema, { ...ref(fd), reason: formString(fd, "reason") }, async (ctx, d) => {
+    const r = await cancelReceipt(ctx, d);
+    return `Receipt ${r.receiptNo} cancelled. ${r.invoices === 1 ? "The invoice is" : `${r.invoices} invoices are`} due again.`;
   });
 }

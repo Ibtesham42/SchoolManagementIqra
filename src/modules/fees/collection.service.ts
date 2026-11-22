@@ -67,7 +67,7 @@ async function openInvoicesOf(db: Db, studentId: string, asOf: string, onlyIds?:
       paidAmount: true,
       enrollment: { select: { academicSession: { select: { name: true } } } },
       installment: { select: { name: true } },
-      items: { orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { id: true, kind: true, description: true, amount: true, concessionAmount: true, paidAmount: true, sortOrder: true } },
+      items: { orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { id: true, kind: true, description: true, amount: true, concessionAmount: true, paidAmount: true, sortOrder: true, _count: { select: { allocations: true } } } },
     },
   });
   const rules = new Map<string, LateFeeRule | null>();
@@ -76,7 +76,9 @@ async function openInvoicesOf(db: Db, studentId: string, asOf: string, onlyIds?:
     rules.set(sid, r ? { graceDays: r.graceDays, calc: r.calc, value: moneyString(r.value.toString()), cap: r.cap === null ? null : moneyString(r.cap.toString()) } : null);
   }
   return invoices.map((i) => {
-    const hasLate = i.items.some((it) => it.kind === "LATE_FEE");
+    // A frozen late fee (amount > 0) or a waiver (zero, never allocated) stops the live late fee. A zero line WITH
+    // allocation history was voided by a receipt cancellation (review 5B-M3 M1) and doesn't count.
+    const hasLate = i.items.some((it) => it.kind === "LATE_FEE" && (it.amount.gt(0) || it._count.allocations === 0));
     const balance = i.total.minus(i.paidAmount);
     const liveLate = hasLate ? "0.00" : lateFeeFor(rules.get(i.academicSessionId) ?? null, iso(i.dueOn), asOf, moneyString(balance.toString()));
     return {
