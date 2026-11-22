@@ -27,8 +27,8 @@ Legend: **PK** primary key · **U** unique · **IX** index · **FK** foreign key
 
 | Model | Key fields | Constraints / indexes |
 |---|---|---|
-| User (SD) | username, email?, passwordHash, isActive, mustChangePassword, lastLoginAt, failedLoginCount, lockedUntil, employeeId?, studentId?, guardianId?, privacyConsentAt?, privacyConsentVersion? | U(username), U(lower(email)) partial where not null, U(employeeId), U(studentId), U(guardianId). **Phase 6A (migration `20261126000000`, DRAFT):** studentId → Student and guardianId → Guardian become FKs (RESTRICT); CHECK `user_one_person` (at most one of employee / student / guardian — ADR-045); CHECK consent at + version both or neither |
-| AccountActivation (Phase 6A, DRAFT) | userId → User (CASCADE), codeHash, channel (SLIP / EMAIL), expiresAt, usedAt?, failedAttempts, createdById? → User (SET NULL) | U(codeHash), IX(userId), IX(expiresAt); CHECK expires_at > created_at, failed_attempts ≥ 0. Single-use portal activation codes (P4, P6); only the hash is stored |
+| User (SD) | username, email?, passwordHash, isActive, mustChangePassword, lastLoginAt, failedLoginCount, lockedUntil, employeeId?, studentId?, guardianId?, privacyConsentAt?, privacyConsentVersion? | U(username), U(lower(email)) partial where not null, U(employeeId), U(studentId), U(guardianId). **Phase 6A (migration `20261126000000`, applied to development and Test 2026-11-22):** studentId → Student and guardianId → Guardian become FKs (RESTRICT); CHECK `user_one_person` (at most one of employee / student / guardian — ADR-045); CHECK consent at + version both or neither |
+| AccountActivation (Phase 6A) | userId → User (CASCADE), codeHash, channel (SLIP / EMAIL), expiresAt, usedAt?, failedAttempts, createdById? → User (SET NULL) | U(codeHash), IX(userId), IX(expiresAt); CHECK expires_at > created_at, failed_attempts ≥ 0. Single-use portal activation codes (P4, P6); only the hash is stored |
 | Session | tokenHash, userId, expiresAt, lastSeenAt, ip, userAgent | U(tokenHash), IX(userId), IX(expiresAt) |
 | PasswordResetToken | tokenHash, userId, expiresAt, usedAt | U(tokenHash) |
 | Role | key, name, description, isSystem | U(key) |
@@ -242,7 +242,7 @@ Online payments (PENDING payments, gateway columns, PaymentGatewayEvent U(gatewa
 
 Spec model → planned model: `StudentClass` → SchoolClass (+StudentEnrollment) · `Attendance` → StudentAttendance + EmployeeAttendance · `Timetable` → TimetableSlot · `Inventory` → InventoryItem · `Gallery` → GalleryAlbum/GalleryImage · `Teacher` → Employee + TeacherProfile (one person table for all staff avoids duplicated HR/payroll logic).
 
-## Phase 6A additions (migration `20261126000000_phase6a_portal_accounts`, DRAFT — awaiting the owner's SQL approval)
+## Phase 6A additions (migration `20261126000000_phase6a_portal_accounts` — owner-approved, applied to development and Test 2026-11-22)
 
 - `student_guardian.portal_access boolean NOT NULL DEFAULT true` — P24 custody block (a guardian's portal account can't see this student).
 - `fee_invoice_item` (KI-105, P15): `waived_amount numeric(12,2)?`, `waiver_reason varchar(500)?`, `waived_by_id → user (SET NULL)?`, `waived_with_payment_id → fee_payment (RESTRICT)?`, `frozen_by_payment_id → fee_payment (RESTRICT)?`; IX on both payment links; CHECK `fee_invoice_item_waiver` (waiver data only on a zero LATE_FEE line, then amount > 0 and a reason), CHECK `fee_invoice_item_frozen_kind` (a freezing payment only on LATE_FEE lines). Backfill: existing waiver lines move amount and reason out of `description` ("Late fee waived").

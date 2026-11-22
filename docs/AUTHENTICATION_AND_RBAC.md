@@ -128,7 +128,7 @@ Note: a user may hold several roles (e.g. Teacher + Class Teacher); grants union
 - Re-saving an existing class-teacher assignment whose teacher no longer meets H4 now returns a validation message instead of doing nothing (the H4 check runs first, under the employee lock).
 
 ### Portal (Phase 6, decisions P1–P24; owner 2026-11-22)
-- **Catalog 89 / 13 / 320** (from 86 / 13 / 312): new `homework.read` (Parent CHILDREN, Student SELF), `notice.manage` (School Admin, Principal, Class Teacher ASSIGNED), `portal.account.manage` (School Admin); Student loses `fee.read` SELF (P16); Parent / Student `notice.read` narrowed from ALL to CHILDREN / SELF (no portal role holds an ALL grant). Super Admin gets the new permissions automatically. **Database sync pending** (owner approval, KI-062 / KI-073 procedure).
+- **Catalog 89 / 13 / 320** (from 86 / 13 / 312): new `homework.read` (Parent CHILDREN, Student SELF), `notice.manage` (School Admin, Principal, Class Teacher ASSIGNED), `portal.account.manage` (School Admin); Student loses `fee.read` SELF (P16); Parent / Student `notice.read` narrowed from ALL to CHILDREN / SELF (no portal role holds an ALL grant). Super Admin gets the new permissions automatically. **Synced to development and Test 2026-11-22** (owner-approved; dry run, one guarded transaction each, 312 → 320, all 13 roles exact).
 - Portal reads go through `lib/rbac/portal-scope.portalCanSee` (ADR-044). Portal accounts are exclusive (ADR-045).
 - Anti-escalation: assigning the Parent role through the generic user editor now also needs `homework.read`; portal accounts are provisioned through `portal.account.manage` (6A-M3), never `/erp/users`.
 

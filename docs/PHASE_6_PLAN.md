@@ -1,6 +1,6 @@
 # Phase 6 — Parent and Student Portals: assessment and implementation plan
 
-**Status: decisions P1–P24 APPROVED as recommended (owner, 2026-11-22)** — including P19 = UPI payment intimation (gateway stays deferred, `PAYMENT_GATEWAY=none`), P14 = optional student accounts from Class 9 (off by default), P15 = KI-105 fixed by migration A. The §10 questions for the school are still open. Drafted by the architect agent from the code; file:line references were checked by the architect, not re-verified by the main session. Owner decisions P1–P24 are pending. Nothing is built yet. Like Phases 3–5, Phase 6 is split into three parts:
+**Status: decisions P1–P24 APPROVED as recommended (owner, 2026-11-22)** — including P19 = UPI payment intimation (gateway stays deferred, `PAYMENT_GATEWAY=none`), P14 = optional student accounts from Class 9 (off by default), P15 = KI-105 fixed by migration A. Migration A applied to development and Test and catalog 89 / 13 / 320 synced (2026-11-22, 6A-M1). The §10 questions for the school are still open. Drafted by the architect agent from the code; file:line references were checked by the architect, not re-verified by the main session. Owner decisions P1–P24 are pending. Nothing is built yet. Like Phases 3–5, Phase 6 is split into three parts:
 - **6A**: accounts, the family link and the portal shell;
 - **6B**: what families see (read-only views);
 - **6C**: communication, payment intimation and student accounts.
