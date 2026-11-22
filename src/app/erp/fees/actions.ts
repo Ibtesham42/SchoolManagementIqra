@@ -41,6 +41,8 @@ import { cancelInvoiceSchema, generateInvoicesSchema } from "@/modules/fees/invo
 import { cancelInvoice, issueInvoices } from "@/modules/fees/invoices.service";
 import { cancelReceiptSchema, receiptLookupSchema } from "@/modules/fees/receipts.schemas";
 import { cancelReceipt, findReceiptId } from "@/modules/fees/receipts.service";
+import { runReconciliation } from "@/modules/fees/reconciliation.service";
+import { enforce, RULES } from "@/lib/rate-limit";
 import { addChargeSchema, concessionRefSchema, createConcessionSchema, decideConcessionSchema, proposeConcessionSchema, updateConcessionSchema } from "@/modules/fees/concessions.schemas";
 import { addCharge, createConcession, decideConcession, proposeConcession, removeCharge, revokeConcession, setConcessionActive, updateConcession } from "@/modules/fees/concessions.service";
 
@@ -246,4 +248,21 @@ export async function cancelReceiptAction(_prev: ActionState, fd: FormData): Pro
     const r = await cancelReceipt(ctx, d);
     return `Receipt ${r.receiptNo} cancelled. ${r.invoices === 1 ? "The invoice is" : `${r.invoices} invoices are`} due again.`;
   });
+}
+
+// ───────────────────────────── Phase 5C-M2: reconciliation ─────────────────────────────
+
+export interface ReconciliationState extends ActionState {
+  result?: Awaited<ReturnType<typeof runReconciliation>>;
+}
+
+/** POSTed and rate limited (each run scans the fee tables); the service authorizes (fee.report ALL). */
+export async function runReconciliationAction(_prev: ReconciliationState): Promise<ReconciliationState> {
+  const ctx = await requireAuth();
+  try {
+    await enforce(RULES.feeReconciliation, ctx.userId);
+    return { ok: true, result: await runReconciliation(ctx) };
+  } catch (e) {
+    return fromError(e);
+  }
 }

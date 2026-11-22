@@ -5,6 +5,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [Unreleased]
 
 ### Added (Phase 5C — fee reports)
+- **Reconciliation** (Fees → Reports → Reconciliation checks): one button checks that every receipt matches what it paid, every invoice matches its lines, the collection totals match the money on invoices, and receipt and invoice numbers have no gaps. Problems are listed by receipt or invoice number.
 - **Reports** (Fees → Reports): money collected by day, payment method, collector or fee head; what is still due by class and section or by installment; defaulters with how long they are overdue and the primary guardian's name and phone; the concession register (who proposed and who approved, plus late-fee waivers); cancelled receipts; and cancelled invoices that were never issued again. Every report can be exported as a CSV file (staff with export rights); guardian phone numbers are left out of downloads unless you may also export student records.
 
 ### Fixed

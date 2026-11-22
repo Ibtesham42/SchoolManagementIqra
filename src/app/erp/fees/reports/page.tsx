@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireAuth } from "@/lib/auth/context";
 import { ConflictError } from "@/lib/errors";
 import { FEE_REPORT_EXPORT_MESSAGES, isExportCode } from "@/lib/http/export-errors";
@@ -144,6 +145,12 @@ export default async function FeeReportsPage({ searchParams }: { searchParams: P
     <div className="mx-auto grid max-w-6xl gap-4">
       <PageHeader title="Fees" description="Collections, dues, defaulters and registers. Read-only; export any report as CSV." />
       <FeesTabs current="reports" />
+      <p className="text-sm">
+        <Link href="/erp/fees/reports/reconciliation" className="underline">
+          Reconciliation checks
+        </Link>{" "}
+        — do receipts, invoices and their numbers all add up?
+      </p>
       {isExportCode(exportCode) && (
         <Alert variant="destructive">
           <AlertDescription>{FEE_REPORT_EXPORT_MESSAGES[exportCode]}</AlertDescription>

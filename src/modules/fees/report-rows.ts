@@ -84,3 +84,18 @@ export function concessionValueText(calc: "PERCENT" | "FIXED", value: string): s
 
 /** Sum of a money column. */
 export const sumColumn = (values: readonly string[]): string => moneyString(sumMoney(values));
+
+/** A run of missing numbers in one numbering series ("RCT/2026/" + 00042 … 00044). */
+export interface NumberGap {
+  prefix: string;
+  from: number;
+  to: number;
+  /** Digits used by the series (zero padding), so the label prints numbers as they were issued. */
+  width: number;
+}
+
+/** "RCT/2026/00042" or "RCT/2026/00042 – RCT/2026/00044 (3 missing)". */
+export function gapLabel(g: NumberGap): string {
+  const n = (k: number) => `${g.prefix}${String(k).padStart(g.width, "0")}`;
+  return g.from === g.to ? n(g.from) : `${n(g.from)} – ${n(g.to)} (${g.to - g.from + 1} missing)`;
+}
