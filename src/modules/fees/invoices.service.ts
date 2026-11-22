@@ -14,7 +14,7 @@ import { classEnrollments, enrollmentSummary, type EnrollmentSummary } from "@/m
 import type { ConcessionInput } from "./fee-calc";
 import { billableInstallments, sessionGeneratesInvoices } from "./fee-rules";
 import { assertFeeRead, assertFeeSetupRead, authorizeFeeWrite } from "./fees.policy";
-import { lockFeeSetup } from "./fees.tx";
+import { lockFeeSetup, lockFeeStudent } from "./fees.tx";
 import { buildInvoice, repriceItems, type BuiltInvoice, type ChargeLine, type StructureLine } from "./invoice-build";
 import type { CancelInvoiceInput, GenerateInvoicesInput } from "./invoices.schemas";
 
@@ -237,6 +237,8 @@ export async function cancelInvoice(ctx: AuthContext, input: CancelInvoiceInput)
  * concessions. Called INSIDE the concession service's transaction (it holds the fee-setup lock). Returns the count.
  */
 export async function repriceUnpaidInvoicesTx(tx: Tx, studentId: string, academicSessionId: string): Promise<number> {
+  // Review 5B-M1 L3: the student lock after the setup lock (held by the caller), as collection uses it.
+  await lockFeeStudent(tx, studentId);
   // Review L1: lock WITH the full "unpaid" predicate, then read only the locked rows (a payment can't slip in between).
   const locked = await tx.$queryRaw<{ id: string }[]>`
     SELECT id FROM fee_invoice

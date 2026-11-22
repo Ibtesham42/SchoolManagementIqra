@@ -13,7 +13,9 @@ export const feeCodeSchema = z
   .string()
   .trim()
   .toUpperCase()
-  .regex(/^[A-Z0-9](?:[A-Z0-9_-]{0,18}[A-Z0-9])$/, "Use 2–20 English letters or digits (hyphen or underscore inside), e.g. TUITION.");
+  .regex(/^[A-Z0-9](?:[A-Z0-9_-]{0,18}[A-Z0-9])$/, "Use 2–20 English letters or digits (hyphen or underscore inside), e.g. TUITION.")
+  // Review 5B-M1 L5: codes the fee services use for their own system heads.
+  .refine((v) => !["LATE_FEE", "TRANSPORT", "OPENING_BALANCE"].includes(v), "This code is reserved for the system.");
 
 const shortName = (max: number) => masterNameSchema.refine((v) => [...v].length <= max, `Use at most ${max} characters.`);
 

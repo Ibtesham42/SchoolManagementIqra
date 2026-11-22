@@ -76,3 +76,27 @@ export async function classEnrollments(db: Db, academicSessionId: string, classI
   });
   return rows.map(shape);
 }
+
+/**
+ * Fee collection (Phase 5B): a student may owe fees from any session, so search across sessions and return each
+ * matching student once, with their LATEST enrollment. Same fields and exclusions as searchEnrollments.
+ */
+export async function searchStudentsAnySession(db: Db, query: string): Promise<EnrollmentSummary[]> {
+  const q = query.normalize("NFKC").trim().slice(0, 100);
+  if (q.length < 2) return [];
+  const lower = normalizeName(q).replace(/[\%_]/g, (c) => `\${c}`);
+  const rows = await db.studentEnrollment.findMany({
+    where: { student: { deletedAt: null, OR: [{ studentCode: { equals: q.toUpperCase() } }, { admissionNo: { equals: q.toUpperCase() } }, { fullNameNormalized: { contains: lower } }] } },
+    orderBy: [{ studentId: "asc" }, { academicSession: { startDate: "desc" } }],
+    distinct: ["studentId"],
+    take: 20,
+    select: SELECT,
+  });
+  return rows.map(shape).sort((a, b) => (a.fullName < b.fullName ? -1 : a.fullName > b.fullName ? 1 : 0));
+}
+
+/** The latest enrollment of a student (any session), or null. */
+export async function latestEnrollment(db: Db, studentId: string): Promise<EnrollmentSummary | null> {
+  const r = await db.studentEnrollment.findFirst({ where: { studentId, student: { deletedAt: null } }, orderBy: { academicSession: { startDate: "desc" } }, select: SELECT });
+  return r ? shape(r) : null;
+}

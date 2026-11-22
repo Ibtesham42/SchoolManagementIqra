@@ -34,6 +34,8 @@ import {
   updateFeeStructure,
 } from "@/modules/fees/setup.service";
 import { updateFeeNumberFormats } from "@/modules/settings/settings.service";
+import { collectSchema, collectionSearchSchema } from "@/modules/fees/collection.schemas";
+import { collectPayment, searchForCollection } from "@/modules/fees/collection.service";
 import { cancelInvoiceSchema, generateInvoicesSchema } from "@/modules/fees/invoices.schemas";
 import { cancelInvoice, issueInvoices } from "@/modules/fees/invoices.service";
 import { addChargeSchema, concessionRefSchema, createConcessionSchema, decideConcessionSchema, proposeConcessionSchema, updateConcessionSchema } from "@/modules/fees/concessions.schemas";
@@ -176,4 +178,45 @@ export async function issueInvoicesAction(_prev: ActionState, fd: FormData): Pro
 }
 export async function cancelInvoiceAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return run(cancelInvoiceSchema, { ...ref(fd), reason: formString(fd, "reason") }, async (ctx, d) => (await cancelInvoice(ctx, d), "Invoice cancelled. It can be issued again."));
+}
+
+// ───────────────────────────── Phase 5B-M1: counter collection ─────────────────────────────
+
+export interface CollectionSearchState extends ActionState {
+  results?: { studentId: string; studentCode: string; fullName: string; className: string; sectionCode: string }[];
+}
+
+/** POSTed (review 5A-M3 L7): the search term never goes into a URL. */
+export async function searchCollectionAction(_prev: CollectionSearchState, fd: FormData): Promise<CollectionSearchState> {
+  const ctx = await requireAuth();
+  const parsed = collectionSearchSchema.safeParse({ q: formString(fd, "q") });
+  if (!parsed.success) return fromZod(parsed.error);
+  try {
+    const found = await searchForCollection(ctx, parsed.data.q);
+    return { ok: true, results: found.map((f) => ({ studentId: f.studentId, studentCode: f.studentCode, fullName: f.fullName, className: f.className, sectionCode: f.sectionCode })), message: found.length === 0 ? "No student found." : undefined };
+  } catch (e) {
+    return fromError(e);
+  }
+}
+
+export async function collectPaymentAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const nullable = (k: string) => (formString(fd, k).trim() === "" ? null : formString(fd, k));
+  const raw = {
+    studentId: formString(fd, "studentId"),
+    amount: formString(fd, "amount"),
+    method: formString(fd, "method"),
+    transactionRef: formString(fd, "transactionRef"),
+    bankName: formString(fd, "bankName"),
+    instrumentDate: nullable("instrumentDate"),
+    paidOn: formString(fd, "paidOn"),
+    invoiceIds: ids(fd, "invoiceId"),
+    waiveLateFeeInvoiceIds: ids(fd, "waiveLateFee"),
+    waiveReason: formString(fd, "waiveReason"),
+    idempotencyKey: formString(fd, "idempotencyKey"),
+  };
+  return run(collectSchema, raw, async (ctx, d) => {
+    const r = await collectPayment(ctx, d);
+    if (r?.replay) return r.cancelled ? `This form was already used: receipt ${r.receiptNo}, since cancelled.` : `Already recorded: receipt ${r.receiptNo}.`;
+    return `Payment recorded. Receipt ${r?.receiptNo}.`;
+  });
 }

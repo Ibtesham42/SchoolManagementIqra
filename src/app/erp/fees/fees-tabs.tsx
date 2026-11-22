@@ -2,9 +2,10 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /** Server-rendered sub-navigation of the fees area (Phase 5A-M2: setup screens). */
-export function FeesTabs({ current, session }: { current: "heads" | "schedule" | "structures" | "concessions" | "charges" | "invoices"; session?: string }) {
+export function FeesTabs({ current, session }: { current: "heads" | "schedule" | "structures" | "concessions" | "charges" | "invoices" | "collect"; session?: string }) {
   const q = session ? `?session=${encodeURIComponent(session)}` : "";
   const tabs = [
+    { key: "collect", href: "/erp/fees/collect", label: "Collect" },
     { key: "heads", href: "/erp/fees", label: "Fee heads" },
     { key: "schedule", href: `/erp/fees/schedule${q}`, label: "Installments & late fee" },
     { key: "structures", href: `/erp/fees/structures${q}`, label: "Class fees" },

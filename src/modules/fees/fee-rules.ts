@@ -45,6 +45,17 @@ export function normalizeReference(raw: string): string | null {
   return /^[A-Z0-9][A-Z0-9/_.-]{3,39}$/.test(v) ? v : null;
 }
 
+/**
+ * Review 5B-M1 L6: UPI / bank-transfer UTRs and card approval numbers compare as letters and digits only, so
+ * "UTR-123456" and "UTR123456" are the same reference. Cheques keep / - _ . (their numbers are short).
+ */
+export function normalizeReferenceFor(method: PaymentMethod, raw: string): string | null {
+  const base = normalizeReference(raw);
+  if (!base || method === "CHEQUE") return base;
+  const strict = base.replace(/[^A-Z0-9]/g, "");
+  return strict.length >= 4 ? strict : null;
+}
+
 /** Cheque bank names (review 5A M4): trimmed, single spaces, upper case — part of the cheque's uniqueness key. */
 export function normalizeBankName(raw: string): string | null {
   const v = raw.normalize("NFKC").trim().replace(/\s+/g, " ").toUpperCase();

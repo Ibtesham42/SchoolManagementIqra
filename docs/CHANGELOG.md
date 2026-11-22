@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added (Phase 5B — fee collection at the counter)
+- **Collect** (Fees → Collect): find a student (from any session, so earlier dues can be collected), see what is due today oldest first with today's late fees, and record a payment by cash, UPI, bank transfer, cheque or card. The payment goes to the oldest dues first (or the invoices you choose), the late fee is fixed on the invoice when paid, and a receipt number is given. Submitting the same form twice gives one receipt; the counter also lists the student's receipts of the last 24 hours. Payment dates can go back at most 7 days. Late fees can be waived (with a reason) by staff allowed to give concessions.
+
 ### Added (Phase 5A — invoices)
 - **Invoices** (Fees → Invoices): choose a class and an installment, check the preview (who is billed, how much, who is skipped and why), then issue the invoices in one step. They are numbered from the school's invoice format, include approved concessions and extra charges, and running it again only adds students who don't have the invoice yet. An unpaid invoice can be cancelled with a reason and issued again.
 - Approving or revoking a concession updates the student's unpaid invoices straight away.
