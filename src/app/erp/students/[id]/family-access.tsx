@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
 import { isPortalSlipCode, PORTAL_SLIP_MESSAGES } from "@/lib/http/portal-slip-errors";
 import type { getFamilyAccess, FamilyAccountStatus } from "@/modules/students/family-accounts.service";
@@ -6,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { TextField } from "@/components/erp/form";
-import { AccountActiveForm, PortalAccessToggle } from "./family-access-forms";
+import { AccountActiveForm, InviteByEmailForm, PortalAccessToggle } from "./family-access-forms";
 
 const RELATION: Record<string, string> = { FATHER: "Father", MOTHER: "Mother", GUARDIAN: "Guardian", OTHER: "Other" };
 const STATUS: Record<FamilyAccountStatus, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
@@ -22,14 +23,21 @@ const SLIP_ROUTE = "/api/v1/portal-accounts/slips";
  * Phase 6A-M3 — "Family access" on the student profile (`portal.account.manage` + `student.read` ALL). Slips are
  * plain form POSTs to the PDF route (the code exists only in the downloaded PDF).
  */
-export function FamilyAccess({ studentId, guardians, slips, timeZone }: { studentId: string; guardians: Awaited<ReturnType<typeof getFamilyAccess>>; slips?: string; timeZone: string }) {
+export function FamilyAccess({ studentId, guardians, slips, timeZone, canLink }: { studentId: string; guardians: Awaited<ReturnType<typeof getFamilyAccess>>; slips?: string; timeZone: string; canLink: boolean }) {
   return (
     <Card id="family">
       <CardHeader>
         <CardTitle>
           <h2>Family access (parent portal)</h2>
         </CardTitle>
-        <CardDescription>Issue a parent account with a printed activation slip, print a new slip, block a guardian from this student, or deactivate an account.</CardDescription>
+        <CardDescription>Issue a parent account with a printed activation slip (or an emailed invitation), print a new slip, block a guardian from this student, or deactivate an account.</CardDescription>
+        {canLink && (
+          <p className="text-sm">
+            <Link href={`/erp/students/${studentId}/guardians`} className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline">
+              Same parent recorded twice? Link or merge guardians
+            </Link>
+          </p>
+        )}
       </CardHeader>
       <CardContent className="grid gap-4">
         {isPortalSlipCode(slips) && (
@@ -89,6 +97,9 @@ export function FamilyAccess({ studentId, guardians, slips, timeZone }: { studen
                       </form>
                     </details>
                   )
+                )}
+                {g.email && g.portalAccess && !g.account?.everActivated && (status === "NONE" || status === "PENDING" || status === "EXPIRED") && (
+                  <InviteByEmailForm studentId={studentId} guardianId={g.guardianId} email={g.email} needsUsername={!g.account} suggestedUsername={g.suggestedUsername} />
                 )}
                 <div className="flex flex-col gap-3">
                   <PortalAccessToggle studentId={studentId} guardianId={g.guardianId} portalAccess={g.portalAccess} name={g.name} />

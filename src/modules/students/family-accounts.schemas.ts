@@ -15,6 +15,9 @@ const optionalUsername = z
 export const guardianSlipSchema = z.object({ studentId: id, guardianId: id, mode: z.enum(["create", "reset"]), username: optionalUsername.default(null) }).strict();
 export type GuardianSlipInput = z.infer<typeof guardianSlipSchema>;
 
+/** Phase 6A-M3b: an emailed invitation (create the account if needed, or a new code for one never activated). */
+export const guardianInvitationSchema = z.object({ studentId: id, guardianId: id, username: optionalUsername.default(null) }).strict();
+
 /** A section's slips: accounts for primary guardians without one; optionally new codes for accounts not activated yet. */
 export const sectionSlipsSchema = z.object({ sectionId: id, reissuePending: z.boolean().default(false) }).strict();
 export type SectionSlipsInput = z.infer<typeof sectionSlipsSchema>;

@@ -9,6 +9,7 @@ import { hasPermission, scopeFor } from "@/lib/rbac/authorize";
 import { STUDENT_STATUS_LABEL } from "@/modules/students/students.rules";
 import { canBrowseStudents, getStudent } from "@/modules/students/students.service";
 import { canManageFamilyAccess, getFamilyAccess } from "@/modules/students/family-accounts.service";
+import { canLinkGuardians } from "@/modules/students/guardian-links.service";
 import { getSchoolTimezone } from "@/modules/settings/settings.public";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -204,7 +205,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
         </CardContent>
       </Card>
 
-      {family && <FamilyAccess studentId={s.id} guardians={family} slips={typeof sp.slips === "string" ? sp.slips : undefined} timeZone={timeZone!} />}
+      {family && <FamilyAccess studentId={s.id} guardians={family} slips={typeof sp.slips === "string" ? sp.slips : undefined} timeZone={timeZone!} canLink={canLinkGuardians(ctx)} />}
 
       <Card id="history">
         <CardHeader>

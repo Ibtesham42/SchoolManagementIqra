@@ -1,5 +1,6 @@
 import { prisma, type Tx } from "@/lib/db";
 import { audit, type AuditActor } from "@/lib/audit";
+import { emailAvailable, maskEmail, sendEmail } from "@/lib/email";
 import { formatActivationCode } from "@/lib/auth/activation-code";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { todayInTimeZone } from "@/lib/format";
@@ -19,7 +20,7 @@ import {
   usernameTakenTx,
   type PortalAccountRow,
 } from "@/modules/identity/portal-accounts.tx";
-import { getPortalSettings, getSchoolTimezone } from "@/modules/settings/settings.public";
+import { getPortalSettings, getSchoolName, getSchoolTimezone } from "@/modules/settings/settings.public";
 import type { GuardianSlipInput, SectionSlipsInput } from "./family-accounts.schemas";
 
 /**
@@ -33,6 +34,8 @@ import type { GuardianSlipInput, SectionSlipsInput } from "./family-accounts.sch
  * - Username: the guardian's 10-digit mobile number when free; otherwise the office types one (single slip), and a
  *   section run lists that guardian as "needs a username" — never which account holds the number.
  */
+/** Review 6A-M3b M2: how long a contact change by someone else blocks email invitations. */
+export const RECENT_CONTACT_CHANGE_MS = 7 * 86_400_000;
 const actorOf = (ctx: AuthContext): AuditActor => ({ userId: ctx.userId, label: ctx.username, ipHash: ctx.ipHash, requestId: ctx.requestId });
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 /** Bulk issuance: one section per transaction (§2.6). */
@@ -75,7 +78,7 @@ export async function getFamilyAccess(ctx: AuthContext, studentId: string) {
         where: { guardian: { deletedAt: null } },
         orderBy: [{ isPrimary: "desc" }, { guardianId: "asc" }],
         take: 10,
-        select: { relation: true, isPrimary: true, portalAccess: true, guardian: { select: { id: true, name: true, phone: true } } },
+        select: { relation: true, isPrimary: true, portalAccess: true, guardian: { select: { id: true, name: true, phone: true, email: true } } },
       },
     },
   });
@@ -90,7 +93,9 @@ export async function getFamilyAccess(ctx: AuthContext, studentId: string) {
       isPrimary: g.isPrimary,
       portalAccess: g.portalAccess,
       suggestedUsername: suggestedUsername(g.guardian.phone),
-      account: a ? { username: a.username, status: familyAccountStatus(a), codeExpiresAt: a.pendingCodeExpiresAt, activatedAt: a.activatedAt } : null,
+      /** Review 6A-M3b M2: the full address — the office (student.read ALL) must see exactly where an invitation goes. */
+      email: g.guardian.email,
+      account: a ? { username: a.username, status: familyAccountStatus(a), codeExpiresAt: a.pendingCodeExpiresAt, activatedAt: a.activatedAt, everActivated: a.everActivated } : null,
     };
   });
 }
@@ -178,6 +183,97 @@ export async function issueGuardianSlip(ctx: AuthContext, input: GuardianSlipInp
     if (!existing) throw new NotFoundError("This guardian has no portal account yet.");
     return [await slipOf(tx, link.guardian, await issueActivationCodeTx(tx, actor, existing.id, { reset: true }), timeZone)];
   });
+}
+
+/**
+ * Phase 6A-M3b (P4): an emailed invitation instead of a printed slip, for a guardian with an email address on file.
+ * Creates the account if there is none (username as for slips); for an account never activated, a new code replaces
+ * the old one. An ACTIVATED account is never re-opened by email (a stale address must not become a takeover path):
+ * the office prints a new slip instead. Email availability (provider on, today's free-tier cap not used up) is
+ * checked BEFORE any code is issued, so a printed slip isn't voided for an email that can't go out. The link
+ * carries username and code in the URL FRAGMENT only (`/activate#u=…&code=…`). Sent after the commit; if sending
+ * still fails, the office is told to print a slip (the emailed code is then unknown to anyone).
+ */
+export async function sendFamilyInvitation(ctx: AuthContext, input: { studentId: string; guardianId: string; username: string | null }): Promise<{ sent: boolean; to: string }> {
+  assertManager(ctx);
+  // Review 6A-M3b L7: never a relative link in an email.
+  if (!/^https?:\/\//.test(process.env.APP_URL ?? "")) throw new ValidationError("Email invitations need the site address (APP_URL) to be configured. Print a slip instead.", [{ path: "email", message: "Email unavailable." }]);
+  if (!(await emailAvailable())) throw new ValidationError("Email can't be sent right now (switched off, or today's limit is used up). Print a slip instead, or try tomorrow.", [{ path: "email", message: "Email unavailable." }]);
+  const timeZone = await getSchoolTimezone();
+  const issued = await prisma.$transaction(async (tx) => {
+    await lockTimeout(tx);
+    await lockStudents(tx, [input.studentId]);
+    const link = await tx.studentGuardian.findUnique({
+      where: { studentId_guardianId: { studentId: input.studentId, guardianId: input.guardianId } },
+      select: { guardian: { select: { id: true, name: true, phone: true, email: true, deletedAt: true } } },
+    });
+    if (!link || link.guardian.deletedAt) throw new NotFoundError("Guardian not found.");
+    if (!link.guardian.email) throw new ValidationError("This guardian has no email address on file.", [{ path: "email", message: "No email." }]);
+    await lockGuardians(tx, [input.guardianId]);
+    // Review 6A-M3b M2: an address (or number) changed recently by SOMEONE ELSE — e.g. a class teacher editing the
+    // guardian — could point the invitation at the wrong mailbox. Check it with the parent and enter it yourself.
+    const recent = await tx.auditLog.findMany({
+      where: { action: "guardian.update", entityType: "Guardian", entityId: input.guardianId, at: { gte: new Date(Date.now() - RECENT_CONTACT_CHANGE_MS) } },
+      orderBy: [{ at: "desc" }, { id: "desc" }],
+      take: 20,
+      select: { actorId: true, after: true },
+    });
+    // The LATEST change of the email / mobile number counts: once the office saves the confirmed value itself, it may invite.
+    const touchesContact = (after: unknown) => {
+      const fields = (after as { fields?: unknown } | null)?.fields;
+      return Array.isArray(fields) && (fields.includes("email") || fields.includes("phone"));
+    };
+    const latest = recent.find((r) => touchesContact(r.after));
+    const changedByOther = !!latest && latest.actorId !== ctx.userId;
+    if (changedByOther) throw new ConflictError("This guardian's email or mobile number was changed by someone else in the last 7 days. Confirm it with the parent and save it yourself, or print a slip instead.");
+    if ((await childNamesTx(tx, input.guardianId)).length === 0) {
+      throw new ValidationError("This guardian can't see any studying child in the portal (blocked or none), so no invitation was sent.", [{ path: "guardianId", message: "No visible child." }]);
+    }
+    const actor = actorOf(ctx);
+    let userId: string;
+    const existing = await portalAccountOfTx(tx, { guardianId: input.guardianId });
+    if (existing) {
+      // Review 6A-M3b M1: "ever activated", not "currently activated" — an office reset (e.g. a compromised mailbox)
+      // must not be undone by an email to the address on file.
+      if (existing.activatedAt || existing.everActivated) throw new ConflictError("This account has been activated before. To reset it, print a new slip and hand it over in person.");
+      userId = existing.id;
+    } else {
+      const username = input.username ?? suggestedUsername(link.guardian.phone);
+      if (!username) throw new ValidationError("Enter a username for this account.", [{ path: "username", message: "Enter a username." }]);
+      if (await usernameTakenTx(tx, username)) throw new ValidationError("That username is already taken. Choose another one.", [{ path: "username", message: "Already taken." }]);
+      userId = (await createPortalAccountTx(tx, actor, { kind: "GUARDIAN", guardianId: input.guardianId, username, displayName: link.guardian.name })).userId;
+    }
+    const slip = await slipOf(tx, link.guardian, await issueActivationCodeTx(tx, actor, userId, { reset: false, channel: "EMAIL" }), timeZone);
+    return { slip, email: link.guardian.email };
+  });
+
+  const appUrl = (process.env.APP_URL ?? "").replace(/\/$/, "");
+  const schoolName = await getSchoolName();
+  const link = `${appUrl}/activate#u=${encodeURIComponent(issued.slip.username)}&code=${encodeURIComponent(issued.slip.code)}`;
+  try {
+    const result = await sendEmail({
+      to: issued.email,
+      kind: "portal_invitation",
+      subject: `${schoolName}: activate your parent portal account`,
+      text: [
+        `Dear ${issued.slip.guardianName},`,
+        "",
+        `${schoolName} has opened a parent portal account for you${issued.slip.children.length ? ` (${issued.slip.children.join(", ")})` : ""}.`,
+        "",
+        `Open this link to activate it before ${issued.slip.expiresOn}:`,
+        link,
+        "",
+        `Username: ${issued.slip.username}`,
+        `Activation code: ${issued.slip.code}`,
+        "",
+        "You will also need your child's date of birth. The code works once. If you did not expect this email, please tell the school office.",
+      ].join("\n"),
+    });
+    return { sent: result.delivered, to: maskEmail(issued.email) };
+  } catch (e) {
+    console.error("portal invitation email failed", e instanceof Error ? e.name : "unknown");
+    return { sent: false, to: maskEmail(issued.email) };
+  }
 }
 
 /**

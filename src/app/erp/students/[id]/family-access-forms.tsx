@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { ConfirmAction } from "@/components/erp/confirm-action";
 import { FormStatus, SubmitButton, TextField } from "@/components/erp/form";
 import { initialState } from "@/lib/action-state";
-import { setFamilyAccountActiveAction, setPortalAccessAction } from "./family-actions";
+import { sendInvitationAction, setFamilyAccountActiveAction, setPortalAccessAction } from "./family-actions";
 
 export function PortalAccessToggle({ studentId, guardianId, portalAccess, name }: { studentId: string; guardianId: string; portalAccess: boolean; name: string }) {
   return portalAccess ? (
@@ -40,6 +40,26 @@ export function AccountActiveForm({ studentId, guardianId, active }: { studentId
       <TextField id={`reason-${guardianId}`} label={active ? "Reason for deactivating" : "Reason for reactivating"} name="reason" maxLength={300} error={state.fieldErrors?.reason} required />
       <SubmitButton variant={active ? "destructive" : "outline"} className="w-full sm:w-auto">
         {active ? "Deactivate account" : "Reactivate account"}
+      </SubmitButton>
+    </form>
+  );
+}
+
+/** Phase 6A-M3b — email the activation link (guardian with an email address; account not activated yet). */
+export function InviteByEmailForm({ studentId, guardianId, email, needsUsername, suggestedUsername }: { studentId: string; guardianId: string; email: string; needsUsername: boolean; suggestedUsername: string | null }) {
+  const [state, action] = useActionState(sendInvitationAction, initialState);
+  return (
+    <form action={action} className="grid gap-2 sm:max-w-md">
+      <FormStatus state={state} />
+      <input type="hidden" name="studentId" value={studentId} />
+      <input type="hidden" name="guardianId" value={guardianId} />
+      {needsUsername ? (
+        <TextField id={`invite-username-${guardianId}`} label="Username" name="username" defaultValue={suggestedUsername ?? ""} autoCapitalize="none" spellCheck={false} error={state.fieldErrors?.username} />
+      ) : (
+        <input type="hidden" name="username" value="" />
+      )}
+      <SubmitButton variant="outline" className="w-full sm:w-auto">
+        Email an invitation to {email}
       </SubmitButton>
     </form>
   );

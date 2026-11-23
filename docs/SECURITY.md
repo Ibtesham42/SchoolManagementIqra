@@ -89,3 +89,7 @@ Student academic & admission records: permanent (school register). Fee/payroll f
 ## Reporting
 
 Security issues: report privately to the school's designated system administrator (contact configured in settings). Do not open public issues.
+
+## Accepted (Phase 6A-M3b, 2026-11-23)
+
+- The "Link or merge guardians" search (`/erp/students/[id]/guardians?phone=…`) is a GET form, so the searched guardian mobile number appears in the app's access logs and the office browser's history. Only School Admin / Super Admin can use it, the page never shows more than the last 4 digits back, and `Referrer-Policy` limits leakage. Revisit if access logs are shipped to a third party.

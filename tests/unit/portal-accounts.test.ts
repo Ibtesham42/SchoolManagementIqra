@@ -72,7 +72,7 @@ describe("activation codes", () => {
 });
 
 describe("account states and usernames", () => {
-  const base = { id: "u", username: "9876543210", isActive: true, activatedAt: null, pendingCodeExpiresAt: null };
+  const base = { id: "u", username: "9876543210", isActive: true, activatedAt: null, pendingCodeExpiresAt: null, everActivated: false };
   it("status truth table", () => {
     expect(familyAccountStatus(null)).toBe("NONE");
     expect(familyAccountStatus({ ...base, pendingCodeExpiresAt: new Date() })).toBe("PENDING");

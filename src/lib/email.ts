@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { consume } from "@/lib/usage";
+import { consume, dailyCap, usageToday } from "@/lib/usage";
 
 /**
  * Email delivery behind one function (ADR-021). Providers:
@@ -55,6 +55,22 @@ async function sendViaResend(msg: EmailMessage): Promise<EmailResult> {
   });
   if (!res.ok) throw new Error(`Email provider responded ${res.status}`);
   return { delivered: true, provider: "resend" };
+}
+
+/**
+ * Phase 6A-M3b: can an email actually go out right now? False when email is off, when the "log" preview runs in
+ * production (nothing is delivered), or when today's free-tier cap is used up. Callers that would otherwise throw
+ * away something valuable (an activation code that supersedes a printed slip) check this first.
+ */
+export async function emailAvailable(): Promise<boolean> {
+  const provider = process.env.EMAIL_PROVIDER ?? "log";
+  if (provider === "none") return false;
+  if (provider === "log") return process.env.NODE_ENV !== "production";
+  // Review 6A-M3b L4: an incomplete Resend configuration would throw only after the caller committed.
+  if (provider === "resend" && (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM)) return false;
+  if (provider !== "resend") return false;
+  const used = (await usageToday()).find((u) => u.metric === "email.sent")?.used ?? 0;
+  return used < dailyCap("email.sent");
 }
 
 export function maskEmail(email: string): string {

@@ -42,6 +42,11 @@ export interface PortalAccountRow {
   activatedAt: Date | null;
   /** Expiry of the newest usable code, if any. */
   pendingCodeExpiresAt: Date | null;
+  /**
+   * Review 6A-M3b M1: the account was activated at least once (a password was set by activation, which an office
+   * reset never clears). Such an account is never re-opened by email, even while a reset leaves it "slip issued".
+   */
+  everActivated: boolean;
 }
 
 /** The account linked to a guardian (or student), if any — no authorization here; the caller authorized. */
@@ -53,10 +58,11 @@ export async function portalAccountOfTx(tx: Tx, link: { guardianId: string } | {
       username: true,
       isActive: true,
       privacyConsentAt: true,
+      passwordChangedAt: true,
       activations: { where: { usedAt: null, expiresAt: { gt: new Date() } }, orderBy: { createdAt: "desc" }, take: 1, select: { expiresAt: true } },
     },
   });
-  return u ? { id: u.id, username: u.username, isActive: u.isActive, activatedAt: u.privacyConsentAt, pendingCodeExpiresAt: u.activations[0]?.expiresAt ?? null } : null;
+  return u ? { id: u.id, username: u.username, isActive: u.isActive, activatedAt: u.privacyConsentAt, pendingCodeExpiresAt: u.activations[0]?.expiresAt ?? null, everActivated: u.passwordChangedAt !== null } : null;
 }
 
 /** Accounts linked to many guardians at once (section lists); inside a transaction or with the global client (reads). */
@@ -71,10 +77,11 @@ export async function portalAccountsOfGuardiansTx(tx: Tx | typeof prisma, guardi
       username: true,
       isActive: true,
       privacyConsentAt: true,
+      passwordChangedAt: true,
       activations: { where: { usedAt: null, expiresAt: { gt: new Date() } }, orderBy: { createdAt: "desc" }, take: 1, select: { expiresAt: true } },
     },
   });
-  return new Map(rows.map((u) => [u.guardianId!, { id: u.id, username: u.username, isActive: u.isActive, activatedAt: u.privacyConsentAt, pendingCodeExpiresAt: u.activations[0]?.expiresAt ?? null }]));
+  return new Map(rows.map((u) => [u.guardianId!, { id: u.id, username: u.username, isActive: u.isActive, activatedAt: u.privacyConsentAt, pendingCodeExpiresAt: u.activations[0]?.expiresAt ?? null, everActivated: u.passwordChangedAt !== null }]));
 }
 
 /** Is this username free (any account, active or not)? Never says whose it is. */
