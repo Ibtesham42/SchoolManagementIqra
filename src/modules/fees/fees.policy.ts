@@ -4,8 +4,10 @@ import { hasPermission, scopeFor, type AuthContext } from "@/lib/rbac/authorize"
 /**
  * Phase 5 fee access rules (PHASE_5_PLAN.md §4, FC17). Pure — unit tested.
  * - Fee data is read at `fee.read` ALL (or by holders of a fee write permission for the part they write).
- * - CHILDREN (Parent) and SELF (Student) are REFUSED until Phase 6 adds the guardian / student link — never guessed
- *   (same principle as students.policy). ASSIGNED isn't granted to anyone for fees and is refused as well.
+ * - CHILDREN (Parent) and SELF (Student) are REFUSED on every staff path here — always. Phase 6B-M3: the parent portal
+ *   reads fees ONLY through `fees.portal.ts` (explicit portal branch: `assertPortalStudent(…, "fees")`, a whitelist, and
+ *   never for students — P16), so a staff function can never be widened to a portal scope. ASSIGNED isn't granted to
+ *   anyone for fees and is refused as well.
  */
 export function canReadFees(ctx: AuthContext): boolean {
   return hasPermission(ctx, "fee.read") && scopeFor(ctx, "fee.read") === "ALL";

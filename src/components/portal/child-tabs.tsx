@@ -12,6 +12,7 @@ const TABS = [
   ["calendar", "Calendar"],
   ["homework", "Homework"],
   ["results", "Report cards"],
+  ["fees", "Fees"],
 ] as const;
 
 export function ChildTabs({ studentId, tabs }: { studentId: string; tabs: readonly string[] }) {

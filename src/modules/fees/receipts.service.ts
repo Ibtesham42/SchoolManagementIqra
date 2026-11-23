@@ -111,7 +111,8 @@ interface SnapshotLine {
   amount: string;
 }
 const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
-function readSnapshot(raw: unknown) {
+/** Whitelisted reader of a receipt snapshot (pure; also used by the portal parent copy, Phase 6B-M3). */
+export function readSnapshot(raw: unknown) {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const st = o.student && typeof o.student === "object" ? (o.student as Record<string, unknown>) : {};
   const lines: SnapshotLine[] = Array.isArray(o.lines)

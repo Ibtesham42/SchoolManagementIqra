@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { requirePortal } from "@/lib/auth/context";
-import { listPortalChildren } from "@/modules/students/students.portal";
+import { listPortalChildren, portalWindow } from "@/modules/students/students.portal";
+import { portalOverdueChildren } from "@/modules/fees/fees.portal";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/erp/page-header";
 
@@ -10,11 +12,19 @@ export const metadata = { title: "Portal" };
 /** Phase 6A-M2 — portal home: the children this account can see (a student account: its own record). */
 export default async function PortalHomePage() {
   const ctx = await requirePortal();
-  const kids = await listPortalChildren(ctx);
+  const window = await portalWindow(); // one settings read for the whole page (review 6B-M3 info)
+  const kids = await listPortalChildren(ctx, window);
   const isStudent = ctx.portal.kind === "STUDENT";
+  // FC22 in-app (P23): a live "dues overdue" banner — no reminder emails or jobs.
+  const overdue = isStudent ? 0 : await portalOverdueChildren(ctx, window);
   return (
     <div className="grid gap-4">
       <PageHeader title={`Welcome, ${ctx.displayName}`} description={isStudent ? "Your school record." : "Your children at this school."} />
+      {overdue > 0 && (
+        <Alert variant="destructive" role="status">
+          <AlertDescription>Fees are overdue for {overdue === 1 ? "one of your children" : `${overdue} of your children`}. Open the child&apos;s Fees tab to see what is due.</AlertDescription>
+        </Alert>
+      )}
       {kids.length === 0 ? (
         <Card>
           <CardHeader>

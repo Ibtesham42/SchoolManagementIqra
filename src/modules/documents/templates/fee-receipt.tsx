@@ -31,7 +31,8 @@ export interface FeeReceiptData {
 }
 
 /** ORIGINAL / DUPLICATE: counted prints by fee collectors; COPY: a non-counting view for other receipt readers. */
-export type ReceiptCopy = "ORIGINAL" | "DUPLICATE" | "COPY";
+/** PARENT (Phase 6B-M3): the portal download — never counted as a print. */
+export type ReceiptCopy = "ORIGINAL" | "DUPLICATE" | "COPY" | "PARENT";
 
 const stamp = { fontFamily: "Helvetica-Bold", fontSize: 12, textAlign: "center" as const, borderWidth: 1.5, borderColor: COLORS.text, paddingVertical: 4, marginBottom: 10, letterSpacing: 2 };
 
@@ -43,6 +44,7 @@ export function FeeReceiptDocument({ branding, receipt, copy, cancelled, generat
         {cancelled && <Text style={stamp}>CANCELLED — NOT VALID</Text>}
         {copy === "DUPLICATE" && <Text style={stamp}>DUPLICATE</Text>}
         {copy === "COPY" && <Text style={stamp}>OFFICE COPY — NOT FOR ISSUE</Text>}
+        {copy === "PARENT" && <Text style={stamp}>PARENT COPY</Text>}
         <KeyValueRows
           rows={[
             ["Receipt no.", receipt.receiptNo],

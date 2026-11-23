@@ -33,6 +33,7 @@ const load = async () => ({
   ...(await import("@/modules/academic/calendar.portal")),
   ...(await import("@/modules/academic/results.portal")),
   ...(await import("@/modules/academic/homework.portal")),
+  ...(await import("@/modules/fees/fees.portal")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
 
@@ -183,6 +184,20 @@ describe.skipIf(!enabled)("portal IDOR suite v1 (integration)", () => {
     await expect(m.renderPortalReportCardPdf(actors.parentA, "c0000000000000000000000000", window)).rejects.toThrow("Not found.");
     await expect(m.readPortalHomeworkAttachment(actors.parentA, "c0000000000000000000000000", window)).rejects.toThrow("Not found.");
     await expect(m.renderPortalReportCardPdf(actors.teacher, "c0000000000000000000000000", window)).rejects.toBeInstanceOf(m.AppError);
+  });
+
+  it("6B-M3 fees: parents' own children and a leaver in the window; a student account never (Forbidden for every id, P16)", async () => {
+    const allowed: Record<string, string[]> = { ...ALLOWED, parentL: ["L1"] };
+    const outcomes: string[] = [];
+    for (const [actor, ids] of Object.entries(allowed)) {
+      for (const k of IDS) {
+        const r = await m.getPortalFeeLedger(actors[actor], idOf(k), window).then(() => "ok", (e: Error) => `${e.constructor.name}:${e.message}`);
+        const expected = ids.includes(k) ? "ok" : actor === "studentA1" ? "ForbiddenError:You don't have permission to do that." : "NotFoundError:Not found.";
+        if (r !== expected && !(actor === "studentA1" && r.startsWith("ForbiddenError"))) outcomes.push(`fees · ${actor} × ${k}: got ${r}, expected ${expected}`);
+      }
+    }
+    expect(outcomes).toEqual([]);
+    await expect(m.renderPortalReceiptPdf(actors.parentA, "c0000000000000000000000000", window)).rejects.toThrow("Not found.");
   });
 
   it("unauthenticated: portal reads refuse before any lookup", async () => {

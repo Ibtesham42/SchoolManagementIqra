@@ -143,7 +143,7 @@ const ROWS: Row[] = [
 ];
 
 /** Phase 6B-M2: family download routes. A family's own-child request needs the record's owner (database); staff are refused first. */
-const PORTAL_ROUTES = ["portal/report-cards/[id]/pdf", "portal/homework/[id]/attachment"];
+const PORTAL_ROUTES = ["portal/report-cards/[id]/pdf", "portal/homework/[id]/attachment", "portal/receipts/[id]/pdf"];
 
 async function call(row: Row, studentId: string) {
   const mod = (await import(`@/app/api/v1/${row.route}/route`)) as Record<string, Handler>;

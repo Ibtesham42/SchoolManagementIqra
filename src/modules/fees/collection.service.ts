@@ -10,8 +10,8 @@ import { getSchoolName } from "@/modules/settings/settings.public";
 import { readFeeSettingsTx } from "@/modules/settings/settings.service";
 import { latestEnrollment, searchStudentsAnySession } from "@/modules/students/enrollment-reads.tx";
 import { AllocationError, allocatePayment, type OpenInvoice } from "./allocation";
-import { lateFeeFor, type LateFeeRule } from "./fee-calc";
-import { lateFeeFrozen, normalizeBankName, normalizeReferenceFor } from "./fee-rules";
+import { normalizeBankName, normalizeReferenceFor } from "./fee-rules";
+import { openInvoicesOf } from "./ledger-reads.tx";
 import { authorizeFeeWrite, holdsAll } from "./fees.policy";
 import { lockFeeStudent } from "./fees.tx";
 import type { CollectInput } from "./collection.schemas";
@@ -51,48 +51,6 @@ export async function searchForCollection(ctx: AuthContext, q: string) {
 }
 
 type Db = Tx | typeof prisma;
-
-/** Open invoices of a student (all sessions) with outstanding items and the live late fee as of `asOf`. */
-async function openInvoicesOf(db: Db, studentId: string, asOf: string, onlyIds?: string[]) {
-  const invoices = await db.feeInvoice.findMany({
-    where: { studentId, deletedAt: null, status: { in: ["ISSUED", "PARTIAL"] }, ...(onlyIds ? { id: { in: onlyIds } } : {}) },
-    orderBy: [{ dueOn: "asc" }, { invoiceNo: "asc" }, { id: "asc" }],
-    take: 100,
-    select: {
-      id: true,
-      invoiceNo: true,
-      academicSessionId: true,
-      dueOn: true,
-      total: true,
-      paidAmount: true,
-      enrollment: { select: { academicSession: { select: { name: true } } } },
-      installment: { select: { name: true } },
-      items: { orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { id: true, kind: true, description: true, amount: true, concessionAmount: true, paidAmount: true, sortOrder: true, _count: { select: { allocations: true } } } },
-    },
-  });
-  const rules = new Map<string, LateFeeRule | null>();
-  for (const sid of new Set(invoices.map((i) => i.academicSessionId))) {
-    const r = await db.lateFeeRule.findFirst({ where: { academicSessionId: sid, isActive: true }, select: { graceDays: true, calc: true, value: true, cap: true } });
-    rules.set(sid, r ? { graceDays: r.graceDays, calc: r.calc, value: moneyString(r.value.toString()), cap: r.cap === null ? null : moneyString(r.cap.toString()) } : null);
-  }
-  return invoices.map((i) => {
-    // A frozen late fee (amount > 0) or a waiver (zero, never allocated) stops the live late fee. A zero line WITH
-    // allocation history was voided by a receipt cancellation (review 5B-M3 M1) and doesn't count.
-    const hasLate = lateFeeFrozen(i.items.map((it) => ({ kind: it.kind, amount: it.amount.toString(), allocationCount: it._count.allocations })));
-    const balance = i.total.minus(i.paidAmount);
-    const liveLate = hasLate ? "0.00" : lateFeeFor(rules.get(i.academicSessionId) ?? null, iso(i.dueOn), asOf, moneyString(balance.toString()));
-    return {
-      id: i.id,
-      invoiceNo: i.invoiceNo,
-      sessionName: i.enrollment.academicSession.name,
-      installmentName: i.installment?.name ?? "Previous dues",
-      dueOn: iso(i.dueOn),
-      balance: moneyString(balance.toString()),
-      lateFee: liveLate,
-      items: i.items.map((it) => ({ id: it.id, kind: it.kind, description: it.description, sortOrder: it.sortOrder, outstanding: moneyString(it.amount.minus(it.concessionAmount).minus(it.paidAmount).toString()) })),
-    };
-  });
-}
 
 /** The counter screen: student, open invoices (oldest first) with live late fees, total due today, today's receipts. */
 export async function getCounterView(ctx: AuthContext, studentId: string) {
