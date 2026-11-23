@@ -4,7 +4,7 @@ import { todayInTimeZone } from "@/lib/format";
 import { NotFoundError } from "@/lib/errors";
 import { authorize, type AuthContext } from "@/lib/rbac/authorize";
 import { PORTAL_NOT_FOUND, assertPortalStudent, portalScopeOf, portalVisibleChildren } from "@/lib/rbac/portal-access";
-import { portalCanSee, type PortalWindow } from "@/lib/rbac/portal-scope";
+import { portalCanSee, type PortalCapability, type PortalWindow } from "@/lib/rbac/portal-scope";
 import { getPortalSettings, getSchoolTimezone } from "@/modules/settings/settings.public";
 
 /**
@@ -68,6 +68,16 @@ export async function listPortalChildren(ctx: AuthContext, window?: PortalWindow
       current: !!ctx.portal && portalCanSee(ctx.portal, scopeOf, r.id, "profile", w),
     };
   });
+}
+
+/**
+ * Review 6B-M1 L6: the child pages this account may open (tabs). No data read — the same in-memory check the pages'
+ * services run; an id that isn't this account's child gives an empty list (the page itself answers 404).
+ */
+export function portalChildTabs(ctx: AuthContext, studentId: string, window: PortalWindow): PortalCapability[] {
+  if (!ctx.portal) return [];
+  const scopeOf = portalScopeOf(ctx);
+  return (["profile", "attendance", "timetable", "calendar"] as const).filter((c) => portalCanSee(ctx.portal!, scopeOf, studentId, c, window));
 }
 
 const RELATION_LABEL: Record<string, string> = { FATHER: "Father", MOTHER: "Mother", GUARDIAN: "Guardian", OTHER: "Other" };

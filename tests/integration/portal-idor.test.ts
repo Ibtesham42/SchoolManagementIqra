@@ -28,6 +28,9 @@ const load = async () => ({
   ...(await import("@/modules/academic/results.service")),
   ...(await import("@/modules/academic/homework.service")),
   ...(await import("@/modules/fees/receipts.service")),
+  ...(await import("@/modules/students/student-attendance.portal")),
+  ...(await import("@/modules/academic/timetable.portal")),
+  ...(await import("@/modules/academic/calendar.portal")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
 
@@ -126,16 +129,26 @@ describe.skipIf(!enabled)("portal IDOR suite v1 (integration)", () => {
   const IDS = ["A1", "A2", "B1", "L1", "LO", "DEL", "MISSING", "OTHER_TYPE"] as const;
   const idOf = (k: (typeof IDS)[number]) => (k === "MISSING" ? "c0000000000000000000000000" : k === "OTHER_TYPE" ? otherTypeId : kids[k]);
 
-  it("profile: allowed exactly for own children; everything else the identical NotFound", async () => {
+  // Phase 6B-M1: attendance, timetable and calendar follow the same table (leavers see none of them, P17).
+  const RESOURCES: Record<string, (ctx: Ctx, id: string) => Promise<unknown>> = {
+    profile: (ctx, id) => m.getPortalStudentProfile(ctx, id, window),
+    attendance: (ctx, id) => m.getPortalAttendanceMonth(ctx, { studentId: id }, window),
+    timetable: (ctx, id) => m.getPortalTimetable(ctx, id, window),
+    calendar: (ctx, id) => m.getPortalCalendarMonth(ctx, { studentId: id }, window),
+  };
+
+  it("profile, attendance, timetable, calendar: allowed exactly for own children; everything else the identical NotFound", async () => {
     const outcomes: string[] = [];
-    for (const [actor, allowed] of Object.entries(ALLOWED)) {
-      for (const k of IDS) {
-        const r = await m.getPortalStudentProfile(actors[actor], idOf(k), window).then(
-          (p) => `ok:${p.id === idOf(k)}`,
-          (e: Error) => `${e.constructor.name}:${e.message}`,
-        );
-        const expected = allowed.includes(k) ? "ok:true" : "NotFoundError:Not found.";
-        if (r !== expected) outcomes.push(`${actor} × ${k}: got ${r}, expected ${expected}`);
+    for (const [resource, read] of Object.entries(RESOURCES)) {
+      for (const [actor, allowed] of Object.entries(ALLOWED)) {
+        for (const k of IDS) {
+          const r = await read(actors[actor], idOf(k)).then(
+            () => "ok",
+            (e: Error) => `${e.constructor.name}:${e.message}`,
+          );
+          const expected = allowed.includes(k) ? "ok" : "NotFoundError:Not found.";
+          if (r !== expected) outcomes.push(`${resource} · ${actor} × ${k}: got ${r}, expected ${expected}`);
+        }
       }
     }
     expect(outcomes).toEqual([]);

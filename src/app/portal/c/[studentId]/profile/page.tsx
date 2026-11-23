@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requirePortal } from "@/lib/auth/context";
-import { NotFoundError } from "@/lib/errors";
+import { ForbiddenError, NotFoundError } from "@/lib/errors";
 import { formatDateOnly } from "@/lib/format";
 import { getPortalStudentProfile } from "@/modules/students/students.portal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +16,7 @@ export default async function PortalProfilePage({ params }: { params: Promise<{ 
   const ctx = await requirePortal();
   const { studentId } = await params;
   const p = await getPortalStudentProfile(ctx, studentId).catch((e: unknown) => {
-    if (e instanceof NotFoundError) notFound();
+    if (e instanceof NotFoundError || e instanceof ForbiddenError) notFound(); // review 6B-M1 L6: an edited role, too
     throw e;
   });
   const rows: [string, string | null][] = [

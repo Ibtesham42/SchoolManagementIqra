@@ -5,13 +5,14 @@ import { ConflictError, ForbiddenError, NotFoundError, ServiceBusyError, Validat
 import { authorize, hasPermission, scopeFor, type AuthContext } from "@/lib/rbac/authorize";
 import { assertSessionWritable } from "./academic.rules";
 import { lockSessionShared } from "./academic.tx";
-import { STUDENT_HOLIDAY_SCOPES } from "./student-attendance.rules";
+import { calendarEntries } from "./calendar-reads.tx";
 import type { CalendarMonthInput, CreateEventInput, EventRefInput, UpdateEventInput } from "./calendar.schemas";
 
 /**
  * Phase 4C-M3 — academic calendar (PHASE_4_PLAN.md AC18): student holidays (ALL / STUDENTS), exam periods and subject
  * exam dates (exams past DRAFT), and the school's own academic events. Kept separate from public CMS events.
- * - Read: `academic.read` or `timetable.read` at a staff scope (ALL / ASSIGNED). Parents / students: with the portal (AC20).
+ * - Read: `academic.read` or `timetable.read` at a staff scope (ALL / ASSIGNED). Parents / students: `calendar.portal.ts`
+ *   (Phase 6B-M1), through the same `calendarEntries`.
  * - Events: `academic.manage`; dates inside the session; never in a CLOSED session. Events are school dates, not people
  *   or financial records, so removal is a hard delete (audited).
  * Lock order: academic_session FOR SHARE → academic_event FOR UPDATE.
@@ -33,52 +34,13 @@ export function calendarAccess(ctx: AuthContext) {
   return { read: staffScope(ctx, "academic.read") || staffScope(ctx, "timetable.read"), manage: hasPermission(ctx, "academic.manage") };
 }
 
-export type CalendarEntry =
-  | { kind: "holiday"; date: string; endDate: string; title: string }
-  | { kind: "exam"; date: string; endDate: string; title: string; examId: string }
-  | { kind: "exam_subject"; date: string; endDate: string; title: string; examId: string }
-  | { kind: "event"; date: string; endDate: string; title: string; details: string | null; id: string; version: number };
-
+export type { CalendarEntry } from "./calendar-reads.tx";
 /** One month of the calendar for a session (entries overlapping the month), sorted by date. */
 export async function getCalendarMonth(ctx: AuthContext, input: CalendarMonthInput) {
   if (!calendarAccess(ctx).read) throw new ForbiddenError();
   const session = await prisma.academicSession.findUnique({ where: { id: input.academicSessionId }, select: { id: true, name: true, status: true, startDate: true, endDate: true } });
   if (!session) throw new NotFoundError("Academic session not found.");
-  const [y, m] = input.month.split("-").map(Number);
-  const from = day(`${input.month}-01`);
-  const to = new Date(Date.UTC(y, m, 0)); // last day of the month
-  const [holidays, exams, examSubjects, events] = await Promise.all([
-    prisma.holiday.findMany({ where: { date: { gte: from, lte: to }, appliesTo: { in: [...STUDENT_HOLIDAY_SCOPES] } }, orderBy: { date: "asc" }, take: 62, select: { date: true, name: true } }),
-    prisma.examination.findMany({
-      where: { academicSessionId: session.id, status: { not: "DRAFT" }, startDate: { not: null, lte: to }, OR: [{ endDate: { gte: from } }, { endDate: null, startDate: { gte: from } }] },
-      take: 50,
-      select: { id: true, name: true, startDate: true, endDate: true },
-    }),
-    prisma.examSubject.findMany({
-      where: { academicSessionId: session.id, examDate: { gte: from, lte: to }, examination: { status: { not: "DRAFT" } } },
-      take: 300,
-      select: { examDate: true, examination: { select: { id: true, name: true } }, classSubject: { select: { class: { select: { name: true } }, subject: { select: { name: true } } } } },
-    }),
-    prisma.academicEvent.findMany({
-      where: { academicSessionId: session.id, startDate: { lte: to }, endDate: { gte: from } },
-      orderBy: { startDate: "asc" },
-      take: 100,
-      select: { id: true, version: true, title: true, details: true, startDate: true, endDate: true },
-    }),
-  ]);
-  const entries: CalendarEntry[] = [
-    ...holidays.map((h) => ({ kind: "holiday" as const, date: iso(h.date), endDate: iso(h.date), title: h.name })),
-    ...exams.map((e) => ({ kind: "exam" as const, date: iso(e.startDate!), endDate: iso(e.endDate ?? e.startDate!), title: e.name, examId: e.id })),
-    ...examSubjects.map((s) => ({
-      kind: "exam_subject" as const,
-      date: iso(s.examDate!),
-      endDate: iso(s.examDate!),
-      title: `${s.examination.name}: ${s.classSubject.class.name} ${s.classSubject.subject.name}`,
-      examId: s.examination.id,
-    })),
-    ...events.map((e) => ({ kind: "event" as const, date: iso(e.startDate), endDate: iso(e.endDate), title: e.title, details: e.details, id: e.id, version: e.version })),
-  ];
-  entries.sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind) || a.title.localeCompare(b.title));
+  const entries = await calendarEntries(session.id, input.month);
   return { session: { id: session.id, name: session.name, status: session.status, startDate: iso(session.startDate), endDate: iso(session.endDate) }, month: input.month, entries };
 }
 

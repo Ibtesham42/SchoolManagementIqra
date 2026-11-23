@@ -128,3 +128,43 @@ export async function studentLabels(db: Db, studentIds: readonly string[]): Prom
   }
   return out;
 }
+
+/**
+ * Phase 6B-M1 — the enrollment a portal page is about: the student's ACTIVE enrollment in the latest session, else the
+ * latest one of any status (e.g. between a session's close and the promotion). With the session dates and the
+ * section, for attendance / timetable / calendar reads. No authorization here: callers ran `assertPortalStudent`.
+ */
+export async function currentEnrollment(db: Db, studentId: string) {
+  const select = {
+    id: true,
+    status: true,
+    enrolledOn: true,
+    leftOn: true,
+    sectionId: true,
+    academicSessionId: true,
+    academicSession: { select: { name: true, status: true, startDate: true, endDate: true } },
+    section: { select: { code: true, classId: true, class: { select: { name: true } } } },
+  } as const;
+  const where = { studentId, student: { deletedAt: null } };
+  const r =
+    (await db.studentEnrollment.findFirst({ where: { ...where, status: "ACTIVE" }, orderBy: { academicSession: { startDate: "desc" } }, select })) ??
+    (await db.studentEnrollment.findFirst({ where, orderBy: { academicSession: { startDate: "desc" } }, select }));
+  if (!r) return null;
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return {
+    enrollmentId: r.id,
+    status: r.status as "ACTIVE" | "PROMOTED" | "DETAINED" | "LEFT",
+    enrolledOn: iso(r.enrolledOn),
+    leftOn: r.leftOn ? iso(r.leftOn) : null,
+    sectionId: r.sectionId,
+    classId: r.section.classId,
+    className: r.section.class.name,
+    sectionCode: r.section.code,
+    academicSessionId: r.academicSessionId,
+    sessionName: r.academicSession.name,
+    sessionStatus: r.academicSession.status as "PLANNED" | "ACTIVE" | "CLOSED",
+    sessionStart: iso(r.academicSession.startDate),
+    sessionEnd: iso(r.academicSession.endDate),
+  };
+}
+export type CurrentEnrollment = NonNullable<Awaited<ReturnType<typeof currentEnrollment>>>;

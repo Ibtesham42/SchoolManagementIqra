@@ -11,6 +11,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - **Email invitations**: for a guardian with an email address, the office can email the activation link instead of printing a slip (within the free daily email limit; already activated accounts still need a printed slip).
 - **Link or merge guardians** (from "Family access"): when a parent was recorded again at a brother's or sister's admission, the office finds the records by mobile number and links the existing one to the student, or merges the two, so one parent account sees all their children. A block on one child is kept when records are merged.
 
+### Added (Phase 6B — family views)
+- **Attendance, timetable and school calendar in the parent portal**: for each child, a month calendar of attendance (present, absent, late, half day, holidays and weekly offs) with this month's and this session's percentage; the class timetable for the week with subjects and teachers; and the school calendar with holidays, exams for the child's own class and school events. **Note for the school:** the details of school calendar events are now visible to parents and students — check existing events before turning the portal on.
+
 ### Changed (Phase 6A)
 - Parent and student accounts can no longer be edited from Users (only from the student's Family access), and "forgot password" never applies to them; the office prints a new slip instead.
 - "Keep me signed in" lasts 30 days only for parent and student accounts; staff are always signed out after 8 hours without use.
