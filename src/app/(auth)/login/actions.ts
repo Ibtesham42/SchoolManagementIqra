@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { loginSchema, login } from "@/modules/identity/auth.service";
 import { changeOwnPassword, changePasswordSchema } from "@/modules/identity/password.service";
-import { clearSessionCookie, clientIpHash, requireAuth, setSessionCookie } from "@/lib/auth/context";
+import { clearSessionCookie, clientIpHash, homePath, requireAuth, setSessionCookie } from "@/lib/auth/context";
 import { revokeSession, sessionCookieName } from "@/lib/auth/session";
 import { formString, fromError, type ActionState } from "@/lib/action-state";
 
@@ -17,22 +17,23 @@ export async function loginAction(_prev: ActionState, formData: FormData): Promi
   });
   if (!parsed.success) return { error: "Enter your username and password." };
 
-  let mustChange = false;
+  let home = "/erp";
   try {
     const result = await login(parsed.data, {
       ipHash: await clientIpHash(),
       userAgent: (await headers()).get("user-agent") ?? undefined,
     });
     await setSessionCookie(result.token, result.expiresAt);
-    mustChange = result.mustChangePassword;
+    home = result.home; // by account kind (ADR-045): /portal for parents and students, /erp for staff
   } catch (e) {
     return fromError(e);
   }
-  redirect(mustChange ? "/erp/change-password" : "/erp");
+  redirect(home);
 }
 
 export async function changePasswordAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const ctx = await requireAuth({ allowPendingPasswordChange: true });
+  // Shared by the ERP and the portal change-password pages (6A-M2).
+  const ctx = await requireAuth({ allowPendingPasswordChange: true, allowPortal: true });
   const parsed = changePasswordSchema.safeParse({
     currentPassword: formString(formData, "currentPassword"),
     newPassword: formString(formData, "newPassword"),
@@ -47,8 +48,9 @@ export async function changePasswordAction(_prev: ActionState, formData: FormDat
   // B5 (KI-052): the ERP layout was rendered while the change was pending (permission-based navigation
   // hidden). A redirect alone keeps that layout, so the user saw only Dashboard / My account until a
   // full reload. Re-render the ERP layout so the menu reflects the user's real permissions.
-  revalidatePath("/erp", "layout");
-  redirect("/erp");
+  const home = homePath({ ...ctx, mustChangePassword: false });
+  revalidatePath(home, "layout");
+  redirect(home);
 }
 
 export async function logoutAction() {

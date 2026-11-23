@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { sessionCookieName, validateSessionToken } from "@/lib/auth/session";
 import { hashIdentifier } from "@/lib/crypto";
 import { pickClientIp } from "@/lib/auth/client-ip";
-import type { AuthContext } from "@/lib/rbac/authorize";
+import type { AuthContext, PortalContext } from "@/lib/rbac/authorize";
+import { homePathFor, type AccountKind } from "@/lib/rbac/account-kind";
 
 /** Per-request cached session lookup for Server Components, actions and route handlers. */
 export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
@@ -16,17 +17,40 @@ export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
   return { ...ctx, ipHash: await clientIpHash() };
 });
 
+export const accountKind = (ctx: AuthContext): AccountKind => ctx.portal?.kind ?? "STAFF";
+
+/** Where this account belongs (its shell's home, or its change-password page while a change is pending). */
+export const homePath = (ctx: AuthContext) => homePathFor(accountKind(ctx), !!ctx.mustChangePassword);
+
 /**
  * Every ERP page and action calls this (layouts alone are not enough: Next.js does not
  * re-run layouts on client-side navigation, and actions bypass layouts entirely).
  * Users with a pending forced password change are sent to the change-password page
  * unless the caller explicitly opts in (only that page and its action do).
+ * Phase 6A-M2 (ADR-045): portal accounts never use the ERP — they are sent to /portal. Only callers shared by both
+ * shells (the change-password action) pass `allowPortal`.
  */
-export async function requireAuth(opts: { allowPendingPasswordChange?: boolean } = {}): Promise<AuthContext> {
+export async function requireAuth(opts: { allowPendingPasswordChange?: boolean; allowPortal?: boolean } = {}): Promise<AuthContext> {
   const ctx = await getAuthContext();
   if (!ctx) redirect("/login");
-  if (ctx.mustChangePassword && !opts.allowPendingPasswordChange) redirect("/erp/change-password");
+  if (ctx.portal && !opts.allowPortal) redirect(homePath(ctx));
+  if (ctx.mustChangePassword && !opts.allowPendingPasswordChange) redirect(homePath(ctx));
   return ctx;
+}
+
+/** A portal-only account's context (narrowed: `portal` is set). */
+export type PortalAuthContext = AuthContext & { portal: PortalContext };
+
+/**
+ * Every /portal page and portal action calls this (same reasons as requireAuth). Staff accounts go to /erp; a
+ * pending password change goes to /portal/change-password unless the caller opts in.
+ */
+export async function requirePortal(opts: { allowPendingPasswordChange?: boolean } = {}): Promise<PortalAuthContext> {
+  const ctx = await getAuthContext();
+  if (!ctx) redirect("/login");
+  if (!ctx.portal) redirect(homePath(ctx));
+  if (ctx.mustChangePassword && !opts.allowPendingPasswordChange) redirect(homePath(ctx));
+  return ctx as PortalAuthContext;
 }
 
 export async function clientIpHash(): Promise<string> {

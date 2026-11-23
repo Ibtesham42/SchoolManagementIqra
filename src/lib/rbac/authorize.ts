@@ -1,5 +1,6 @@
 import { ForbiddenError, UnauthenticatedError } from "@/lib/errors";
 import type { PermissionKey, Scope } from "@/lib/rbac/catalog";
+import type { PortalFamily } from "@/lib/rbac/portal-scope";
 
 /** Widest first: a user holding ALL never needs a narrower check. */
 const SCOPE_RANK: Record<Scope, number> = { ALL: 3, ASSIGNED: 2, CHILDREN: 1, SELF: 0 };
@@ -18,9 +19,21 @@ export interface AuthContext {
    * SELF scope on staff permissions means exactly this record; absent = no SELF access (fail closed).
    */
   employeeId?: string | null;
+  /**
+   * Phase 6A-M2 (ADR-044 / ADR-045): set only for a portal-only account (exactly PARENT or STUDENT), resolved once
+   * per request from StudentGuardian (guardian) or the account's own student link. Absent / null = staff account.
+   * Nothing is cached across requests, so an unlink, a block (portalAccess = false) or a soft delete applies at
+   * the next request.
+   */
+  portal?: PortalContext | null;
   mustChangePassword?: boolean;
   ipHash?: string;
   requestId?: string;
+}
+
+export interface PortalContext extends PortalFamily {
+  guardianId: string | null;
+  studentId: string | null;
 }
 
 export interface GrantRow {

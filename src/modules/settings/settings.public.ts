@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { DEFAULT_SCHOOL_TIMEZONE } from "@/lib/format";
+import { readPortalSettings, type PortalSettings } from "./settings.schemas";
 
 /**
  * Public, non-sensitive school identity for page chrome, PDFs and date formatting.
@@ -43,23 +44,35 @@ export const FALLBACK_PROFILE: PublicSchoolProfile = {
 
 const TTL_MS = 5 * 60_000;
 const FAILURE_TTL_MS = 30_000;
-let cached: { value: PublicSchoolProfile; until: number } | null = null;
+/** `portal`: the parsed features.portal block (Phase 6A-M2) — kept out of PublicSchoolProfile, read via getPortalSettings. */
+let cached: { value: PublicSchoolProfile; portal: PortalSettings; until: number } | null = null;
 
 export async function getSchoolProfilePublic(now = Date.now()): Promise<PublicSchoolProfile> {
   if (cached && cached.until > now) return cached.value;
   try {
     const s = await prisma.schoolSetting.findUnique({
       where: { id: "default" },
-      select: { name: true, shortCode: true, affiliationNo: true, board: true, address: true, phones: true, email: true, website: true, logoFileId: true, timezone: true },
+      select: { name: true, shortCode: true, affiliationNo: true, board: true, address: true, phones: true, email: true, website: true, logoFileId: true, timezone: true, features: true },
     });
-    const value: PublicSchoolProfile = s
-      ? { ...s, address: (s.address as PublicSchoolProfile["address"]) ?? null, timezone: s.timezone || DEFAULT_SCHOOL_TIMEZONE }
-      : FALLBACK_PROFILE;
-    cached = { value, until: now + TTL_MS };
+    let value: PublicSchoolProfile = FALLBACK_PROFILE;
+    if (s) {
+      const { features: _features, ...profile } = s;
+      value = { ...profile, address: (s.address as PublicSchoolProfile["address"]) ?? null, timezone: s.timezone || DEFAULT_SCHOOL_TIMEZONE };
+    }
+    cached = { value, portal: readPortalSettings(s?.features), until: now + TTL_MS };
   } catch {
-    cached = { value: cached?.value ?? FALLBACK_PROFILE, until: now + FAILURE_TTL_MS };
+    cached = { value: cached?.value ?? FALLBACK_PROFILE, portal: cached?.portal ?? readPortalSettings(null), until: now + FAILURE_TTL_MS };
   }
   return cached.value;
+}
+
+/**
+ * Phase 6A-M2: the portal settings block (leaver window, student accounts, UPI) for portal read services, from the
+ * same 5-minute cache. A missing / invalid block, or a database failure with nothing cached, gives the safe defaults.
+ */
+export async function getPortalSettings(now = Date.now()): Promise<PortalSettings> {
+  await getSchoolProfilePublic(now);
+  return cached?.portal ?? readPortalSettings(null);
 }
 
 export async function getSchoolName(now = Date.now()): Promise<string> {

@@ -18,7 +18,7 @@ export function LoginForm() {
       <div className="flex min-h-11 items-center gap-3">
         <Checkbox id="remember" name="remember" />
         <Label htmlFor="remember" className="font-normal">
-          Keep me signed in on this device (parents and students)
+          Keep me signed in on this device (parent and student accounts; not on a shared phone)
         </Label>
       </div>
       <SubmitButton className="w-full">Sign in</SubmitButton>

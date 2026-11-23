@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 import { randomToken, sha256Hex } from "@/lib/crypto";
 import { buildPermissionMap, type AuthContext } from "@/lib/rbac/authorize";
 import type { Scope } from "@/lib/rbac/catalog";
+import { buildPortalContext, MAX_PORTAL_CHILDREN, portalGrantRows } from "@/lib/auth/portal-context";
 
 /**
  * Over HTTPS the cookie uses the `__Host-` prefix: browsers then require Secure, Path=/ and no
@@ -12,7 +14,7 @@ export function sessionCookieName(appUrl = process.env.APP_URL ?? ""): string {
 }
 
 const HOUR = 60 * 60 * 1000;
-/** Staff sessions: 8 h idle. Parent/student "remember me": 30 days. */
+/** Staff sessions: 8 h idle. Portal-only accounts' "keep me signed in": 30 days (ADR-045, `longSessionAllowed`). */
 export const STAFF_SESSION_MS = 8 * HOUR;
 export const LONG_SESSION_MS = 30 * 24 * HOUR;
 /** Absolute cap from sign-in, whatever the activity (docs/AUTHENTICATION_AND_RBAC.md). */
@@ -31,6 +33,15 @@ export function nextSessionExpiry(s: { createdAt: Date; lastSeenAt: Date; expire
   return capped > s.expiresAt.getTime() ? new Date(capped) : null;
 }
 
+/**
+ * Pure (review 6A-M2 M1): a staff session's idle lifetime is at most STAFF_SESSION_MS. Returns the session unchanged
+ * when it already is, else a copy with `expiresAt = lastSeenAt + STAFF_SESSION_MS`.
+ */
+export function staffBoundedSession<T extends { lastSeenAt: Date; expiresAt: Date }>(s: T): T {
+  const cap = s.lastSeenAt.getTime() + STAFF_SESSION_MS;
+  return s.expiresAt.getTime() > cap ? { ...s, expiresAt: new Date(cap) } : s;
+}
+
 export async function createSession(userId: string, opts: { long: boolean; ipHash?: string; userAgent?: string }) {
   const token = randomToken(32);
   const ttl = opts.long ? LONG_SESSION_MS : STAFF_SESSION_MS;
@@ -46,6 +57,13 @@ export async function createSession(userId: string, opts: { long: boolean; ipHas
   return { token, expiresAt: session.expiresAt, sessionId: session.id };
 }
 
+const PORTAL_STUDENT = {
+  id: true,
+  status: true,
+  deletedAt: true,
+  statusChanges: { orderBy: [{ effectiveDate: "desc" }, { createdAt: "desc" }], take: 1, select: { effectiveDate: true } },
+} satisfies Prisma.StudentSelect;
+
 /**
  * Validates a raw cookie token and returns the AuthContext, or null.
  * Sliding renewal: when less than half the lifetime remains, extend it.
@@ -60,6 +78,19 @@ export async function validateSessionToken(token: string): Promise<AuthContext |
           roles: {
             include: { role: { include: { permissions: { include: { permission: { select: { key: true } } } } } } },
           },
+          // Phase 6A-M2 (ADR-044): the portal family, in the same lookup. Only used for portal-only accounts.
+          guardian: {
+            select: {
+              deletedAt: true,
+              students: {
+                where: { student: { deletedAt: null } },
+                orderBy: { studentId: "asc" },
+                take: MAX_PORTAL_CHILDREN + 1,
+                select: { portalAccess: true, student: { select: PORTAL_STUDENT } },
+              },
+            },
+          },
+          student: { select: PORTAL_STUDENT },
         },
       },
     },
@@ -68,23 +99,31 @@ export async function validateSessionToken(token: string): Promise<AuthContext |
 
   const now = Date.now();
   const { user } = session;
-  if (session.expiresAt.getTime() <= now || !user.isActive || user.deletedAt) {
+  const roles = user.roles.map((ur) => ur.role);
+  const roleKeys = roles.map((r) => r.key);
+  const portal = buildPortalContext({ roleKeys, guardianId: user.guardianId, studentId: user.studentId, guardian: user.guardian, student: user.student });
+  // Review 6A-M2 M1 (ADR-045): a staff account never keeps a long session — one issued while the account was a
+  // portal account (role change) or under the old "any portal role" rule is cut back to the staff idle lifetime.
+  const bounded = portal ? session : staffBoundedSession(session);
+  if (bounded.expiresAt.getTime() <= now || !user.isActive || user.deletedAt) {
     await prisma.session.delete({ where: { id: session.id } }).catch(() => undefined);
     return null;
   }
+  if (bounded !== session) {
+    await prisma.session.update({ where: { id: session.id }, data: { expiresAt: bounded.expiresAt } });
+  }
 
-  const renewed = nextSessionExpiry(session, now);
+  const renewed = nextSessionExpiry(bounded, now);
   if (renewed) {
     // Shift lastSeenAt by the same amount the expiry moved, keeping the idle lifetime invariant
     // even when the absolute cap shortens the extension.
-    const idle = session.expiresAt.getTime() - session.lastSeenAt.getTime();
+    const idle = bounded.expiresAt.getTime() - bounded.lastSeenAt.getTime();
     await prisma.session.update({
       where: { id: session.id },
       data: { expiresAt: renewed, lastSeenAt: new Date(renewed.getTime() - idle) },
     });
   }
 
-  const roles = user.roles.map((ur) => ur.role);
   const rows = roles.flatMap((role) =>
     role.permissions.map((rp) => ({
       roleKey: role.key,
@@ -98,11 +137,13 @@ export async function validateSessionToken(token: string): Promise<AuthContext |
     userId: user.id,
     username: user.username,
     displayName: user.displayName,
-    roleKeys: roles.map((r) => r.key),
+    roleKeys,
     isSuperAdmin: roles.some((r) => r.key === "SUPER_ADMIN" && r.isSystem),
-    permissions: buildPermissionMap(rows),
+    // Review 6A-M2 L1: a portal account keeps only its portal grants (fail closed, whatever the role was edited to).
+    permissions: buildPermissionMap(portal ? portalGrantRows(rows, portal.kind) : rows),
     sessionId: session.id,
     employeeId: user.employeeId,
+    portal,
     mustChangePassword: user.mustChangePassword,
   };
 }

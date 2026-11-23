@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getAuthContext } from "@/lib/auth/context";
+import { getAuthContext, homePath } from "@/lib/auth/context";
 import { getSchoolName } from "@/modules/settings/settings.public";
 import { RESET_COMPLETED_MESSAGE } from "@/modules/identity/messages";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,7 +13,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   // If the session check itself fails (database unreachable), still show the form;
   // the login action reports a generic error instead of the whole page failing.
   const signedIn = await getAuthContext().catch(() => null);
-  if (signedIn) redirect("/erp");
+  if (signedIn) redirect(homePath(signedIn));
   const { reset } = await searchParams;
   return (
     <AuthCard eyebrow={await getSchoolName()} title="Sign in" description="Staff, parent and student portal">

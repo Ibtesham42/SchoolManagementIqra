@@ -19,6 +19,7 @@
 import { ForbiddenError, ValidationError } from "@/lib/errors";
 import { hasPermission, type AuthContext } from "@/lib/rbac/authorize";
 import { isScopeAllowed, type PermissionKey, type Scope } from "@/lib/rbac/catalog";
+import { accountLinkProblem, portalRoleSetProblem } from "@/lib/rbac/account-kind";
 
 export const SUPER_ADMIN = "SUPER_ADMIN";
 
@@ -74,6 +75,9 @@ export function assertCanAssignRoles(
   for (const key of nextRoleKeys) {
     if (!rolesByKey.has(key)) throw new ValidationError(`Unknown role: ${key}`, [{ path: "roleKeys", message: "Unknown role." }]);
   }
+  // ADR-045: a portal account is exactly {PARENT} or {STUDENT}; never combined with staff roles (or each other).
+  const exclusive = portalRoleSetProblem(nextRoleKeys);
+  if (exclusive) throw new ValidationError(exclusive, [{ path: "roleKeys", message: exclusive }]);
   const before = new Set(target?.roleKeys ?? []);
   const after = new Set(nextRoleKeys);
   const added = [...after].filter((k) => !before.has(k));
@@ -95,6 +99,12 @@ export function assertCanAssignRoles(
       }
     }
   }
+}
+
+/** ADR-045: the role set must match the account's person link (guardian / student → portal role, employee → none). */
+export function assertRolesMatchLinks(roleKeys: string[], links: { employeeId?: string | null; guardianId?: string | null; studentId?: string | null }): void {
+  const problem = accountLinkProblem(roleKeys, links);
+  if (problem) throw new ValidationError(problem, [{ path: "roleKeys", message: problem }]);
 }
 
 export function assertCanDeactivate(ctx: AuthContext, target: TargetUser): void {

@@ -24,6 +24,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("next/headers", () => ({ cookies: vi.fn(), headers: vi.fn() }));
 vi.mock("@/lib/auth/context", () => ({
   requireAuth: vi.fn(async () => ctxFor("SCHOOL_ADMIN", true)),
+  homePath: (ctx: AuthContext) => (ctx.portal ? "/portal" : ctx.mustChangePassword ? "/erp/change-password" : "/erp"),
   clearSessionCookie: vi.fn(),
   clientIpHash: vi.fn(),
   setSessionCookie: vi.fn(),

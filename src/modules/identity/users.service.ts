@@ -10,6 +10,7 @@ import { clearLoginLimits } from "./auth.service";
 import { CLASS_TEACHER_ROLE_KEYS } from "@/modules/academic/academic.policy";
 import { releaseClassTeacherAssignments } from "@/modules/academic/academic.tx";
 import type { PermissionKey, Scope } from "@/lib/rbac/catalog";
+import { PORTAL_ROLE_KEYS, accountKindOf } from "@/lib/rbac/account-kind";
 import type { Prisma } from "@/generated/prisma/client";
 import { activeSuperAdminIds, lockSuperAdminGuard } from "./super-admin-guard";
 import {
@@ -19,6 +20,7 @@ import {
   assertCanDeactivate,
   assertCanModifyUser,
   assertKeepsASuperAdmin,
+  assertRolesMatchLinks,
   type RoleGrants,
   type TargetUser,
 } from "./identity.policy";
@@ -170,6 +172,7 @@ export async function updateUser(ctx: AuthContext, input: z.infer<typeof updateU
       const target = await loadTarget(tx, input.id);
       assertCanModifyUser(ctx, target);
       assertCanAssignRoles(ctx, target, input.roleKeys, await loadRoles(tx));
+      assertRolesMatchLinks(input.roleKeys, await tx.user.findUniqueOrThrow({ where: { id: target.id }, select: { employeeId: true, guardianId: true, studentId: true } }));
       if (target.roleKeys.includes(SUPER_ADMIN) && !input.roleKeys.includes(SUPER_ADMIN)) {
         assertKeepsASuperAdmin(await activeSuperAdminIds(tx), target.id, { isActive: target.isActive, isSuperAdmin: false });
       }
@@ -184,13 +187,17 @@ export async function updateUser(ctx: AuthContext, input: z.infer<typeof updateU
       if (!input.roleKeys.some((k) => (CLASS_TEACHER_ROLE_KEYS as readonly string[]).includes(k))) {
         await releaseClassTeacherAssignments(tx, actorOf(ctx), target.id);
       }
-      // Permissions are loaded on every request, so role changes take effect immediately — no session revocation needed.
+      // Permissions are loaded on every request, so role changes take effect immediately. Review 6A-M2 M1 (ADR-045):
+      // a change of account kind (staff ↔ parent / student) also changes the session rules and the shell, so the
+      // account's sessions end now (validateSessionToken also bounds staff sessions, as a second line).
+      const kindChanged = accountKindOf(target.roleKeys) !== accountKindOf(input.roleKeys);
+      const sessionsRevoked = kindChanged ? (await tx.session.deleteMany({ where: { userId: target.id } })).count : 0;
       await audit(tx, actorOf(ctx), {
         action: "user.update",
         entityType: "User",
         entityId: target.id,
         before: { ...before, roleKeys: target.roleKeys },
-        after: { ...after, roleKeys: input.roleKeys },
+        after: { ...after, roleKeys: input.roleKeys, ...(kindChanged ? { sessionsRevoked } : {}) },
       });
       return { id: target.id };
     });
@@ -321,6 +328,8 @@ export async function linkEmployeeAccountTx(tx: Tx, ctx: AuthContext, userId: st
   const target = await lockAccount(tx, userId);
   assertCanModifyUser(ctx, target);
   if (!target.isActive) throw new ValidationError("Choose an active account.", [{ path: "userId", message: "This account is deactivated." }]);
+  // ADR-045: a parent / student portal account is never a staff account (the DB CHECK user_one_person covers links).
+  assertRolesMatchLinks(target.roleKeys, { employeeId });
   if (target.employeeId === employeeId) return { username: target.username };
   if (target.employeeId) throw new ConflictError("This account is already linked to another employee. Unlink it there first.");
   try {
@@ -367,7 +376,8 @@ export async function getLinkedAccount(ctx: AuthContext, employeeId: string) {
 export async function listLinkableAccounts(ctx: AuthContext) {
   authorize(ctx, "user.manage");
   return prisma.user.findMany({
-    where: { employeeId: null, isActive: true, deletedAt: null },
+    // ADR-045: portal accounts (guardian / student links or a portal role) can't be linked to staff.
+    where: { employeeId: null, guardianId: null, studentId: null, isActive: true, deletedAt: null, roles: { none: { role: { key: { in: [...PORTAL_ROLE_KEYS] } } } } },
     orderBy: { username: "asc" },
     take: 500,
     select: { id: true, username: true, displayName: true },

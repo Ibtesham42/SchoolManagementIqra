@@ -5,6 +5,7 @@ import { burnPasswordCheck, verifyPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
 import { RULES, assertBelowLimit, enforce, hit, resetSubject } from "@/lib/rate-limit";
 import { AppError } from "@/lib/errors";
+import { accountKindOf, homePathFor, longSessionAllowed } from "@/lib/rbac/account-kind";
 
 export const loginSchema = z
   .object({
@@ -24,8 +25,6 @@ export class InvalidCredentialsError extends AppError {
     super("UNAUTHENTICATED", "Invalid username or password.");
   }
 }
-
-const LONG_SESSION_ROLES = new Set(["PARENT", "STUDENT"]);
 
 /**
  * Rate limits (S-03): per IP and per (username, IP) count every attempt; the per-username ceiling counts only
@@ -77,7 +76,9 @@ export async function login(input: LoginInput, meta: { ipHash: string; userAgent
     return fail();
   }
 
-  const long = input.remember && user.roles.some((r) => LONG_SESSION_ROLES.has(r.role.key));
+  // ADR-045: only a portal-only account (exactly PARENT or STUDENT) may keep a 30-day session; staff get 8 h.
+  const roleKeys = user.roles.map((r) => r.role.key);
+  const long = longSessionAllowed(roleKeys, input.remember);
   const session = await createSession(user.id, { long, ipHash: meta.ipHash, userAgent: meta.userAgent });
   await prisma.$transaction(async (tx) => {
     await tx.user.update({
@@ -87,7 +88,7 @@ export async function login(input: LoginInput, meta: { ipHash: string; userAgent
     await audit(tx, { userId: user.id, ipHash: meta.ipHash }, { action: "auth.login", entityType: "User", entityId: user.id });
   });
 
-  return { ...session, mustChangePassword: user.mustChangePassword };
+  return { ...session, mustChangePassword: user.mustChangePassword, home: homePathFor(accountKindOf(roleKeys), user.mustChangePassword) };
 }
 
 /**
