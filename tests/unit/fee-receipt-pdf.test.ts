@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { createElement } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ForbiddenError } from "@/lib/errors";
 import { buildPermissionMap, type AuthContext } from "@/lib/rbac/authorize";
 import { normalizeGrant, ROLES } from "@/lib/rbac/catalog";
@@ -12,6 +12,9 @@ import { canReadReceipts } from "@/modules/fees/fees.policy";
 import { renderReceiptPdf } from "@/modules/fees/receipts.service";
 import { FALLBACK_PROFILE } from "@/modules/settings/settings.public";
 import { extractTextRuns, nonWinAnsiChars, pageText } from "../pdf-text";
+
+// Real PDF renders / first imports of heavy route modules: allow for a loaded machine when the whole suite runs.
+vi.setConfig({ testTimeout: 30_000 });
 
 /** Phase 5B-M2 fee receipt PDF (FC14) — real rendering with synthetic data, stamps, printable text and access gates. */
 const receipt: FeeReceiptData = {

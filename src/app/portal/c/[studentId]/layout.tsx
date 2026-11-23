@@ -14,7 +14,7 @@ export default async function ChildLayout({ children, params }: { children: Reac
   const tabs = ctx.mustChangePassword ? [] : portalChildTabs(ctx, studentId, await portalWindow());
   return (
     <>
-      {tabs.length > 1 && <ChildTabs studentId={studentId} tabs={tabs} />}
+      {tabs.length > 0 && <ChildTabs studentId={studentId} tabs={tabs} />}
       {children}
     </>
   );

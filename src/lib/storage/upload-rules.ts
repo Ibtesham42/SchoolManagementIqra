@@ -26,6 +26,12 @@ export type UploadRule =
        * that the file belongs to the exact owner the caller authorized (see canReadStoredFile).
        */
       readPermission: PermissionKey;
+      /**
+       * Phase 6B-M2: the permission a PORTAL account (parent / student, `AuthContext.portal` set) needs instead of
+       * `readPermission`. Only for purposes families may download; the owning module's portal service must have run
+       * `assertPortalStudent` for the owner's student first. Absent = never readable from the portal.
+       */
+      portalReadPermission?: PermissionKey;
     });
 
 export const UPLOAD_RULES = {
@@ -103,6 +109,7 @@ export const UPLOAD_RULES = {
     visibility: "PRIVATE",
     uploadPermission: "homework.manage",
     readPermission: "academic.read",
+    portalReadPermission: "homework.read",
     ownerType: "Homework",
     description: "Homework attachment (PDF, JPEG or PNG, up to 10 MB)",
   },

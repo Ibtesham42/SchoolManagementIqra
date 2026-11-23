@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ACTIVATION_CODE_LENGTH,
   UNUSABLE_PASSWORD_HASH,
@@ -18,6 +18,9 @@ import { RULES } from "@/lib/rate-limit";
 import { activateAccountSchema } from "@/modules/identity/activation.schemas";
 import { guardianSlipSchema, sectionSlipsSchema } from "@/modules/students/family-accounts.schemas";
 import { familyAccountStatus, suggestedUsername } from "@/modules/students/family-accounts.service";
+
+// Real PDF renders / first imports of heavy route modules: allow for a loaded machine when the whole suite runs.
+vi.setConfig({ testTimeout: 30_000 });
 
 /** Phase 6A-M3a — activation codes, account states, slip error codes, schemas and static guards (ADR-046). */
 

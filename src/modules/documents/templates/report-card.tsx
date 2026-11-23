@@ -19,7 +19,10 @@ function part(value: string | null, max: number, status: string) {
   return `${value ?? "—"}/${max}`;
 }
 
-export function ReportCardDocument({ branding, snapshot, remark, publishedAt, generatedAt }: { branding: SchoolBranding; snapshot: ReportCardSnapshot; remark: string | null; publishedAt: Date; generatedAt: Date }) {
+const stamp = { fontFamily: "Helvetica-Bold", fontSize: 12, textAlign: "center" as const, borderWidth: 1.5, paddingVertical: 4, marginBottom: 10, letterSpacing: 2 };
+
+/** `copy`: Phase 6B-M2 — "PARENT COPY" on a portal download (the staff print has none). */
+export function ReportCardDocument({ branding, snapshot, remark, publishedAt, generatedAt, copy }: { branding: SchoolBranding; snapshot: ReportCardSnapshot; remark: string | null; publishedAt: Date; generatedAt: Date; copy?: "PARENT COPY" }) {
   const s = snapshot;
   const rows: [string, string][] = [
     ["Student", `${s.student.name} (${s.student.code})`],
@@ -31,6 +34,7 @@ export function ReportCardDocument({ branding, snapshot, remark, publishedAt, ge
   return (
     <Document title={`${branding.name} — Report card — ${s.exam.name} — ${s.student.code}`} author={branding.name} subject="Report card" creator="School ERP" producer="School ERP" language="en-IN">
       <LetterheadPage branding={branding} title={`Report card — ${s.exam.name}`} reference={s.student.code} generatedAt={generatedAt}>
+        {copy && <Text style={stamp}>{copy}</Text>}
         <KeyValueRows rows={rows} />
         <Text style={{ ...styles.paragraph, marginTop: 10, fontFamily: "Helvetica-Bold" }}>Scholastic results</Text>
         <View style={{ ...styles.row, borderBottomWidth: 1 }} fixed>

@@ -77,7 +77,7 @@ export async function listPortalChildren(ctx: AuthContext, window?: PortalWindow
 export function portalChildTabs(ctx: AuthContext, studentId: string, window: PortalWindow): PortalCapability[] {
   if (!ctx.portal) return [];
   const scopeOf = portalScopeOf(ctx);
-  return (["profile", "attendance", "timetable", "calendar"] as const).filter((c) => portalCanSee(ctx.portal!, scopeOf, studentId, c, window));
+  return (["profile", "attendance", "timetable", "calendar", "homework", "results"] as const).filter((c) => portalCanSee(ctx.portal!, scopeOf, studentId, c, window));
 }
 
 const RELATION_LABEL: Record<string, string> = { FATHER: "Father", MOTHER: "Mother", GUARDIAN: "Guardian", OTHER: "Other" };

@@ -21,6 +21,8 @@ export function pdfResponse(bytes: Buffer, fileName: string, disposition: "inlin
       "Content-Disposition": `${disposition}; filename="${safe}"`,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
+      // Review 6B-M2 L4: same as private file downloads — a PDF opened in the browser runs sandboxed.
+      "Content-Security-Policy": "sandbox",
     },
   });
 }

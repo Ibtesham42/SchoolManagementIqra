@@ -6,6 +6,9 @@ import { buildPermissionMap, type AuthContext } from "@/lib/rbac/authorize";
 import { normalizeGrant, ROLES } from "@/lib/rbac/catalog";
 import { portalGrantRows } from "@/lib/auth/portal-context";
 
+// Real PDF renders / first imports of heavy route modules: allow for a loaded machine when the whole suite runs.
+vi.setConfig({ testTimeout: 30_000 });
+
 /**
  * Phase 6B-M1 entry condition (KI-107, closing review 6A-M4 M2 c/e) — offline, no database:
  *  1. the redirect matrix: the real `requireAuth` sends a portal account to /portal from every ERP page, layout and
@@ -139,6 +142,9 @@ const ROWS: Row[] = [
   { route: "portal-accounts/slips", method: "POST", params: () => ({}), body: (s) => `target=guardian&studentId=${s}&guardianId=g1&mode=reset` },
 ];
 
+/** Phase 6B-M2: family download routes. A family's own-child request needs the record's owner (database); staff are refused first. */
+const PORTAL_ROUTES = ["portal/report-cards/[id]/pdf", "portal/homework/[id]/attachment"];
+
 async function call(row: Row, studentId: string) {
   const mod = (await import(`@/app/api/v1/${row.route}/route`)) as Record<string, Handler>;
   const body = row.body?.(studentId);
@@ -167,7 +173,9 @@ describe("HTTP-level IDOR rows: every /api/v1 route refuses portal accounts, ide
       });
     // The one exclusion: GET files/[id] serves public media and must read the file row before it can tell public from
     // private (missing and forbidden are both 404 there — files.service canReadStoredFile; covered against a database).
-    expect(found.filter((r) => r !== "GET files/[id]").sort()).toEqual(ROWS.map((r) => `${r.method} ${r.route}`).sort());
+    // The portal routes (6B-M2) serve families: they are tested below against staff sessions instead.
+    expect(found.filter((r) => r !== "GET files/[id]" && !r.includes(" portal/")).sort()).toEqual(ROWS.map((r) => `${r.method} ${r.route}`).sort());
+    expect(found.filter((r) => r.includes(" portal/")).sort()).toEqual(PORTAL_ROUTES.map((r) => `GET ${r}`).sort());
   });
 
   for (const kind of ["PARENT", "STUDENT"] as const) {
@@ -185,4 +193,31 @@ describe("HTTP-level IDOR rows: every /api/v1 route refuses portal accounts, ide
       });
     }
   }
+});
+
+describe("portal download routes refuse every staff session before any database access (identical 404)", () => {
+  const staffOf = (roleKey: string): AuthContext => {
+    const role = ROLES.find((r) => r.key === roleKey)!;
+    const rows = role.grants.map(normalizeGrant).map((g) => ({ roleKey, isSystem: false, permissionKey: g.key, scope: g.scope }));
+    return { userId: `u-${roleKey}`, username: roleKey.toLowerCase(), displayName: roleKey, roleKeys: [roleKey], isSuperAdmin: roleKey === "SUPER_ADMIN", permissions: buildPermissionMap(rows), sessionId: "s", portal: null, mustChangePassword: false };
+  };
+  for (const roleKey of ["SUPER_ADMIN", "PRINCIPAL", "CLASS_TEACHER", "ACCOUNTANT"]) {
+    for (const route of PORTAL_ROUTES) {
+      it(`${roleKey} × GET ${route}`, async () => {
+        current = staffOf(roleKey);
+        dbTouches = [];
+        const a = await call({ route, method: "GET", params: () => ({ id: OWN }) }, OWN);
+        const b = await call({ route, method: "GET", params: () => ({ id: OTHER }) }, OTHER);
+        expect(a.status).toBe(404);
+        expect(b).toEqual(a);
+        expect(dbTouches).toEqual([]);
+      });
+    }
+  }
+  it("cross-site requests are refused", async () => {
+    current = portalCtx("PARENT");
+    const mod = (await import("@/app/api/v1/portal/report-cards/[id]/pdf/route")) as unknown as Record<string, Handler>;
+    const res = await mod.GET(new Request("http://localhost:3000/x", { headers: { "sec-fetch-site": "cross-site" } }), { params: Promise.resolve({ id: OWN }) });
+    expect(res.status).toBe(403);
+  });
 });

@@ -38,9 +38,10 @@ export default async function PortalHomePage() {
                       <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
                     </Link>
                   ) : (
-                    <div className="px-4 py-3">
-                      <ChildLine name={k.fullName} detail="Left school. Report cards and fee receipts stay available for a while." />
-                    </div>
+                    <Link href={`/portal/c/${encodeURIComponent(k.id)}/results`} className="flex min-h-16 items-center justify-between gap-3 rounded-xl px-4 py-3 hover:bg-muted">
+                      <ChildLine name={k.fullName} detail="Left school. Report cards stay available for a while." />
+                      <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    </Link>
                   )}
                 </CardContent>
               </Card>

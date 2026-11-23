@@ -158,7 +158,9 @@ export function canReadStoredFile(ctx: AuthContext | null, file: FileAccessFacts
     access.purpose === file.purpose &&
     access.owner.type === file.ownerType &&
     access.owner.id === file.ownerId &&
-    hasPermission(ctx, rule.readPermission)
+    // Phase 6B-M2: a portal account reads with the rule's portal permission (never the staff one) — and only where the
+    // rule names one; its module ran assertPortalStudent for the owner's student first.
+    (ctx.portal ? !!rule.portalReadPermission && hasPermission(ctx, rule.portalReadPermission) : hasPermission(ctx, rule.readPermission))
   );
 }
 

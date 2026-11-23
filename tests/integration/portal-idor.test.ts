@@ -31,6 +31,8 @@ const load = async () => ({
   ...(await import("@/modules/students/student-attendance.portal")),
   ...(await import("@/modules/academic/timetable.portal")),
   ...(await import("@/modules/academic/calendar.portal")),
+  ...(await import("@/modules/academic/results.portal")),
+  ...(await import("@/modules/academic/homework.portal")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
 
@@ -135,6 +137,7 @@ describe.skipIf(!enabled)("portal IDOR suite v1 (integration)", () => {
     attendance: (ctx, id) => m.getPortalAttendanceMonth(ctx, { studentId: id }, window),
     timetable: (ctx, id) => m.getPortalTimetable(ctx, id, window),
     calendar: (ctx, id) => m.getPortalCalendarMonth(ctx, { studentId: id }, window),
+    homework: (ctx, id) => m.listPortalHomework(ctx, id, window),
   };
 
   it("profile, attendance, timetable, calendar: allowed exactly for own children; everything else the identical NotFound", async () => {
@@ -163,6 +166,23 @@ describe.skipIf(!enabled)("portal IDOR suite v1 (integration)", () => {
     expect(await ids("parentL")).toEqual(["L1:leaver"]);
     expect(await ids("parentLOld")).toEqual([]);
     for (const staffActor of ["teacher", "accountant"]) await expect(m.listPortalChildren(actors[staffActor], window)).resolves.toEqual([]);
+  });
+
+  it("6B-M2 report cards: own children, and a leaver inside the window (P17); everything else the identical NotFound", async () => {
+    const allowed: Record<string, string[]> = { ...ALLOWED, parentL: ["L1"] };
+    const outcomes: string[] = [];
+    for (const [actor, ids] of Object.entries(allowed)) {
+      for (const k of IDS) {
+        const r = await m.listPortalReportCards(actors[actor], idOf(k), window).then(() => "ok", (e: Error) => `${e.constructor.name}:${e.message}`);
+        const expected = ids.includes(k) ? "ok" : "NotFoundError:Not found.";
+        if (r !== expected) outcomes.push(`results · ${actor} × ${k}: got ${r}, expected ${expected}`);
+      }
+    }
+    expect(outcomes).toEqual([]);
+    // By record id: a card / homework id that isn't this account's (here: missing) is the same NotFound; staff are refused.
+    await expect(m.renderPortalReportCardPdf(actors.parentA, "c0000000000000000000000000", window)).rejects.toThrow("Not found.");
+    await expect(m.readPortalHomeworkAttachment(actors.parentA, "c0000000000000000000000000", window)).rejects.toThrow("Not found.");
+    await expect(m.renderPortalReportCardPdf(actors.teacher, "c0000000000000000000000000", window)).rejects.toBeInstanceOf(m.AppError);
   });
 
   it("unauthenticated: portal reads refuse before any lookup", async () => {
