@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { hashPassword, passwordProblem } from "@/lib/auth/password";
 import { randomToken, sha256Hex } from "@/lib/crypto";
+import { isUsablePasswordHash } from "@/lib/auth/activation-code";
 import { maskEmail, sendEmail } from "@/lib/email";
 import { ValidationError } from "@/lib/errors";
 import { RULES, enforce } from "@/lib/rate-limit";
@@ -48,9 +49,12 @@ export async function requestPasswordReset(input: z.infer<typeof passwordResetRe
 export async function processResetRequest(input: z.infer<typeof passwordResetRequestSchema>, meta: { ipHash: string }) {
   const user = await prisma.user.findFirst({
     where: { deletedAt: null, isActive: true, OR: [{ username: input.identifier }, { email: input.identifier }] },
-    select: { id: true, email: true, displayName: true },
+    select: { id: true, email: true, displayName: true, passwordHash: true },
   });
   if (!user?.email) return;
+  // Phase 6A-M3: a portal account awaiting activation (or reset by the office) is opened only with its activation
+  // code — an email reset must not skip the date-of-birth check and the consent step.
+  if (!isUsablePasswordHash(user.passwordHash)) return;
 
   const token = randomToken(32);
   await prisma.$transaction(async (tx) => {

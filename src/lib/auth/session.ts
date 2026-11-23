@@ -105,7 +105,10 @@ export async function validateSessionToken(token: string): Promise<AuthContext |
   // Review 6A-M2 M1 (ADR-045): a staff account never keeps a long session — one issued while the account was a
   // portal account (role change) or under the old "any portal role" rule is cut back to the staff idle lifetime.
   const bounded = portal ? session : staffBoundedSession(session);
-  if (bounded.expiresAt.getTime() <= now || !user.isActive || user.deletedAt) {
+  // Review 6A-M3a M2 (defence in depth, ADR-046): a portal account is usable only after activation, which records
+  // the privacy consent. Without it (an account made or changed outside Family access) no session is valid.
+  const unconsented = !!portal && !user.privacyConsentAt;
+  if (bounded.expiresAt.getTime() <= now || !user.isActive || user.deletedAt || unconsented) {
     await prisma.session.delete({ where: { id: session.id } }).catch(() => undefined);
     return null;
   }

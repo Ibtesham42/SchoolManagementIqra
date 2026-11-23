@@ -13,6 +13,7 @@ import { SelectField, TextField } from "@/components/erp/form";
 import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { StudentStatusBadge } from "./parts";
+import { canManageFamilyAccess } from "@/modules/students/family-accounts.service";
 
 export const metadata = { title: "Students" };
 
@@ -55,6 +56,13 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
       <PageHeader
         title="Students"
         description={classTeacherView ? "Students of the sections where you are the class teacher." : "Registered students. New students are added by approving an admission."}
+        actions={
+          canManageFamilyAccess(ctx) ? (
+            <Button asChild variant="outline" className="w-full sm:w-auto">
+              <Link href="/erp/students/portal-accounts">Parent portal accounts</Link>
+            </Button>
+          ) : undefined
+        }
       />
       {isExportCode(exportCode) && (
         <Alert variant="destructive" role="alert">

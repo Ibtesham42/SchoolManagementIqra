@@ -38,6 +38,13 @@ export const RULES = {
   feeReconciliation: { name: "fee-recon", limit: 10, windowSeconds: 10 * 60 },
   // Phase 5C-M3: previous-dues (opening balance) templates, per signed-in user.
   feeTemplate: { name: "fee-template", limit: 30, windowSeconds: 10 * 60 },
+  // Phase 6A-M3 (PHASE_6_PLAN.md §2.5): the public /activate form — per client IP and per username; each code also
+  // becomes void after 5 wrong dates of birth entered with the right code (activation.service).
+  activationPerIp: { name: "activate:ip", limit: 10, windowSeconds: 60 * 60 },
+  // Review 6A-M3a M1: 20 / h per username — enough to bound guessing, too loose to lock a real parent out for long.
+  activationPerUser: { name: "activate:user", limit: 20, windowSeconds: 60 * 60 },
+  // Phase 6A-M3: activation slip PDFs (each issues codes and renders), per signed-in office user.
+  portalSlips: { name: "portal-slips", limit: 30, windowSeconds: 10 * 60 },
   // Public file route (S-04), per client IP — IN-PROCESS only (hitLocal): it must not touch the database.
   filesPerIp: { name: "files:ip", limit: 120, windowSeconds: 60 },
 } satisfies Record<string, RateLimitRule>;

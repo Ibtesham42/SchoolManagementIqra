@@ -77,6 +77,9 @@ vi.mock("@/modules/students/students.service", () => ({
   },
   getStudent: (...args: unknown[]) => getStudent(...args),
 }));
+// Phase 6A-M3: the "Family access" panel (School Admin) — no database in this unit test.
+vi.mock("@/modules/students/family-accounts.service", () => ({ canManageFamilyAccess: () => true, getFamilyAccess: vi.fn(async () => []) }));
+vi.mock("@/modules/settings/settings.public", () => ({ getSchoolTimezone: vi.fn(async () => "Asia/Kolkata") }));
 
 const { default: StudentPage } = await import("@/app/erp/students/[id]/page");
 const { NotPermitted } = await import("@/components/erp/not-permitted");

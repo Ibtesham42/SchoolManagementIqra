@@ -25,6 +25,9 @@ export function LoginForm() {
       <Link href="/forgot-password" className="inline-flex min-h-11 items-center justify-center text-sm text-primary underline-offset-4 hover:underline">
         Forgot your password?
       </Link>
+      <Link href="/activate" className="inline-flex min-h-11 items-center justify-center text-sm text-primary underline-offset-4 hover:underline">
+        Parents: got an activation slip? Activate your account
+      </Link>
     </form>
   );
 }

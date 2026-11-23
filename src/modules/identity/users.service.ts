@@ -124,6 +124,15 @@ async function loadTarget(tx: Tx, id: string): Promise<TargetUser & { username: 
   };
 }
 
+/**
+ * Review 6A-M3a M2 (ADR-046): parent / student portal accounts are reset and switched on or off only through Family
+ * access (students module: role allowlist, student → guardian → user locks, activation codes voided). A temporary
+ * password from here would skip activation and consent and leave an old slip working.
+ */
+function assertNotPortalAccount(target: { roleKeys: string[] }) {
+  if (accountKindOf(target.roleKeys) !== "STAFF") throw new ForbiddenError("This is a parent / student portal account. Use \"Family access\" on the student's profile to print a new slip or switch it off.");
+}
+
 async function setRoles(tx: Tx, userId: string, roleKeys: string[]) {
   const roles = await tx.role.findMany({ where: { key: { in: roleKeys } }, select: { id: true } });
   await tx.userRole.deleteMany({ where: { userId } });
@@ -212,6 +221,7 @@ export async function setUserActive(ctx: AuthContext, id: string, active: boolea
   await prisma.$transaction(async (tx) => {
     await lockSuperAdminGuard(tx);
     const target = await loadTarget(tx, id);
+    assertNotPortalAccount(target);
     if (active) assertCanModifyUser(ctx, target);
     else {
       assertCanDeactivate(ctx, target);
@@ -239,6 +249,7 @@ export async function adminResetPassword(ctx: AuthContext, id: string) {
   const passwordHash = await hashPassword(temporaryPassword);
   const username = await prisma.$transaction(async (tx) => {
     const target = await loadTarget(tx, id);
+    assertNotPortalAccount(target);
     assertCanModifyUser(ctx, target);
     await tx.user.update({
       where: { id },

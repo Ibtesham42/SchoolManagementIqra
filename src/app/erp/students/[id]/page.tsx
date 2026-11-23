@@ -8,6 +8,8 @@ import { formatDateOnly, formatDateTime } from "@/lib/format";
 import { hasPermission, scopeFor } from "@/lib/rbac/authorize";
 import { STUDENT_STATUS_LABEL } from "@/modules/students/students.rules";
 import { canBrowseStudents, getStudent } from "@/modules/students/students.service";
+import { canManageFamilyAccess, getFamilyAccess } from "@/modules/students/family-accounts.service";
+import { getSchoolTimezone } from "@/modules/settings/settings.public";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +17,7 @@ import { NotPermitted } from "@/components/erp/not-permitted";
 import { PageHeader } from "@/components/erp/page-header";
 import { addressText, Facts, GENDER_LABEL, RELATION_LABEL, type Address, type PreviousSchool } from "../../admissions/parts";
 import { StudentStatusBadge } from "../parts";
+import { FamilyAccess } from "./family-access";
 
 export const metadata = { title: "Student" };
 
@@ -29,6 +32,7 @@ const ENROLLMENT_LABEL: Record<string, string> = { ACTIVE: "Studying", PROMOTED:
 const SECTIONS = [
   ["overview", "Overview"],
   ["guardians", "Guardians"],
+  ["family", "Family access"],
   ["history", "Academic history"],
   ["documents", "Documents"],
   ["status", "Status history"],
@@ -50,7 +54,10 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
   const canEdit = hasPermission(ctx, "student.update") && ["ALL", "ASSIGNED"].includes(scopeFor(ctx, "student.update") ?? "");
   const canChangeStatus = hasPermission(ctx, "student.transfer") && s.status === "ACTIVE";
   const prev = s.previousSchool as PreviousSchool;
-  const shownSections = SECTIONS.filter(([key]) => key !== "documents" || s.documents !== null);
+  // Phase 6A-M3: parent portal accounts (School Admin / Super Admin).
+  const family = canManageFamilyAccess(ctx) ? await getFamilyAccess(ctx, s.id) : null;
+  const timeZone = family ? await getSchoolTimezone() : undefined;
+  const shownSections = SECTIONS.filter(([key]) => (key !== "documents" || s.documents !== null) && (key !== "family" || family !== null));
 
   return (
     <div className="mx-auto grid max-w-5xl gap-4">
@@ -196,6 +203,8 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
           )}
         </CardContent>
       </Card>
+
+      {family && <FamilyAccess studentId={s.id} guardians={family} slips={typeof sp.slips === "string" ? sp.slips : undefined} timeZone={timeZone!} />}
 
       <Card id="history">
         <CardHeader>

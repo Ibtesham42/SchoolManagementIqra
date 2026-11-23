@@ -54,6 +54,8 @@ describe.skipIf(!enabled)("portal shell (integration)", () => {
         passwordHash: data.password ? await m.hashPassword(data.password) : "x",
         guardianId: data.guardianId,
         studentId: data.studentId,
+        // Portal accounts are usable only after activation (consent recorded, review 6A-M3a M2).
+        privacyConsentAt: roleKey === "PARENT" || roleKey === "STUDENT" ? new Date() : null,
         roles: { create: { roleId: role.id } },
       },
     });

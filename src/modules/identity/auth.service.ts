@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { burnPasswordCheck, verifyPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
+import { isUsablePasswordHash } from "@/lib/auth/activation-code";
 import { RULES, assertBelowLimit, enforce, hit, resetSubject } from "@/lib/rate-limit";
 import { AppError } from "@/lib/errors";
 import { accountKindOf, homePathFor, longSessionAllowed } from "@/lib/rbac/account-kind";
@@ -57,7 +58,13 @@ export async function login(input: LoginInput, meta: { ipHash: string; userAgent
     return fail();
   }
 
-  const ok = await verifyPassword(user.passwordHash, input.password);
+  // Phase 6A-M3: a portal account not activated yet (or reset by the office) has no usable password — it costs the
+  // same Argon2 work as a wrong password, so timing doesn't tell "awaiting activation" apart.
+  if (!isUsablePasswordHash(user.passwordHash)) await burnPasswordCheck(input.password);
+  const ok = isUsablePasswordHash(user.passwordHash) && (await verifyPassword(user.passwordHash, input.password));
+  // Review 6A-M3a M2: a portal account without recorded consent (never activated) can't sign in, even with a password.
+  const roleKeysAll = user.roles.map((r) => r.role.key);
+  if (ok && accountKindOf(roleKeysAll) !== "STAFF" && !user.privacyConsentAt) return fail();
   if (!ok) {
     const failed = user.failedLoginCount + 1;
     const lock = failed >= MAX_FAILED_ATTEMPTS;

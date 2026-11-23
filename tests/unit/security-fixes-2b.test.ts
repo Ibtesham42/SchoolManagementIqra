@@ -129,7 +129,8 @@ describe("S-03: login limiter can't be used to lock a user out from elsewhere", 
     expect(auth).toMatch(/assertBelowLimit\(RULES\.loginFailuresPerUser, input\.username\)/);
     expect(auth).not.toMatch(/RULES\.loginPerUser\b/);
     // Every credential failure path records a failure; success does not.
-    expect((auth.match(/return fail\(\);/g) ?? []).length).toBe(3);
+    // (Phase 6A-M3a adds a 4th: a portal account without recorded consent — review M2.)
+    expect((auth.match(/return fail\(\);/g) ?? []).length).toBe(4);
     const users = src("src/modules/identity/users.service.ts");
     expect(users.match(/await clearLoginLimits\(username\)/g)?.length).toBe(2); // admin reset + unlock
     expect(src("src/modules/identity/password-reset.service.ts")).toMatch(/await clearLoginLimits\(pre\.user\.username\)/);

@@ -7,6 +7,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ### Added (Phase 6A — parent and student portal, first part)
 - **Portal** (`/portal`): parents and students who sign in now get their own simple, phone-first area instead of the staff ERP — a home page listing their children, a read-only profile for each child (Student ID, admission number, class and section, roll number, date of birth), a child switcher for families with more than one child, and an account page to change the password or sign out other devices. (Accounts for parents are issued by the school office in the next step.)
 
+- **Parent accounts** (Students → Parent portal accounts, and "Family access" on each student's profile): the school office creates parent accounts for a whole section at once, or one guardian at a time, and prints an activation slip for each parent with a username (the mobile number) and a one-time code. Brothers and sisters share one parent account. The parent opens **Activate your account** from the sign-in page, enters the slip's username and code, a child's date of birth, agrees to the privacy notice and chooses a password. A lost slip or forgotten password: the office prints a new slip. The office can also stop one guardian from seeing one child, or switch an account off.
+
 ### Changed (Phase 6A)
 - "Keep me signed in" lasts 30 days only for parent and student accounts; staff are always signed out after 8 hours without use.
 - A parent or student account can no longer be given a staff role (and the other way round): a staff member who is also a parent gets a separate parent account.
