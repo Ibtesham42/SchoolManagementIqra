@@ -12,6 +12,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - **Link or merge guardians** (from "Family access"): when a parent was recorded again at a brother's or sister's admission, the office finds the records by mobile number and links the existing one to the student, or merges the two, so one parent account sees all their children. A block on one child is kept when records are merged.
 
 ### Changed (Phase 6A)
+- Parent and student accounts can no longer be edited from Users (only from the student's Family access), and "forgot password" never applies to them; the office prints a new slip instead.
 - "Keep me signed in" lasts 30 days only for parent and student accounts; staff are always signed out after 8 hours without use.
 - A parent or student account can no longer be given a staff role (and the other way round): a staff member who is also a parent gets a separate parent account.
 

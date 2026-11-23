@@ -29,7 +29,7 @@ describe.skipIf(!enabled)("guardian links and invitations (integration)", () => 
   let sessionId: string, classId: string, sectionId: string;
   const address = { line1: "1 Example Road", line2: null, city: "Sampletown", district: null, state: "Example State", pinCode: "110001", country: "India" };
   let seq = 0;
-  const phone = () => `8${String(Date.now() % 1e8).padStart(8, "0")}${seq++ % 10}`;
+  const phone = () => `101${String(Date.now() % 1e6).padStart(6, "0")}${seq++ % 10}`; // "10x…": never a real Indian number
 
   async function user(suffix: string, roleKey: string) {
     const role = await m.prisma.role.findUniqueOrThrow({ where: { key: roleKey } });

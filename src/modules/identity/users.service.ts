@@ -182,6 +182,9 @@ export async function updateUser(ctx: AuthContext, input: z.infer<typeof updateU
       assertCanModifyUser(ctx, target);
       assertCanAssignRoles(ctx, target, input.roleKeys, await loadRoles(tx));
       assertRolesMatchLinks(input.roleKeys, await tx.user.findUniqueOrThrow({ where: { id: target.id }, select: { employeeId: true, guardianId: true, studentId: true } }));
+      // Review 6A-M4 M1: a portal account's email / roles are never changed here — an email set from /erp/users would
+      // reopen the account through the email reset, around Family access and the date-of-birth check.
+      assertNotPortalAccount(target);
       if (target.roleKeys.includes(SUPER_ADMIN) && !input.roleKeys.includes(SUPER_ADMIN)) {
         assertKeepsASuperAdmin(await activeSuperAdminIds(tx), target.id, { isActive: target.isActive, isSuperAdmin: false });
       }

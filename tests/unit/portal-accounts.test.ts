@@ -65,7 +65,9 @@ describe("activation codes", () => {
 
   it("rate limits for the public form exist (per IP and per username)", () => {
     expect(RULES.activationPerIp).toMatchObject({ limit: 10, windowSeconds: 3600 });
-    expect(RULES.activationPerUser).toMatchObject({ limit: 20, windowSeconds: 3600 }); // review M1: no quick lock-out
+    // Review 6A-M4 L1: attempts per (username, IP); failures per username with a higher ceiling (the login model).
+    expect(RULES.activationPerUserIp).toMatchObject({ limit: 10, windowSeconds: 3600 });
+    expect(RULES.activationFailuresPerUser).toMatchObject({ limit: 30, windowSeconds: 3600 });
 
     expect(RULES.portalSlips.limit).toBeGreaterThan(0);
   });
@@ -137,25 +139,29 @@ describe("static guards (ADR-046)", () => {
     const s = src("modules", "identity", "activation.service.ts");
     const body = s.slice(s.indexOf("export async function activatePortalAccount"));
     expect(body.indexOf("RULES.activationPerIp")).toBeLessThan(body.indexOf("$transaction"));
-    expect(body.indexOf("RULES.activationPerUser")).toBeLessThan(body.indexOf("$transaction"));
+    expect(body.indexOf("RULES.activationPerUserIp")).toBeLessThan(body.indexOf("$transaction"));
+    expect(body.indexOf("RULES.activationFailuresPerUser")).toBeLessThan(body.indexOf("$transaction"));
     expect(body.indexOf("hashPassword(")).toBeLessThan(body.indexOf("$transaction"));
     expect(body).toMatch(/FOR UPDATE[\s\S]*account_activation[\s\S]*FOR UPDATE/);
-    expect(body.match(/throw new ActivationFailedError\(\)/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(s).toMatch(/async function failed\(username: string\): Promise<never> \{\s*await hit\(RULES\.activationFailuresPerUser, username\);\s*throw new ActivationFailedError\(\);/);
     // Review M1: a wrong code returns before anything is counted; only a wrong DOB with the right code counts.
     expect(body).toMatch(/if \(!sameHash\(row\.code_hash, codeHash\)\) return \{ ok: false \};\s*if \(!dobs\.includes\(input\.dob\)\) \{/);
     // Review L2: password checks before the per-username bucket.
-    expect(body.indexOf("passwordProblem(")).toBeLessThan(body.indexOf("RULES.activationPerUser"));
+    expect(body.indexOf("passwordProblem(")).toBeLessThan(body.indexOf("RULES.activationPerUserIp"));
     // Review L3: unknown / ineligible usernames take the equalized path.
-    expect(body.match(/return equalizedFailure\(tx\)/g)?.length).toBe(2);
+    expect(body.match(/return equalizedFailure\(tx\)/g)?.length).toBe(3); // + no live code (review 6A-M4 L4)
+    expect(body.match(/return failed\(input\.username\)/g)?.length).toBe(2); // every failure counts on the failure bucket
   });
 
   it("review M2: /erp/users can't reset or switch a portal account; unconsented portal accounts get no session or login", () => {
     const u = src("modules", "identity", "users.service.ts");
-    for (const fn of ["export async function setUserActive", "export async function adminResetPassword"]) {
+    for (const fn of ["export async function setUserActive", "export async function adminResetPassword", "export async function updateUser"]) {
       const body = u.slice(u.indexOf(fn), u.indexOf("\n}\n", u.indexOf(fn)));
       expect(body, fn).toMatch(/assertNotPortalAccount\(target\)/);
     }
     expect(src("lib", "auth", "session.ts")).toMatch(/const unconsented = !!portal && !user\.privacyConsentAt;/);
+    // Review 6A-M4 M1: no email reset for portal accounts at all.
+    expect(src("modules", "identity", "password-reset.service.ts")).toMatch(/if \(accountKindOf\(user\.roles\.map\(\(r\) => r\.role\.key\)\) !== "STAFF"\) return;/);
     expect(src("modules", "identity", "auth.service.ts")).toMatch(/accountKindOf\(roleKeysAll\) !== "STAFF" && !user\.privacyConsentAt\) return fail\(\)/);
   });
 

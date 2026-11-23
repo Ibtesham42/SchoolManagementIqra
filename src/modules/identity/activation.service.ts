@@ -6,7 +6,7 @@ import { createSession } from "@/lib/auth/session";
 import { MAX_ACTIVATION_ATTEMPTS, hashActivationCode, isActivationUsable, normalizeActivationCode } from "@/lib/auth/activation-code";
 import { AppError, ValidationError } from "@/lib/errors";
 import { accountKindOf } from "@/lib/rbac/account-kind";
-import { RULES, enforce } from "@/lib/rate-limit";
+import { RULES, assertBelowLimit, enforce, hit } from "@/lib/rate-limit";
 import type { ActivateAccountInput } from "./activation.schemas";
 import { clearLoginLimits } from "./auth.service";
 
@@ -42,6 +42,12 @@ const sameHash = (a: string, b: string) => a.length === b.length && timingSafeEq
 
 type Outcome = { ok: true; userId: string; username: string } | { ok: false };
 
+/** Every failure records one hit on the per-username FAILURE bucket (review 6A-M4 L1), then the one generic error. */
+async function failed(username: string): Promise<never> {
+  await hit(RULES.activationFailuresPerUser, username);
+  throw new ActivationFailedError();
+}
+
 /**
  * Review 6A-M3a L3: an unknown or ineligible username runs the same kind of reads as a known one (the code row and
  * a family lookup, for no rows), so response time says little about which mobile numbers hold an account.
@@ -59,11 +65,12 @@ export async function activatePortalAccount(input: ActivateAccountInput, meta: {
   if (input.newPassword !== input.confirmPassword) throw new ValidationError("Passwords do not match.", [{ path: "confirmPassword", message: "Passwords do not match." }]);
   const problem = passwordProblem(input.newPassword, input.username);
   if (problem) throw new ValidationError(problem, [{ path: "newPassword", message: problem }]);
-  await enforce(RULES.activationPerUser, input.username);
+  await enforce(RULES.activationPerUserIp, input.username, meta.ipHash);
+  await assertBelowLimit(RULES.activationFailuresPerUser, input.username);
 
   const code = normalizeActivationCode(input.code);
   const passwordHash = await hashPassword(input.newPassword); // always, before any lookup (timing)
-  if (!code) throw new ActivationFailedError();
+  if (!code) return failed(input.username);
   const codeHash = hashActivationCode(code);
 
   const outcome = await prisma.$transaction(async (tx): Promise<Outcome> => {
@@ -80,7 +87,7 @@ export async function activatePortalAccount(input: ActivateAccountInput, meta: {
       SELECT id, code_hash, used_at, expires_at, failed_attempts FROM account_activation
       WHERE user_id = ${user.id} AND used_at IS NULL ORDER BY created_at DESC LIMIT 1 FOR UPDATE`;
     const row = live[0];
-    if (!row || !isActivationUsable({ usedAt: row.used_at, expiresAt: row.expires_at })) return { ok: false };
+    if (!row || !isActivationUsable({ usedAt: row.used_at, expiresAt: row.expires_at })) return equalizedFailure(tx); // review 6A-M4 L4
 
     const dobs = await deps.datesOfBirth(tx, { guardianId: user.guardianId, studentId: user.studentId });
     // Review 6A-M3a M1: a WRONG CODE never counts against the code — otherwise anyone who knows a parent's mobile
@@ -106,7 +113,7 @@ export async function activatePortalAccount(input: ActivateAccountInput, meta: {
     return { ok: true, userId: user.id, username: user.username };
   });
 
-  if (!outcome.ok) throw new ActivationFailedError();
+  if (!outcome.ok) return failed(input.username);
   await clearLoginLimits(outcome.username);
   // A fresh session after activation (never a pre-auth one); "keep me signed in" is chosen at the next login.
   return createSession(outcome.userId, { long: false, ipHash: meta.ipHash, userAgent: meta.userAgent });

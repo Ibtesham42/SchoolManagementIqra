@@ -65,7 +65,7 @@ describe.skipIf(!enabled)("portal shell (integration)", () => {
   const appVersion = async (id: string) => (await m.prisma.admissionApplication.findUniqueOrThrow({ where: { id }, select: { version: true } })).version;
   async function admit(firstName: string) {
     const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName: "Example", dob: "1995-05-01", gender: "FEMALE" });
-    await m.updateGuardiansStep(officer, { id, version: await appVersion(id), guardians: [{ relation: "MOTHER", name: `Synthetic Parent ${firstName}`, phone: `96${Math.floor(10_000_000 + Math.random() * 89_999_999)}`, altPhone: null, email: null, occupation: null, isPrimary: true, isEmergencyContact: true }] });
+    await m.updateGuardiansStep(officer, { id, version: await appVersion(id), guardians: [{ relation: "MOTHER", name: `Synthetic Parent ${firstName}`, phone: `104${Math.floor(1_000_000 + Math.random() * 8_999_999)}`, altPhone: null, email: null, occupation: null, isPrimary: true, isEmergencyContact: true }] });
     await m.updateContactStep(officer, { id, version: await appVersion(id), phone: null, email: null, address });
     await m.submitApplication(officer, id, await appVersion(id));
     await m.setSection(principal, id, await appVersion(id), sectionA);
@@ -154,12 +154,15 @@ describe.skipIf(!enabled)("portal shell (integration)", () => {
     expect(roles.map((r) => r.role.key)).toEqual(["PARENT"]);
   });
 
-  it("review M1: a parent's long session is ended by a change to a staff role, and an old long staff session is bounded", async () => {
-    const acct = await user("parentF", "PARENT");
-    const { token } = await m.createSession(acct.id, { long: true });
-    await m.updateUser(admin, { id: acct.id, displayName: "Synthetic parentF", email: null, roleKeys: ["TEACHER"] });
-    expect(await m.validateSessionToken(token)).toBeNull(); // revoked with the kind change
+  it("review M1: an account-kind change ends the sessions; /erp/users can't edit portal accounts; an old long staff session is bounded", async () => {
+    const staffAcct = await user("staffF", "TEACHER");
+    const { token } = await m.createSession(staffAcct.id, { long: true });
+    await m.updateUser(admin, { id: staffAcct.id, displayName: "Synthetic staffF", email: null, roleKeys: ["PARENT"] });
+    expect(await m.validateSessionToken(token)).toBeNull(); // revoked with the kind change (and no consent recorded)
+    const parentAcct = await user("parentF", "PARENT");
+    await expect(m.updateUser(admin, { id: parentAcct.id, displayName: "Synthetic parentF", email: `${run}@example.test`, roleKeys: ["PARENT"] })).rejects.toBeInstanceOf(m.ForbiddenError); // review 6A-M4 M1
     // A long session that a staff account still holds (issued under the old rule) is cut to 8 h at the next request.
+    const acct = await user("teacherF", "TEACHER");
     const legacy = await m.createSession(acct.id, { long: true });
     const ctx = (await m.validateSessionToken(legacy.token))!;
     expect(ctx.portal).toBeNull();

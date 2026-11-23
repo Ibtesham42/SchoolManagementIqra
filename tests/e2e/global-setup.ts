@@ -4,6 +4,7 @@ import { parse } from "dotenv";
 import pg from "pg";
 import { hashPassword } from "../../src/lib/auth/password";
 import { assertRunIdentity, E2E_TARGET, IDENTITY_SQL, resolveRunTarget } from "../../src/lib/db-target-guard";
+import { createPortalFixture, removePortalFixtures, type PortalFixture } from "./portal-fixture";
 
 /**
  * Creates disposable e2e users (one set per browser project) in the development or test database the
@@ -48,7 +49,7 @@ export default async function globalSetup() {
     return;
   }
   const client = await connectVerified(env);
-  const creds: Record<string, { admin: string; readyAdmin: string; teacher: string; password: string; newPassword: string }> = {};
+  const creds: Record<string, { admin: string; readyAdmin: string; teacher: string; password: string; newPassword: string; portal?: PortalFixture }> = {};
   const password = `E2e-${randomBytes(9).toString("base64url")}`;
   const hash = await hashPassword(password); // outside the transaction (Argon2 is slow)
   try {
@@ -56,7 +57,8 @@ export default async function globalSetup() {
     // ADR-025: Super Admin membership changes take the guard lock as the first statement.
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('school_erp.super_admin_guard'))`);
     await client.query(`DELETE FROM "user" WHERE username LIKE 'e2e-%'`);
-    const roles = await client.query<{ id: string; key: string }>(`SELECT id, key FROM role WHERE key IN ('SUPER_ADMIN','TEACHER')`);
+    await removePortalFixtures(client); // Phase 6A-M4: e2e families left by an interrupted run
+    const roles = await client.query<{ id: string; key: string }>(`SELECT id, key FROM role WHERE key IN ('SUPER_ADMIN','TEACHER','PARENT')`);
     const roleId = (k: string) => {
       const r = roles.rows.find((x) => x.key === k);
       if (!r) throw new Error(`Role ${k} missing — run the seed first`);
@@ -80,7 +82,9 @@ export default async function globalSetup() {
           JSON.stringify({ username, roleKeys: [role], e2e: true }),
         ]);
       }
-      creds[p] = { admin, readyAdmin, teacher, password, newPassword: `E2e-new-${randomBytes(9).toString("base64url")}` };
+      // Phase 6A-M4: a synthetic family with a parent account awaiting activation (portal.spec).
+      const portal = await createPortalFixture(client, p, roleId("PARENT"));
+      creds[p] = { admin, readyAdmin, teacher, password, newPassword: `E2e-new-${randomBytes(9).toString("base64url")}`, portal };
     }
     // Development/test only (guarded above): clears lockouts left by earlier e2e runs.
     await client.query(`DELETE FROM rate_limit_bucket`);

@@ -35,7 +35,7 @@ describe.skipIf(!enabled)("parent portal accounts (integration)", () => {
   const meta = { ipHash: `ip-${run}` };
   const password = `Synthetic-${run}-pw!`;
   let phoneSeq = 0;
-  const phone = () => `9${String(Date.now() % 1e8).padStart(8, "0")}${phoneSeq++ % 10}`;
+  const phone = () => `102${String(Date.now() % 1e6).padStart(6, "0")}${phoneSeq++ % 10}`; // "10x…": never a real Indian number
 
   async function user(suffix: string, roleKey: string) {
     const role = await m.prisma.role.findUniqueOrThrow({ where: { key: roleKey } });
