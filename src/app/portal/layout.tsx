@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { Bell, LogOut } from "lucide-react";
 import { requirePortal } from "@/lib/auth/context";
 import { logoutAction } from "@/app/(auth)/login/actions";
 import { getSchoolName } from "@/modules/settings/settings.public";
+import { countPortalUnread } from "@/modules/notifications/notifications.portal";
 import { listPortalChildren } from "@/modules/students/students.portal";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
 import { PortalNav } from "@/components/portal/portal-nav";
@@ -17,7 +19,7 @@ export const metadata = { robots: { index: false } };
  */
 export default async function PortalLayout({ children }: { children: ReactNode }) {
   const ctx = await requirePortal({ allowPendingPasswordChange: true });
-  const kids = ctx.mustChangePassword ? [] : await listPortalChildren(ctx);
+  const [kids, unread] = ctx.mustChangePassword ? [[], 0] : await Promise.all([listPortalChildren(ctx), countPortalUnread(ctx)]);
   const current = kids
     .filter((k) => k.current)
     .map((k) => ({ id: k.id, fullName: k.fullName, detail: [k.className && `Class ${k.className}`, k.sectionCode].filter(Boolean).join(" · ") || k.studentCode, current: true }));
@@ -36,6 +38,13 @@ export default async function PortalLayout({ children }: { children: ReactNode }
             <p className="truncate text-xs text-muted-foreground">{ctx.displayName}</p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {!ctx.mustChangePassword && (
+              // 6C-M2: the unread count renders on navigation only — never polled (plan R2).
+              <Link href="/portal/inbox" aria-label={unread > 0 ? `Updates, ${unread} unread` : "Updates"} className="relative inline-flex size-11 items-center justify-center rounded-lg hover:bg-muted">
+                <Bell className="size-5" aria-hidden="true" />
+                {unread > 0 && <span className="absolute top-1 right-1 min-w-5 rounded-full bg-primary px-1 text-center text-xs font-semibold text-primary-foreground">{unread > 99 ? "99+" : unread}</span>}
+              </Link>
+            )}
             <ChildSwitcher items={current} />
             <form action={logoutAction}>
               <Button type="submit" variant="ghost" className="min-h-11">

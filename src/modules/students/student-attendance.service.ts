@@ -9,7 +9,9 @@ import { lockSessionShared } from "@/modules/academic/academic.tx";
 import { correctionRule, STUDENT_HOLIDAY_SCOPES, summarizeStudentDays, type StudentStatus } from "@/modules/academic/student-attendance.rules";
 import { classifyRange } from "@/modules/hr/leave.rules";
 import { lockLeaveCalendar } from "@/modules/hr/leave.tx";
+import { afterCommit, type NotificationDraft } from "@/modules/notifications/notifications.service";
 import { readStudentCalendarTx } from "@/modules/settings/settings.service";
+import { familyRecipientsOf } from "./family-recipients.tx";
 import { studentDaySchema, studentMonthSchema, type MarkStudentDayInput, type StudentDayInput, type StudentMonthInput } from "./student-attendance.schemas";
 
 /**
@@ -148,10 +150,31 @@ export async function getStudentDay(ctx: AuthContext, raw: StudentDayInput) {
   };
 }
 
+/**
+ * Phase 6C-M2 (P23): "marked absent today" for the families of students newly marked ABSENT on the school's TODAY —
+ * never for back-dated corrections. Once per child per day (dedupe `absence:<student>:<date>`): re-marking or a
+ * second save sends nothing new. A later correction to present doesn't recall it (the attendance tab shows the truth).
+ */
+async function absenceNotifications(enrollmentIds: readonly string[], date: string): Promise<NotificationDraft[]> {
+  if (enrollmentIds.length === 0) return [];
+  // Still absent after the commit (a concurrent correction may have changed the mark).
+  const rows = await prisma.studentAttendance.findMany({ where: { enrollmentId: { in: [...enrollmentIds] }, date: day(date), status: "ABSENT" }, select: { enrollment: { select: { studentId: true } } }, take: 500 });
+  const recipients = await familyRecipientsOf(prisma, rows.map((r) => r.enrollment.studentId), { students: false });
+  return recipients.map((r) => ({
+    userId: r.userId,
+    type: "attendance.absent" as const,
+    title: "Marked absent today",
+    body: `${r.firstName} was marked absent today.`,
+    link: `/portal/c/${encodeURIComponent(r.studentId)}/attendance`,
+    dedupeKey: `absence:${r.studentId}:${date}`,
+  }));
+}
+
 export async function markStudentDay(ctx: AuthContext, input: MarkStudentDayInput) {
   authorizeAny(ctx, ["attendance.student.mark", "academic.manage"]);
+  let saved: { created: number; changed: number; absentToday: string[] };
   try {
-    return await prisma.$transaction(async (tx: Tx) => {
+    saved = await prisma.$transaction(async (tx: Tx) => {
       await tx.$queryRaw`SELECT set_config('lock_timeout', '5s', true) AS lock_timeout`;
       await lockLeaveCalendar(tx); // shared calendar lock: holidays and weekly offs can't change under this save
       const peek = await tx.section.findUnique({ where: { id: input.sectionId }, select: { academicSessionId: true } });
@@ -228,11 +251,19 @@ export async function markStudentDay(ctx: AuthContext, input: MarkStudentDayInpu
           after: { date: input.date, created: creates.length, changed: updates.length, byStatus, corrections: updates.map((u) => ({ id: u.id, before: u.before, after: u.status })) },
         });
       }
-      return { created: creates.length, changed: updates.length };
+      const absentToday = input.date === today ? [...creates.filter((c) => c.status === "ABSENT").map((c) => c.enrollmentId), ...updates.filter((u) => u.status === "ABSENT").map((u) => existingEnrollmentOf(existing, u.id))] : [];
+      return { created: creates.length, changed: updates.length, absentToday: absentToday.filter((x): x is string => x !== null) };
     });
   } catch (e) {
     return busy(e);
   }
+  await afterCommit("absence", () => absenceNotifications(saved.absentToday, input.date));
+  return { created: saved.created, changed: saved.changed };
+}
+
+function existingEnrollmentOf(existing: Map<string, { id: string; enrollmentId: string }>, attendanceId: string): string | null {
+  for (const r of existing.values()) if (r.id === attendanceId) return r.enrollmentId;
+  return null;
 }
 
 // ───────────────────────────── Month register ─────────────────────────────

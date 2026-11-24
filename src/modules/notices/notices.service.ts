@@ -12,7 +12,8 @@ import { lockSessionShared, noticeClasses, noticeSectionOptions, noticeSections,
 import { discardUpload, prepareUpload, readStoredFile, recordUpload, retireStoredFile, type PreparedUpload } from "@/modules/files/files.service";
 import { getSchoolTimezone } from "@/modules/settings/settings.public";
 import { todayInTimeZone } from "@/lib/format";
-import { countFamilyAccounts, familyAccountWhere, type FamilyAudience } from "@/modules/students/family-audience.tx";
+import { afterCommit, forgetNoticeNotifications, MAX_PER_CALL, type NotificationDraft } from "@/modules/notifications/notifications.service";
+import { countFamilyAccounts, familyAccountIds, familyAccountWhere, type FamilyAudience } from "@/modules/students/family-audience.tx";
 import { liveWhere, manageScopeOf, mayWriteNotice, noticeState, publishMoment, STAFF_AUDIENCES, type ManageScope } from "./notices.policy";
 import type { CreateNoticeInput, NoticeAudience, NoticeRefInput, NoticeScope, UpdateNoticeInput } from "./notices.schemas";
 
@@ -192,11 +193,30 @@ export async function deleteNotice(ctx: AuthContext, input: NoticeRefInput) {
   }
 }
 
+/**
+ * Phase 6C-M2 (P23): "new notice" for every family account in a FAMILIES / ALL notice's audience, after the publication
+ * committed. Only when it is visible at once — a scheduled notice shows up through the portal's unread-notices line
+ * instead (no job runs at its publish time). Staff get no in-app notification yet (no staff inbox: ERP header later).
+ */
+async function noticeNotifications(noticeId: string): Promise<NotificationDraft[]> {
+  const n = await prisma.notice.findUnique({ where: { id: noticeId }, select: { title: true, audience: true, scope: true, status: true, publishAt: true, academicSessionId: true, targets: { select: { classId: true, sectionId: true } } } });
+  if (!n || n.status !== "PUBLISHED" || n.audience === "STAFF" || !n.publishAt || n.publishAt > new Date()) return [];
+  const users = await familyAccountIds(prisma, audienceOf(n), MAX_PER_CALL);
+  return users.map((userId) => ({ userId, type: "notice.published" as const, title: "New notice from the school", body: n.title, link: `/portal/notices/${encodeURIComponent(noticeId)}`, dedupeKey: `notice:${noticeId}` }));
+}
+
+const audienceOf = (n: { academicSessionId: string; scope: NoticeScope; targets: { classId: string | null; sectionId: string | null }[] }): FamilyAudience => ({
+  academicSessionId: n.academicSessionId,
+  ...(n.scope === "SECTION" ? { sectionIds: n.targets.flatMap((t) => (t.sectionId ? [t.sectionId] : [])) } : {}),
+  ...(n.scope === "CLASS" ? { classIds: n.targets.flatMap((t) => (t.classId ? [t.classId] : [])) } : {}),
+});
+
 export async function publishNotice(ctx: AuthContext, input: NoticeRefInput) {
   const scope = requireManage(ctx);
   await enforce(RULES.noticeCompose, ctx.userId);
+  let result: { scheduled: boolean };
   try {
-    return await prisma.$transaction(async (tx) => {
+    result = await prisma.$transaction(async (tx) => {
       const n = await lockNotice(tx, ctx, scope, input.id, input.version);
       assertDraft(n);
       assertSessionWritable(n.sessionStatus);
@@ -210,6 +230,8 @@ export async function publishNotice(ctx: AuthContext, input: NoticeRefInput) {
   } catch (e) {
     return busy(e);
   }
+  if (!result.scheduled) await afterCommit("notice", () => noticeNotifications(input.id));
+  return result;
 }
 
 /** Published (live, scheduled or expired) → WITHDRAWN: readers stop seeing it at once. Allowed in a closed session. */
@@ -224,6 +246,12 @@ export async function withdrawNotice(ctx: AuthContext, input: NoticeRefInput) {
     });
   } catch (e) {
     busy(e);
+  }
+  // Review 6C-M2 M3: after commit, its notifications disappear too (the inbox also hides them at read time).
+  try {
+    await forgetNoticeNotifications(input.id);
+  } catch (e) {
+    console.error("notifications (notice withdraw) failed", e instanceof Error ? e.name : "unknown");
   }
 }
 
@@ -334,11 +362,7 @@ export async function getManagedNotice(ctx: AuthContext, id: string) {
   });
   if (!n) throw new NotFoundError(NOT_FOUND);
   const families = n.audience !== "STAFF";
-  const audience: FamilyAudience = {
-    academicSessionId: n.academicSessionId,
-    ...(n.scope === "SECTION" ? { sectionIds: n.targets.flatMap((t) => (t.sectionId ? [t.sectionId] : [])) } : {}),
-    ...(n.scope === "CLASS" ? { classIds: n.targets.flatMap((t) => (t.classId ? [t.classId] : [])) } : {}),
-  };
+  const audience = audienceOf(n);
   // Review 6C-M1 L1: family reads are counted with the reach's own rule (in the audience now), so the ratio is ≤ 100 %;
   // student accounts (P14) are counted on their own.
   const [labels, familyReads, studentReads, staffReads, reach] = await Promise.all([

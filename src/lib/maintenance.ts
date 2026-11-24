@@ -8,6 +8,8 @@ import { safeEqual } from "@/lib/crypto";
 export const RETENTION = {
   usedResetTokensDays: 7,
   usageCounterDays: 400, // > 1 year, for month-over-month usage review
+  // Phase 6C-M2 (plan R10): in-app notifications, read or not.
+  notificationDays: 90,
 } as const;
 
 export interface CleanupResult {
@@ -15,11 +17,12 @@ export interface CleanupResult {
   rateLimitBuckets: number;
   resetTokens: number;
   usageCounters: number;
+  notifications: number;
 }
 
 export async function runCleanup(now = new Date()): Promise<CleanupResult> {
   const day = 24 * 60 * 60 * 1000;
-  const [sessions, rateLimitBuckets, resetTokens, usageCounters] = await prisma.$transaction([
+  const [sessions, rateLimitBuckets, resetTokens, usageCounters, notifications] = await prisma.$transaction([
     prisma.session.deleteMany({ where: { expiresAt: { lt: now } } }),
     prisma.rateLimitBucket.deleteMany({ where: { expiresAt: { lt: now } } }),
     prisma.passwordResetToken.deleteMany({
@@ -31,12 +34,14 @@ export async function runCleanup(now = new Date()): Promise<CleanupResult> {
       },
     }),
     prisma.usageCounter.deleteMany({ where: { day: { lt: new Date(now.getTime() - RETENTION.usageCounterDays * day) } } }),
+    prisma.notification.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - RETENTION.notificationDays * day) } } }),
   ]);
   return {
     sessions: sessions.count,
     rateLimitBuckets: rateLimitBuckets.count,
     resetTokens: resetTokens.count,
     usageCounters: usageCounters.count,
+    notifications: notifications.count,
   };
 }
 

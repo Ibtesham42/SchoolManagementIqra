@@ -12,7 +12,9 @@ import { lockSessionShared } from "@/modules/academic/academic.tx";
 import { loadBranding } from "@/modules/documents/documents.service";
 import { FeeReceiptDocument, type ReceiptCopy } from "@/modules/documents/templates/fee-receipt";
 import { getSchoolTimezone } from "@/modules/settings/settings.public";
+import { afterCommit } from "@/modules/notifications/notifications.service";
 import { readFeeSettingsTx } from "@/modules/settings/settings.service";
+import { receiptNotifications } from "./fees.notify";
 import { lockFeeStudent } from "./fees.tx";
 import type { CancelReceiptInput, ReceiptLookupInput } from "./receipts.schemas";
 
@@ -190,8 +192,9 @@ export async function getReceipt(ctx: AuthContext, id: string) {
 /** Cancel a receipt (FC13): reverse its allocations and restore the invoices' balances in ONE transaction. */
 export async function cancelReceipt(ctx: AuthContext, input: CancelReceiptInput) {
   authorizeFeeWrite(ctx, "fee.refund");
+  let result;
   try {
-    return await prisma.$transaction(
+    result = await prisma.$transaction(
       async (tx) => {
         const head = await tx.feePayment.findUnique({ where: { id: input.id }, select: { studentId: true, allocations: { where: { reversedAt: null }, select: { invoiceId: true } } } });
         if (!head) throw new NotFoundError("Receipt not found.");
@@ -256,6 +259,8 @@ export async function cancelReceipt(ctx: AuthContext, input: CancelReceiptInput)
     if (isTransactionBusy(e)) throw new ServiceBusyError();
     throw e;
   }
+  await afterCommit("receipt-cancel", () => receiptNotifications(input.id, "cancelled"));
+  return result;
 }
 
 /**

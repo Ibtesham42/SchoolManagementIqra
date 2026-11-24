@@ -41,7 +41,7 @@ describe("static guards: every *.portal.ts read runs the portal check before rea
   const files = walk(join(ROOT, "src", "modules")).filter((f) => f.endsWith(".portal.ts"));
 
   it("all four portal modules exist", () => {
-    expect(files.map((f) => f.split(/[\\/]/).pop()).sort()).toEqual(["calendar.portal.ts", "fees.portal.ts", "homework.portal.ts", "notices.portal.ts", "results.portal.ts", "student-attendance.portal.ts", "students.portal.ts", "timetable.portal.ts"]);
+    expect(files.map((f) => f.split(/[\\/]/).pop()).sort()).toEqual(["calendar.portal.ts", "fees.portal.ts", "homework.portal.ts", "notices.portal.ts", "notifications.portal.ts", "results.portal.ts", "student-attendance.portal.ts", "students.portal.ts", "timetable.portal.ts"]);
   });
 
   it("each exported async function checks access first (assertPortalStudent / portalVisibleChildren)", () => {

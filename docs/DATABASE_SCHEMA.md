@@ -232,7 +232,7 @@ Online payments (PENDING payments, gateway columns, PaymentGatewayEvent U(gatewa
 
 | Model | Key fields | Constraints |
 |---|---|---|
-| Notification | userId, type, title, body, link?, readAt?, channel (IN_APP/EMAIL/SMS), dedupeKey? (Phase 6A) | IX(userId, readAt), IX(userId, createdAt DESC); partial U(userId, dedupeKey) WHERE dedupe_key IS NOT NULL (Phase 6A — idempotent fan-out, e.g. one absence alert per child per day) |
+| Notification | userId, type, title, body, link?, readAt?, channel (IN_APP/EMAIL/SMS), dedupeKey? (Phase 6A) | IX(userId, readAt), IX(userId, createdAt DESC); partial U(userId, dedupeKey) WHERE dedupe_key IS NOT NULL (Phase 6A — idempotent fan-out, e.g. one absence alert per child per day). **Written since Phase 6C-M2** (modules/notifications): in-app only; types `result.published`, `attendance.absent`, `fee.receipt`, `fee.receipt_cancelled`, `notice.published`; keys `absence:` / `result:` / `receipt:` / `receipt-cancel:<student>:…`, `notice:<id>`; link always a `/portal/` path; deleted after 90 days (cleanup) |
 | NotificationPreference | userId, type, inApp, email, sms | PK(userId, type) |
 | ImportJob | module, fileId, mapping JSON, status (UPLOADED/MAPPED/VALIDATED/IMPORTING/COMPLETED/FAILED/CANCELLED), totals, reportFileId?, createdById | IX(createdById) |
 | ImportRow | jobId, rowNumber, data JSON, errors JSON, status (VALID/INVALID/DUPLICATE/IMPORTED/SKIPPED), entityId? | U(jobId, rowNumber) |

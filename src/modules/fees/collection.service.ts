@@ -6,6 +6,7 @@ import { todayInTimeZone } from "@/lib/format";
 import { amountInWordsIndian, moneyString, sumMoney, toMoney } from "@/lib/money";
 import type { AuthContext } from "@/lib/rbac/authorize";
 import { formatSequence, nextSequence, sequenceKey } from "@/lib/sequence";
+import { afterCommit } from "@/modules/notifications/notifications.service";
 import { getSchoolName } from "@/modules/settings/settings.public";
 import { readFeeSettingsTx } from "@/modules/settings/settings.service";
 import { latestEnrollment, searchStudentsAnySession } from "@/modules/students/enrollment-reads.tx";
@@ -13,6 +14,7 @@ import { AllocationError, allocatePayment, type OpenInvoice } from "./allocation
 import { normalizeBankName, normalizeReferenceFor } from "./fee-rules";
 import { openInvoicesOf } from "./ledger-reads.tx";
 import { authorizeFeeWrite, holdsAll } from "./fees.policy";
+import { receiptNotifications } from "./fees.notify";
 import { lockFeeStudent } from "./fees.tx";
 import type { CollectInput } from "./collection.schemas";
 
@@ -122,8 +124,9 @@ export async function collectPayment(ctx: AuthContext, input: CollectInput) {
   if (input.method === "CHEQUE" && !bank) throw new ValidationError("Enter the bank name.", [{ path: "bankName", message: "Invalid bank name." }]);
   const instrumentDate = input.method === "CHEQUE" ? input.instrumentDate : null; // review L4: only cheques have one
   const school = await getSchoolName(); // read before the transaction (cached public profile)
+  let result;
   try {
-    return await prisma.$transaction(
+    result = await prisma.$transaction(
       async (tx) => {
         const early = await replayOf(tx, ctx, input);
         if (early) return early;
@@ -239,6 +242,9 @@ export async function collectPayment(ctx: AuthContext, input: CollectInput) {
       { timeout: 20_000 },
     );
   } catch (e) {
-    mapErrors(e);
+    return mapErrors(e);
   }
+  // Phase 6C-M2: after commit; a replayed submit (same idempotency key) notifies nobody again (and dedupe would anyway).
+  if (!result.replay) await afterCommit("receipt", () => receiptNotifications(result.id, "issued"));
+  return result;
 }

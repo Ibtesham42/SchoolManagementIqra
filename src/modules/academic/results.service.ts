@@ -9,7 +9,9 @@ import { hasPermission, scopeFor, type AuthContext } from "@/lib/rbac/authorize"
 import type { Prisma } from "@/generated/prisma/client";
 import { loadBranding } from "@/modules/documents/documents.service";
 import { ReportCardDocument } from "@/modules/documents/templates/report-card";
+import { afterCommit, type NotificationDraft } from "@/modules/notifications/notifications.service";
 import { readResultSettingsTx } from "@/modules/settings/settings.service";
+import { familyRecipientsOf } from "@/modules/students/family-recipients.tx";
 import { rankByPercent, type GradeBand, type OverallResult } from "./grade-calc";
 import { lockExamRowTx, requiredSheets, sheetCoverage } from "./marks.service";
 import { lockProblems, markString, type MarkEntry } from "./marks.rules";
@@ -292,11 +294,31 @@ export async function getSectionResults(ctx: AuthContext, input: SectionResultsI
 const CHUNK = 500;
 
 
+/**
+ * Phase 6C-M2 (P23): after the publication committed, one in-app notification per family (and student) account of each
+ * child with a new report card — "the report card is ready", never marks or results. Dedupe `result:<student>:<exam>`.
+ */
+async function resultNotifications(examId: string): Promise<NotificationDraft[]> {
+  const exam = await prisma.examination.findUnique({ where: { id: examId }, select: { name: true } });
+  if (!exam) return [];
+  const cards = await prisma.reportCard.findMany({ where: { examinationId: examId }, select: { enrollment: { select: { studentId: true } } }, take: 20_000 });
+  const recipients = await familyRecipientsOf(prisma, cards.map((c) => c.enrollment.studentId), { students: true });
+  return recipients.map((r) => ({
+    userId: r.userId,
+    type: "result.published" as const,
+    title: "Report card ready",
+    body: `${r.firstName}'s report card for ${exam.name} is ready.`,
+    link: `/portal/c/${encodeURIComponent(r.studentId)}/results`,
+    dedupeKey: `result:${r.studentId}:${examId}`,
+  }));
+}
+
 /** LOCKED → PUBLISHED with one report-card snapshot per ACTIVE enrollment (`result.publish`). */
 export async function publishResults(ctx: AuthContext, input: ExamRefInput) {
   if (!canPublishResults(ctx)) throw new ForbiddenError();
+  let published: { reportCards: number; passed: number };
   try {
-    return await prisma.$transaction(
+    published = await prisma.$transaction(
       async (tx) => {
         const row = await lockExamRowTx(tx, input);
         if (row.status !== "LOCKED") throw new ConflictError("Lock the exam's marks before publishing results.");
@@ -353,6 +375,8 @@ export async function publishResults(ctx: AuthContext, input: ExamRefInput) {
   } catch (e) {
     return busy(e);
   }
+  await afterCommit("results", () => resultNotifications(input.id));
+  return published;
 }
 
 // ───────────────────────────── Report cards ─────────────────────────────

@@ -4,6 +4,7 @@ import { authorize, type AuthContext } from "@/lib/rbac/authorize";
 import { assertPortalStudent, PORTAL_NOT_FOUND, portalScopeOf, portalVisibleChildren } from "@/lib/rbac/portal-access";
 import { portalCanSee, type PortalChild, type PortalWindow } from "@/lib/rbac/portal-scope";
 import { readStoredFile } from "@/modules/files/files.service";
+import { markMyNotificationReadByKey } from "@/modules/notifications/notifications.service";
 import { currentEnrollment } from "@/modules/students/enrollment-reads.tx";
 import { portalWindow } from "@/modules/students/students.portal";
 import { FAMILY_AUDIENCES, liveWhere } from "./notices.policy";
@@ -103,8 +104,20 @@ export async function openPortalNotice(ctx: AuthContext, id: string, window?: Po
   const n = where ? await prisma.notice.findFirst({ where: { ...where, id }, select: { id: true, title: true, body: true, publishAt: true, expiresAt: true, attachmentFileId: true } }) : null;
   if (!n) throw new NotFoundError(PORTAL_NOT_FOUND);
   // Review 6C-M1 L2: a page opened from another site records no receipt (the caller passes recordRead: false).
-  if (opts.recordRead) await prisma.noticeRead.createMany({ data: [{ noticeId: n.id, userId: ctx.userId }], skipDuplicates: true });
+  if (opts.recordRead) {
+    await prisma.noticeRead.createMany({ data: [{ noticeId: n.id, userId: ctx.userId }], skipDuplicates: true });
+    await markMyNotificationReadByKey(ctx, `notice:${n.id}`); // 6C-M2: reading the notice clears its notification
+  }
   return { id: n.id, title: n.title, body: n.body, publishAt: n.publishAt!, expiresAt: n.expiresAt, hasAttachment: n.attachmentFileId !== null };
+}
+
+/** 6C-M2 (review M1 / M3): which of these notice ids this family may read right now — for filtering the inbox. */
+export async function visibleFamilyNoticeIds(ctx: AuthContext, ids: readonly string[], window?: PortalWindow): Promise<Set<string>> {
+  gate(ctx);
+  const w = window ?? (await portalWindow());
+  const where = familyNoticeWhere(await familyAudience(ctx, w, portalVisibleChildren(ctx, w)), new Date(), w.today);
+  if (!where || ids.length === 0) return new Set();
+  return new Set((await prisma.notice.findMany({ where: { ...where, id: { in: [...ids] } }, select: { id: true }, take: ids.length })).map((n) => n.id));
 }
 
 /** GET /api/v1/portal/notices/[id]/attachment — same audience test, then the file layer (portal permission, exact owner). */

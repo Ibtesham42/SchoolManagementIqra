@@ -21,6 +21,8 @@ import {
   type PortalAccountRow,
 } from "@/modules/identity/portal-accounts.tx";
 import { getPortalSettings, getSchoolName, getSchoolTimezone } from "@/modules/settings/settings.public";
+import { forgetStudentNotifications } from "@/modules/notifications/notifications.service";
+import { guardianAccountIds } from "./family-recipients.tx";
 import type { GuardianSlipInput, SectionSlipsInput } from "./family-accounts.schemas";
 
 /**
@@ -355,16 +357,25 @@ export async function renderActivationSlipsPdf(slips: ActivationSlip[]): Promise
 /** P24: block (or allow) one guardian's portal view of one student. Takes effect at that account's next request. */
 export async function setGuardianPortalAccess(ctx: AuthContext, input: { studentId: string; guardianId: string; portalAccess: boolean }) {
   assertManager(ctx);
-  await prisma.$transaction(async (tx) => {
+  const changed = await prisma.$transaction(async (tx) => {
     await lockTimeout(tx);
     await lockStudents(tx, [input.studentId]);
     await lockGuardians(tx, [input.guardianId]);
     const link = await tx.studentGuardian.findUnique({ where: { studentId_guardianId: { studentId: input.studentId, guardianId: input.guardianId } }, select: { portalAccess: true } });
     if (!link) throw new NotFoundError("Guardian not found.");
-    if (link.portalAccess === input.portalAccess) return;
+    if (link.portalAccess === input.portalAccess) return false;
     await tx.studentGuardian.update({ where: { studentId_guardianId: { studentId: input.studentId, guardianId: input.guardianId } }, data: { portalAccess: input.portalAccess } });
     await audit(tx, actorOf(ctx), { action: input.portalAccess ? "portal.link_allow" : "portal.link_block", entityType: "Student", entityId: input.studentId, before: { guardianId: input.guardianId, portalAccess: link.portalAccess }, after: { guardianId: input.guardianId, portalAccess: input.portalAccess } });
+    return true;
   });
+  // Phase 6C-M2 (P24, plan R5): after a block, nothing about this child stays in that guardian's inbox either.
+  if (changed && !input.portalAccess) {
+    try {
+      await forgetStudentNotifications(await guardianAccountIds(prisma, input.guardianId), input.studentId);
+    } catch (e) {
+      console.error("notifications (custody block) failed", e instanceof Error ? e.name : "unknown");
+    }
+  }
 }
 
 /** Deactivate or reactivate a guardian's portal account (reached from one of the guardian's students). */

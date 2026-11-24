@@ -30,6 +30,11 @@ export function familyAccountWhere(a: FamilyAudience) {
   };
 }
 
+/** Phase 6C-M2: the ids of those accounts (notice fan-out), at most `limit`. */
+export async function familyAccountIds(db: Db, a: FamilyAudience, limit: number): Promise<string[]> {
+  return (await db.user.findMany({ where: familyAccountWhere(a), select: { id: true }, orderBy: { id: "asc" }, take: limit })).map((u) => u.id);
+}
+
 export async function countFamilyAccounts(db: Db, a: FamilyAudience): Promise<number> {
   return db.user.count({ where: familyAccountWhere(a) });
 }
