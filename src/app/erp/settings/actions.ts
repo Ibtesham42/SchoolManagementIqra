@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAuth } from "@/lib/auth/context";
 import { formString, fromError, fromZod, type ActionState } from "@/lib/action-state";
 import { defaultSectionCapacitySchema } from "@/modules/academic/academic.schemas";
-import { academicSessionSchema, schoolProfileSchema, sessionIdSchema, updateAcademicSessionSchema } from "@/modules/settings/settings.schemas";
+import { academicSessionSchema, portalPaymentSettingsSchema, schoolProfileSchema, sessionIdSchema, updateAcademicSessionSchema } from "@/modules/settings/settings.schemas";
 import {
   changeAcademicSessionStatus,
   createAcademicSession,
@@ -15,6 +15,7 @@ import {
   updateDefaultSectionCapacity,
   updateSchoolProfile,
   updatePayrollDayBasis,
+  updatePortalPaymentSettings,
   updateShowRank,
 } from "@/modules/settings/settings.service";
 
@@ -180,6 +181,20 @@ export async function updateShowRankAction(_prev: ActionState, fd: FormData): Pr
     await updateShowRank(ctx, value === "true");
     revalidatePath("/erp/settings");
     return { ok: true, message: value === "true" ? "Report cards published from now on show the rank in class." : "Report cards published from now on show no rank." };
+  } catch (e) {
+    return fromError(e);
+  }
+}
+
+/** Phase 6C-M3 (P19, P17): UPI details for the parent portal and the leaver window. */
+export async function updatePortalSettingsAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireAuth();
+  const parsed = portalPaymentSettingsSchema.safeParse({ payeeName: formString(fd, "payeeName"), vpa: formString(fd, "vpa"), leaverAccessDays: formString(fd, "leaverAccessDays") });
+  if (!parsed.success) return fromZod(parsed.error);
+  try {
+    await updatePortalPaymentSettings(ctx, parsed.data);
+    revalidatePath("/erp/settings");
+    return { ok: true, message: parsed.data.payeeName ? "Portal settings saved. Parents can report UPI payments." : "Portal settings saved. UPI payments are off." };
   } catch (e) {
     return fromError(e);
   }

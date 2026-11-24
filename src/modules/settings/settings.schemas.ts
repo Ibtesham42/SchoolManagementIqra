@@ -129,3 +129,23 @@ export function readPortalSettings(features: unknown): PortalSettings {
   const parsed = portalSettingsSchema.safeParse(block ?? {});
   return parsed.success ? parsed.data : portalSettingsSchema.parse({});
 }
+
+/**
+ * Phase 6C-M3 (P19): the office form for the portal block — the school's UPI payee name and UPI ID (both, or neither =
+ * "Pay by UPI" off) and the leaver access window (P17). `.strict()`.
+ */
+export const portalPaymentSettingsSchema = z
+  .object({
+    payeeName: z.string().trim().max(80, "Use at most 80 characters."),
+    vpa: z.string().trim().toLowerCase().max(320),
+    leaverAccessDays: z.coerce.number("Enter a number of days.").int("Whole days only.").min(0, "0 or more.").max(365, "At most 365."),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    if ((v.payeeName === "") !== (v.vpa === "")) ctx.addIssue({ code: "custom", path: [v.payeeName === "" ? "payeeName" : "vpa"], message: "Fill in both, or clear both to turn UPI payments off." });
+    if (v.payeeName !== "" && v.payeeName.length < 2) ctx.addIssue({ code: "custom", path: ["payeeName"], message: "Use at least 2 characters." });
+    // Review 6C-M3 L4: no control, zero-width or direction-override characters (a misleading payee name).
+    if (/[\u0000-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/.test(v.payeeName)) ctx.addIssue({ code: "custom", path: ["payeeName"], message: "Remove special characters." });
+    if (v.vpa !== "" && !UPI_VPA_RE.test(v.vpa)) ctx.addIssue({ code: "custom", path: ["vpa"], message: "Enter a UPI ID like school@bank." });
+  });
+export type PortalPaymentSettingsInput = z.infer<typeof portalPaymentSettingsSchema>;

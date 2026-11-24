@@ -62,7 +62,7 @@ describe("notification text carries no sensitive data (plan §11)", () => {
 describe("dedupe keys, custody clearing, links, retention", () => {
   const svc = read("src", "modules", "notifications", "notifications.service.ts");
   it("every per-student key prefix is cleared on a custody block", () => {
-    const prefixes = svc.match(/\["absence", "result", "receipt", "receipt-cancel"\]/);
+    const prefixes = svc.match(/\["absence", "result", "receipt", "receipt-cancel", "claim"\]/);
     expect(prefixes).not.toBeNull();
     expect(read("src", "modules", "students", "student-attendance.service.ts")).toMatch(/dedupeKey: `absence:\$\{r\.studentId\}:/);
     expect(read("src", "modules", "academic", "results.service.ts")).toMatch(/dedupeKey: `result:\$\{r\.studentId\}:/);

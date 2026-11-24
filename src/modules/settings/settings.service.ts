@@ -22,8 +22,10 @@ import {
 import { invalidateSchoolProfileCache } from "./settings.public";
 import type {
   AcademicSessionInput,
+  PortalPaymentSettingsInput,
   SchoolProfileInput,
 } from "./settings.schemas";
+import { portalSettingsSchema, readPortalSettings } from "./settings.schemas";
 import {
   assertCanBeCurrent,
   assertEditable,
@@ -730,6 +732,38 @@ export async function setCurrentAcademicSession(ctx: AuthContext, id: string) {
       entityId: SETTINGS_ID,
       before: { currentAcademicSessionId: before },
       after: { currentAcademicSessionId: id },
+    });
+  });
+  invalidateSchoolProfileCache();
+}
+
+// ───────────────────────────── Phase 6C-M3: portal payments and leaver window ─────────────────────────────
+
+/** The portal block as the office sees it (settings.read). */
+export async function getPortalSettingsForOffice(ctx: AuthContext) {
+  authorize(ctx, "settings.read");
+  const row = await prisma.schoolSetting.findUnique({ where: { id: SETTINGS_ID }, select: { features: true } });
+  return readPortalSettings(row?.features);
+}
+
+/** Saves the UPI details (both or neither) and the leaver window inside `features.portal`; other keys are kept. */
+export async function updatePortalPaymentSettings(ctx: AuthContext, input: PortalPaymentSettingsInput) {
+  authorize(ctx, "settings.manage");
+  await prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM school_setting WHERE id = ${SETTINGS_ID} FOR UPDATE`;
+    if (locked.length === 0) throw new ConflictError("Save the school profile before changing portal settings.");
+    const row = await tx.schoolSetting.findUniqueOrThrow({ where: { id: SETTINGS_ID }, select: { features: true } });
+    const features = row.features && typeof row.features === "object" && !Array.isArray(row.features) ? (row.features as Record<string, unknown>) : {};
+    const before = readPortalSettings(features);
+    const upi = input.payeeName === "" ? null : { payeeName: input.payeeName, vpa: input.vpa };
+    const next = portalSettingsSchema.parse({ ...before, upi, leaverAccessDays: input.leaverAccessDays });
+    await tx.schoolSetting.update({ where: { id: SETTINGS_ID }, data: { features: { ...features, portal: next } as Prisma.InputJsonValue } });
+    await audit(tx, actorOf(ctx), {
+      action: "settings.portal_update",
+      entityType: "SchoolSetting",
+      entityId: SETTINGS_ID,
+      before: { upi: before.upi, leaverAccessDays: before.leaverAccessDays },
+      after: { upi: next.upi, leaverAccessDays: next.leaverAccessDays },
     });
   });
   invalidateSchoolProfileCache();

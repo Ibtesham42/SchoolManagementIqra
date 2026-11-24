@@ -3,7 +3,9 @@ import { Download } from "lucide-react";
 import { requirePortal } from "@/lib/auth/context";
 import { ForbiddenError, NotFoundError } from "@/lib/errors";
 import { formatDateOnly } from "@/lib/format";
+import Link from "next/link";
 import { getPortalFeeLedger, type PortalInvoice } from "@/modules/fees/fees.portal";
+import { getPortalSettings } from "@/modules/settings/settings.public";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,16 +71,25 @@ export default async function PortalFeesPage({ params }: { params: Promise<{ stu
     if (e instanceof NotFoundError || e instanceof ForbiddenError) notFound();
     throw e;
   });
+  // Phase 6C-M3: "Pay by UPI" for parents when the school set its UPI ID (the pay page re-checks everything).
+  const upi = ctx.portal.kind === "GUARDIAN" ? (await getPortalSettings()).upi : null;
   const open = data.invoices.filter((i) => i.status === "Due" || i.status === "Part paid");
   const settled = data.invoices.filter((i) => !(i.status === "Due" || i.status === "Part paid"));
   return (
     <div className="grid gap-4">
-      <PageHeader title="Fees" description="Pay at the school office. Amounts include any late fee as of today." />
+      <PageHeader title="Fees" description={upi ? "Pay at the school office or by UPI. Amounts include any late fee as of today." : "Pay at the school office. Amounts include any late fee as of today."} />
       <Card className="gap-1 py-4">
         <CardHeader className="px-4">
           <CardDescription>Due today</CardDescription>
           <CardTitle className="text-2xl tabular-nums">{rs(data.dueToday)}</CardTitle>
         </CardHeader>
+        {upi && (
+          <CardContent className="px-4 pt-2">
+            <Button asChild variant={data.dueToday !== "0.00" ? "default" : "outline"} className="min-h-11">
+              <Link href={`/portal/c/${encodeURIComponent(studentId)}/fees/pay`}>{data.dueToday !== "0.00" ? "Pay by UPI" : "UPI payments you reported"}</Link>
+            </Button>
+          </CardContent>
+        )}
       </Card>
       {data.overdueCount > 0 && (
         <Alert variant="destructive" role="status">

@@ -95,6 +95,10 @@ const REF_INDEXES = [
   { index: "fee_payment_live_card_key", fields: ["transactionRef"] },
 ];
 
+export function mapCollectionErrors(e: unknown): never {
+  return mapErrors(e);
+}
+
 function mapErrors(e: unknown): never {
   if (isUniqueViolation(e, "idempotencyKey")) throw new ConflictError("This payment was already submitted. Reload the page to see the receipt.");
   if (isUniqueViolation(e, "receiptNo")) throw new ConflictError("A receipt number made with the current format already exists. Ask the school administrator to change the receipt number format.");
@@ -114,8 +118,23 @@ async function replayOf(db: Db, ctx: AuthContext, input: CollectInput) {
   throw new ConflictError("This form was already used for another payment. Reload the page and try again.");
 }
 
-/** Collect a payment at the counter and issue its receipt in ONE transaction. */
-export async function collectPayment(ctx: AuthContext, input: CollectInput) {
+/** The trailing 12-digit UPI transaction reference (UTR / RRN) of a canonical reference, or null. */
+export function upiTail(ref: string): string | null {
+  const m = /(\d{12})$/.exec(ref);
+  return m ? m[1] : null;
+}
+
+export interface CollectionPrep {
+  ref: string | null;
+  bank: string | null;
+  instrumentDate: string | null;
+  school: string;
+  /** Phase 6C-M3 (review L3): claim confirmation counts back-dating from the day the parent reported the payment. */
+  maxBackdateDays?: number;
+}
+
+/** Checks and normalisation before any transaction (Phase 6C-M3: shared with claim confirmation). */
+export async function prepareCollection(ctx: AuthContext, input: CollectInput): Promise<CollectionPrep> {
   authorizeFeeWrite(ctx, "fee.collect");
   if (input.waiveLateFeeInvoiceIds.length > 0 && !holdsAll(ctx, "fee.concession.manage")) throw new ForbiddenError("You can't waive late fees.");
   const ref = input.method === "CASH" ? null : input.transactionRef ? normalizeReferenceFor(input.method, input.transactionRef) : null;
@@ -124,22 +143,35 @@ export async function collectPayment(ctx: AuthContext, input: CollectInput) {
   if (input.method === "CHEQUE" && !bank) throw new ValidationError("Enter the bank name.", [{ path: "bankName", message: "Invalid bank name." }]);
   const instrumentDate = input.method === "CHEQUE" ? input.instrumentDate : null; // review L4: only cheques have one
   const school = await getSchoolName(); // read before the transaction (cached public profile)
-  let result;
-  try {
-    result = await prisma.$transaction(
-      async (tx) => {
+  return { ref, bank, instrumentDate, school };
+}
+
+/**
+ * The collection itself, inside the CALLER's transaction: the counter (collectPayment) and, since Phase 6C-M3, the
+ * confirmation of a parent's UPI claim (payment-claims.service), so both issue receipts through one path. Errors are
+ * mapped by the caller with `mapCollectionErrors`.
+ */
+export async function collectInTx(tx: Tx, ctx: AuthContext, input: CollectInput, prep: CollectionPrep) {
+  const { ref, bank, instrumentDate, school } = prep;
         const early = await replayOf(tx, ctx, input);
         if (early) return early;
         await lockFeeStudent(tx, input.studentId);
         // Review L1: check the key again under the lock (a concurrent same-key submit has committed by now).
         const again = await replayOf(tx, ctx, input);
         if (again) return again;
+        // Review 6C-M3 M1b: a UPI reference counts by its 12-digit UTR, whatever prefix was typed ("UTR …", "UPI/…"), so
+        // a payment confirmed from a parent's claim (bare digits) can't be collected again at the counter, nor the reverse.
+        const utr = input.method === "UPI" && ref ? upiTail(ref) : null;
+        if (utr && (await tx.feePayment.findFirst({ where: { status: "SUCCESS", method: { in: ["UPI", "BANK_TRANSFER"] }, transactionRef: { endsWith: utr } }, select: { id: true } }))) {
+          throw new ConflictError("This UPI reference is already on another receipt. Check the UPI reference.");
+        }
         const settings = await readFeeSettingsTx(tx);
         if (!settings.feeReceipt) throw new ConflictError("Set the receipt number format first (Fees → Fee heads).");
         const today = todayInTimeZone(settings.timezone ?? undefined);
         if (input.paidOn > today) throw new ValidationError("The payment date can't be in the future.", [{ path: "paidOn", message: "Future date." }]);
         const backdated = daysBetween(today, input.paidOn);
-        if (backdated > BACKDATE_DAYS) throw new ValidationError(`The payment date can be at most ${BACKDATE_DAYS} days ago.`, [{ path: "paidOn", message: "Too far back." }]);
+        const maxBack = prep.maxBackdateDays ?? BACKDATE_DAYS;
+        if (backdated > maxBack) throw new ValidationError(`The payment date can be at most ${maxBack} days ago.`, [{ path: "paidOn", message: "Too far back." }]);
         const who = await latestEnrollment(tx, input.studentId);
         if (!who) throw new NotFoundError("Student not found.");
         // Lock the student's open invoices; review L2: read ONLY the rows locked.
@@ -238,9 +270,14 @@ export async function collectPayment(ctx: AuthContext, input: CollectInput) {
         await audit(tx, actorOf(ctx), { action: "fee_payment.collect", entityType: "FeePayment", entityId: payment.id, after: { receiptNo, method: input.method, paidOn: input.paidOn, invoices: touched.size, ...(backdated > 0 ? { backdatedDays: backdated } : {}) } });
         if (waive.size > 0) await audit(tx, actorOf(ctx), { action: "fee_late_fee.waive", entityType: "FeePayment", entityId: payment.id, after: { invoiceIds: [...waive] } });
         return { id: payment.id, receiptNo, replay: false, cancelled: false };
-      },
-      { timeout: 20_000 },
-    );
+}
+
+/** Collect a payment at the counter and issue its receipt in ONE transaction. */
+export async function collectPayment(ctx: AuthContext, input: CollectInput) {
+  const prep = await prepareCollection(ctx, input);
+  let result;
+  try {
+    result = await prisma.$transaction((tx) => collectInTx(tx, ctx, input, prep), { timeout: 20_000 });
   } catch (e) {
     return mapErrors(e);
   }

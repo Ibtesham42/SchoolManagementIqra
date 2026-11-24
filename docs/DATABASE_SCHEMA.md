@@ -256,3 +256,11 @@ Internal notices (P21, P22, ADR-047), separate from the Phase 8 public CMS notic
 - **`notice_target`:** id, `(notice_id, academic_session_id, scope) → notice (CASCADE, ON UPDATE CASCADE)`, `class_id → school_class (RESTRICT)?`, `(section_id, academic_session_id) → section (RESTRICT)?`, timestamps; U(notice_id, class_id), U(notice_id, section_id); IX class_id, section_id. CHECK `notice_target_kind`: CLASS ⇒ class only, SECTION ⇒ section only (SCHOOL notices have no targets). The composite FK keeps every target in its notice's session and scope.
 - **`notice_read`:** PK (notice_id, user_id), `read_at` — read receipts; CASCADE with the notice or the user; IX user_id.
 - Backup / restore order: `notice`, `notice_target`, `notice_read` after `fee_payment_allocation` (scripts/db-tables.ts).
+
+## Phase 6C-M3 additions (migration `20261128000000_phase6c_payment_claims` — SQL owner-approved 2026-11-24; **not applied** yet)
+
+Parent payment claims — UPI / bank-transfer intimation (P19, ADR-048). Expand-only: two enums, one table.
+- **Enums:** `FeeClaimMethod` (UPI / BANK_TRANSFER), `FeeClaimStatus` (SUBMITTED / CONFIRMED / REJECTED).
+- **`fee_payment_claim`:** id, `student_id → student (RESTRICT)`, `amount numeric(12,2)`, `method`, `transaction_ref varchar(40)` (canonical: UPI 12 digits; bank transfer 6–30 letters and digits — the same string the confirmed receipt carries), `paid_on date`, `status` (default SUBMITTED), `submitted_by_id → user (SET NULL)?`, `payment_id → fee_payment (RESTRICT, unique)?`, `decided_by_id → user (SET NULL)?`, `decided_at?`, `reject_reason varchar(300)?` (office-only), `version`, timestamps. **Partial unique** `fee_payment_claim_live_ref_key` (transaction_ref) WHERE status IN (SUBMITTED, CONFIRMED) — a rejected claim frees its reference; IX (status, created_at), (student_id, created_at). CHECKs: amount > 0; non-blank reference; CONFIRMED ⇔ payment_id; REJECTED ⇔ a non-blank reason; decided_at set ⇔ not SUBMITTED; decider ≠ submitter; version ≥ 1.
+- `SchoolSetting.features.portal.upi` ({ payeeName, vpa } or null) and `leaverAccessDays` are now editable in Settings (no migration).
+- Backup / restore order: `fee_payment_claim` after `fee_payment_allocation`.

@@ -21,6 +21,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 - **Updates for parents** (bell at the top of the parent portal): parents get an in-app update when a report card is published, when their child is marked absent today (once a day), when a fee receipt is issued or cancelled, and when the school publishes a notice for them. Opening an update goes to the right page; updates are kept for 90 days. No emails or SMS are sent for these. If the office blocks a parent from seeing a child, that parent's updates about the child are removed.
 
+- **Pay by UPI** (parent portal → a child's Fees → Pay by UPI): when the school has entered its UPI ID in Settings, parents see the amount due today and the school's UPI ID, open their UPI app with the amount filled in, then tell the school the payment reference (UTR) and date. Nothing is marked paid until the Accountant checks it against the bank statement under **Fees → UPI claims** and confirms it — this issues a normal receipt — or rejects it (the parent is asked to contact the office). No money passes through the portal and there are no payment-gateway fees. **Needs the database update (migration 20261128000000) before use.**
+
 ### Changed (Phase 6A)
 - Parent and student accounts can no longer be edited from Users (only from the student's Family access), and "forgot password" never applies to them; the office prints a new slip instead.
 - "Keep me signed in" lasts 30 days only for parent and student accounts; staff are always signed out after 8 hours without use.

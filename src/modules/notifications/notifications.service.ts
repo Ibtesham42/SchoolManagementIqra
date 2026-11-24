@@ -18,7 +18,7 @@ import type { AuthContext } from "@/lib/rbac/authorize";
  * - Readers see only their own rows (userId = ctx.userId); anything else is NotFound. Retention: 90 days
  *   (lib/maintenance cleanup).
  */
-export type NotificationType = "result.published" | "attendance.absent" | "fee.receipt" | "fee.receipt_cancelled" | "notice.published";
+export type NotificationType = "result.published" | "attendance.absent" | "fee.receipt" | "fee.receipt_cancelled" | "fee.claim_confirmed" | "fee.claim_rejected" | "notice.published";
 
 export interface NotificationDraft {
   userId: string;
@@ -60,7 +60,7 @@ export async function afterCommit(label: string, build: () => Promise<readonly N
 /** Removes a family account's notifications about one student (P24 custody block: nothing about the child remains). */
 export async function forgetStudentNotifications(userIds: readonly string[], studentId: string): Promise<number> {
   if (userIds.length === 0) return 0;
-  const prefixes = ["absence", "result", "receipt", "receipt-cancel"].map((k) => `${k}:${studentId}:`);
+  const prefixes = ["absence", "result", "receipt", "receipt-cancel", "claim"].map((k) => `${k}:${studentId}:`);
   const r = await prisma.notification.deleteMany({ where: { userId: { in: [...userIds] }, OR: prefixes.map((p) => ({ dedupeKey: { startsWith: p } })) } });
   return r.count;
 }
@@ -75,7 +75,7 @@ export async function forgetNoticeNotifications(noticeId: string): Promise<numbe
  * still see that (notifications.portal; review 6C-M2 M1/M2/L1–L3). Unknown keys → null (never shown in the portal).
  */
 export type NotificationTarget = { kind: "student"; studentId: string; capability: "attendance" | "results" | "fees" } | { kind: "notice"; noticeId: string };
-const KEY_CAPABILITY = { absence: "attendance", result: "results", receipt: "fees", "receipt-cancel": "fees" } as const;
+const KEY_CAPABILITY = { absence: "attendance", result: "results", receipt: "fees", "receipt-cancel": "fees", claim: "fees" } as const;
 
 export function notificationTarget(dedupeKey: string | null): NotificationTarget | null {
   if (!dedupeKey) return null;

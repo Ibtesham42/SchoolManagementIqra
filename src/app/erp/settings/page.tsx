@@ -1,4 +1,5 @@
 import { PayrollBasisForm } from "./payroll-basis-form";
+import { PortalSettingsForm } from "./portal-form";
 import { updateShowRankAction } from "./actions";
 import Link from "next/link";
 import { CalendarRange, FileText, Trash2 } from "lucide-react";
@@ -12,6 +13,7 @@ import {
   getStudentWeeklyOff,
   getShowRank,
   getPayrollDayBasis,
+  getPortalSettingsForOffice,
   listAcademicSessions,
 } from "@/modules/settings/settings.service";
 import { Badge } from "@/components/ui/badge";
@@ -54,13 +56,14 @@ export default async function SettingsPage() {
   const ctx = await requireAuth();
   if (!hasPermission(ctx, "settings.read")) return <NotPermitted />;
   const canManage = hasPermission(ctx, "settings.manage");
-  const [settings, { sessions, currentId }, weeklyOff, studentWeeklyOff, payrollBasis, showRank] = await Promise.all([
+  const [settings, { sessions, currentId }, weeklyOff, studentWeeklyOff, payrollBasis, showRank, portal] = await Promise.all([
     getSchoolSettings(ctx),
     listAcademicSessions(ctx),
     getStaffWeeklyOff(ctx),
     getStudentWeeklyOff(ctx),
     getPayrollDayBasis(ctx),
     getShowRank(ctx),
+    getPortalSettingsForOffice(ctx),
   ]);
   const address = (settings?.address as Address) ?? null;
   const timings = (settings?.timings as Timings) ?? null;
@@ -271,6 +274,22 @@ export default async function SettingsPage() {
               days={weeklyOff.days}
               saturdays={weeklyOff.saturdays}
             />
+          </CardContent>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>Parent portal: UPI payments and leavers</h2>
+          </CardTitle>
+          <CardDescription>
+            {portal.upi ? `Parents see "Pay by UPI" with ${portal.upi.vpa}. Each payment they report waits for the Accountant to confirm it against the bank statement.` : "UPI payments are off: parents don't see \"Pay by UPI\"."} Families keep report cards and fees for {portal.leaverAccessDays} days after a child leaves.
+          </CardDescription>
+        </CardHeader>
+        {canManage && (
+          <CardContent>
+            <PortalSettingsForm defaults={{ payeeName: portal.upi?.payeeName ?? "", vpa: portal.upi?.vpa ?? "", leaverAccessDays: portal.leaverAccessDays }} />
           </CardContent>
         )}
       </Card>

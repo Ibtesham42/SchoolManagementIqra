@@ -49,6 +49,8 @@ export const RULES = {
   portalPdf: { name: "portal-pdf", limit: 30, windowSeconds: 10 * 60 },
   // Phase 6C-M1 (plan §2.5): writing notices (new drafts and publications), per signed-in user.
   noticeCompose: { name: "notice-compose", limit: 30, windowSeconds: 60 * 60 },
+  // Phase 6C-M3 (plan §2.5): parents' UPI / bank-transfer claims, per signed-in family account.
+  paymentClaim: { name: "payment-claim", limit: 5, windowSeconds: 24 * 60 * 60 },
   // Phase 6A-M3: activation slip PDFs (each issues codes and renders), per signed-in office user.
   portalSlips: { name: "portal-slips", limit: 30, windowSeconds: 10 * 60 },
   // Public file route (S-04), per client IP — IN-PROCESS only (hitLocal): it must not touch the database.

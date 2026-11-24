@@ -39,6 +39,14 @@ Notice 1─< NoticeRead >─1 User (both CASCADE) — read receipts
 Notice 0..1─0..1 StoredFile (attachment_file_id, unique, RESTRICT); User ─< Notice (created / published / withdrawn by, SET NULL)
 ```
 
+### Phase 6C-M3 payment claims (ADR-048)
+
+```
+Student 1─< FeePaymentClaim (RESTRICT)
+FeePaymentClaim 0..1─0..1 FeePayment (payment_id, unique, RESTRICT) — the receipt a confirmation issued
+User ─< FeePaymentClaim (submitted by / decided by, SET NULL; CHECK decider ≠ submitter)
+```
+
 ## Rules
 
 1. **Student is session-independent; StudentEnrollment is per session.** Class/section/roll number always come from the enrollment for the session in question. Promotion = new enrollment in the next session (old one → PROMOTED). This keeps history intact.
