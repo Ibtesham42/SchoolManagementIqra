@@ -53,6 +53,14 @@ export const HOMEWORK_UPLOAD_MESSAGES: Record<UploadCode, string> = {
   closed: "This homework was changed by someone else, or can't be changed now. Reload the page and try again.",
 };
 
+/** Phase 6C-M1 notice attachments — notice wording, never text from the URL. */
+export const NOTICE_UPLOAD_MESSAGES: Record<UploadCode, string> = {
+  ...HOMEWORK_UPLOAD_MESSAGES,
+  forbidden: "You can't change this notice, or the request didn't come from this site.",
+  not_found: "That notice wasn't found.",
+  closed: "This notice was changed by someone else, or it is already published. Reload the page and try again.",
+};
+
 export function isUploadCode(v: unknown): v is UploadCode {
   return typeof v === "string" && Object.hasOwn(UPLOAD_MESSAGES, v);
 }

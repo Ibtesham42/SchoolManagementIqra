@@ -139,11 +139,14 @@ const ROWS: Row[] = [
   { route: "payroll/runs/[id]/export", method: "POST", params: () => ({ id: ID }), body: () => "format=csv" },
   { route: "payroll/slips/[id]/pdf", method: "GET", params: () => ({ id: ID }) },
   { route: "staff-attendance/summary/export", method: "POST", params: () => ({}), body: () => "month=2026-11" },
+  // Phase 6C-M1: notice attachments (staff upload / download).
+  { route: "notices/[id]/attachment", method: "GET", params: () => ({ id: ID }) },
+  { route: "notices/[id]/attachment", method: "POST", params: () => ({ id: ID }), body: () => "file=x" },
   { route: "portal-accounts/slips", method: "POST", params: () => ({}), body: (s) => `target=guardian&studentId=${s}&guardianId=g1&mode=reset` },
 ];
 
 /** Phase 6B-M2: family download routes. A family's own-child request needs the record's owner (database); staff are refused first. */
-const PORTAL_ROUTES = ["portal/report-cards/[id]/pdf", "portal/homework/[id]/attachment", "portal/receipts/[id]/pdf"];
+const PORTAL_ROUTES = ["portal/report-cards/[id]/pdf", "portal/homework/[id]/attachment", "portal/receipts/[id]/pdf", "portal/notices/[id]/attachment"];
 
 async function call(row: Row, studentId: string) {
   const mod = (await import(`@/app/api/v1/${row.route}/route`)) as Record<string, Handler>;

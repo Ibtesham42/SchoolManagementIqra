@@ -107,3 +107,36 @@ export async function sessionOptions(db: Tx | typeof prisma) {
 export async function activeClassOptions(db: Tx | typeof prisma) {
   return db.schoolClass.findMany({ where: { isActive: true }, orderBy: [{ displayOrder: "asc" }, { numericLevel: "asc" }, { id: "asc" }], take: 100, select: { id: true, code: true, name: true } });
 }
+
+/**
+ * Phase 6C-M1 (notices): the sections of a session among `ids`, with class, class teacher and the session's status —
+ * for audience targets. Pass `lock` inside a transaction to take FOR SHARE on the rows first (serializes with a class
+ * teacher change; lock order: academic_session → section). No authorization: the notices service authorized itself.
+ */
+export async function noticeSections(db: Tx | typeof prisma, academicSessionId: string, ids: readonly string[], lock = false) {
+  if (ids.length === 0) return [];
+  if (lock) await (db as Tx).$queryRaw`SELECT id FROM section WHERE id = ANY(${[...ids]}) ORDER BY id FOR SHARE`;
+  const rows = await db.section.findMany({
+    where: { id: { in: [...ids] }, academicSessionId },
+    orderBy: [{ class: { displayOrder: "asc" } }, { code: "asc" }],
+    take: ids.length,
+    select: { id: true, code: true, classId: true, classTeacherId: true, academicSession: { select: { status: true } } },
+  });
+  return rows.map((r) => ({ id: r.id, code: r.code, classId: r.classId, classTeacherId: r.classTeacherId, sessionClosed: r.academicSession.status === "CLOSED" }));
+}
+
+/** Phase 6C-M1 (notices): classes among `ids` (any state — an old notice may name a class deactivated since). */
+export async function noticeClasses(db: Tx | typeof prisma, ids: readonly string[]) {
+  if (ids.length === 0) return [];
+  return db.schoolClass.findMany({ where: { id: { in: [...ids] } }, orderBy: [{ displayOrder: "asc" }, { id: "asc" }], take: ids.length, select: { id: true, code: true, name: true, isActive: true } });
+}
+
+/** Phase 6C-M1 (notices): a session's sections for the audience picker — all, or only those `classTeacherId` leads. */
+export async function noticeSectionOptions(db: Tx | typeof prisma, academicSessionId: string, classTeacherId?: string) {
+  return db.section.findMany({
+    where: { academicSessionId, ...(classTeacherId ? { classTeacherId } : {}) },
+    orderBy: [{ class: { displayOrder: "asc" } }, { code: "asc" }],
+    take: 300,
+    select: { id: true, code: true },
+  });
+}

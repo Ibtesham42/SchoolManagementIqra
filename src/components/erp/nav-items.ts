@@ -14,7 +14,8 @@ export type NavIcon =
   | "leave"
   | "staffAttendance"
   | "payroll"
-  | "fees";
+  | "fees"
+  | "notices";
 
 export interface NavItem {
   href: string;
@@ -101,6 +102,8 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "academic",
     anyOf: ["academic.read"],
   }, // every academic screen reads first; manage alone shows nothing
+  // Phase 6C-M1 (P22): school notices — every staff role reads; notice.manage holders also write.
+  { href: "/erp/notices", label: "Notices", icon: "notices", anyOf: ["notice.read", "notice.manage"] },
   { href: "/erp/users", label: "Users", icon: "users", anyOf: ["user.read"] },
   { href: "/erp/roles", label: "Roles", icon: "roles", anyOf: ["role.manage"] },
   {

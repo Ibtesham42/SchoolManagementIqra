@@ -190,7 +190,8 @@ describe("portal navigation", () => {
     expect(childIdFromPath("/portal/c/%E0%A4/profile", ["kid1"])).toBeNull();
     expect(childIdFromPath("/portal", ["kid1"])).toBeNull();
     for (const id of [null, "kid1"]) for (const item of portalNavItems(id)) expect(item.href.startsWith("/portal")).toBe(true);
-    expect(portalNavItems("kid1").map((i) => i.label)).toEqual(["Home", "Profile", "Account"]);
+    expect(portalNavItems("kid1").map((i) => i.label)).toEqual(["Home", "Profile", "Notices", "Account"]);
+    expect(portalNavItems(null).map((i) => i.label)).toEqual(["Home", "Notices", "Account"]);
   });
 });
 

@@ -89,6 +89,10 @@ export const APP_TABLES_IN_FK_ORDER = [
   "fee_payment", // → student, user (before fee_invoice_item since Phase 6A: KI-105 links point at it)
   "fee_invoice_item", // → fee_invoice, fee_category, student_fee_charge, fee_payment (waived with / frozen by), user
   "fee_payment_allocation", // → fee_payment, fee_invoice_item, fee_invoice
+  // Phase 6C notices — migration 20261127000000 (SQL approved 2026-11-24; not applied yet).
+  "notice", // → academic_session, stored_file, user
+  "notice_target", // → notice, school_class, section
+  "notice_read", // → notice, user
   "audit_log",
   "notification",
   "sequence_counter",

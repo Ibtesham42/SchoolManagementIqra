@@ -113,6 +113,19 @@ export const UPLOAD_RULES = {
     ownerType: "Homework",
     description: "Homework attachment (PDF, JPEG or PNG, up to 10 MB)",
   },
+  // Notice attachment (Phase 6C-M1, P22): one optional PDF / image per Notice (owner = the Notice id), added while the
+  // notice is a draft. Staff read it with notice.read and families with notice.read (portal), each only AFTER the
+  // notices service decided the notice is theirs to read.
+  "notice.attachment": {
+    allowed: ["application/pdf", "image/jpeg", "image/png"],
+    maxBytes: DOCUMENT_MAX_BYTES,
+    visibility: "PRIVATE",
+    uploadPermission: "notice.manage",
+    readPermission: "notice.read",
+    portalReadPermission: "notice.read",
+    ownerType: "Notice",
+    description: "Notice attachment (PDF, JPEG or PNG, up to 10 MB)",
+  },
 } as const satisfies Record<string, UploadRule>;
 
 /** Purposes recorded for files that predate purposes (migration 20261109000000): Super Admin only. */

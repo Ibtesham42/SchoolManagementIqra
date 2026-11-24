@@ -29,6 +29,16 @@ StudentGuardian.portal_access — per (student, guardian) custody block
 FeeInvoiceItem >─0..1 FeePayment (waived_with / frozen_by, RESTRICT) — KI-105
 ```
 
+### Phase 6C notices (ADR-047)
+
+```
+AcademicSession 1─< Notice (RESTRICT)
+Notice 1─< NoticeTarget (CASCADE; composite (notice_id, academic_session_id, scope) — same session and scope)
+NoticeTarget >─0..1 SchoolClass (RESTRICT) | >─0..1 Section (composite with the session, RESTRICT)
+Notice 1─< NoticeRead >─1 User (both CASCADE) — read receipts
+Notice 0..1─0..1 StoredFile (attachment_file_id, unique, RESTRICT); User ─< Notice (created / published / withdrawn by, SET NULL)
+```
+
 ## Rules
 
 1. **Student is session-independent; StudentEnrollment is per session.** Class/section/roll number always come from the enrollment for the session in question. Promotion = new enrollment in the next session (old one → PROMOTED). This keeps history intact.

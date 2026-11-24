@@ -112,6 +112,11 @@ model User {
   feeInvoicesCancelled   FeeInvoice[]        @relation("FeeInvoiceCancelledBy")
   feePaymentsCollected   FeePayment[]        @relation("FeePaymentCollectedBy")
   feePaymentsCancelled   FeePayment[]        @relation("FeePaymentCancelledBy")
+  // Phase 6C notices (actor references, SetNull; read receipts cascade)
+  noticesCreated         Notice[]            @relation("NoticeCreatedBy")
+  noticesPublished       Notice[]            @relation("NoticePublishedBy")
+  noticesWithdrawn       Notice[]            @relation("NoticeWithdrawnBy")
+  noticeReads            NoticeRead[]        @relation("NoticeReadBy")
 
   @@index([isActive])
   @@map("user")
@@ -294,6 +299,8 @@ model AcademicSession {
   feeInstallments    FeeInstallment[]
   feeStructures      FeeStructure[]
   lateFeeRules       LateFeeRule[]
+  // Phase 6C
+  notices            Notice[]
 
   @@map("academic_session")
 }
@@ -331,6 +338,8 @@ model SchoolClass {
   // Phase 4C
   promotionTargets PromotionDecision[]
   feeStructures    FeeStructure[]
+  // Phase 6C
+  noticeTargets    NoticeTarget[]
 
   @@index([isActive, displayOrder])
   @@map("school_class")
@@ -371,7 +380,9 @@ model Section {
   marksSheets        MarksSheet[]
 
   // Phase 4C
-  homework Homework[]
+  homework      Homework[]
+  // Phase 6C
+  noticeTargets NoticeTarget[]
 
   @@unique([academicSessionId, classId, nameKey])
   @@unique([academicSessionId, code])
@@ -429,6 +440,7 @@ model StoredFile {
   generatedDocument GeneratedDocument? @relation("GeneratedDocumentFile")
   studentDocument   StudentDocument?   @relation("StudentDocumentFile")
   employeeDocument  EmployeeDocument?  @relation("EmployeeDocumentFile")
+  noticeAttachment  Notice?            @relation("NoticeAttachment")
 
   @@index([sha256])
   @@index([visibility])
@@ -2482,4 +2494,111 @@ model FeePaymentAllocation {
   @@index([invoiceItemId])
   @@index([invoiceId])
   @@map("fee_payment_allocation")
+}
+
+// ───────────────────────────── Phase 6C notices (ADR-047) ─────────────────────────────
+
+/// Who a notice is for. STAFF and ALL notices are school-wide only (CHECK notice_staff_school_wide).
+enum NoticeAudience {
+  FAMILIES
+  STAFF
+  ALL
+}
+
+/// How far a notice reaches. CLASS / SECTION notices list their targets in notice_target.
+enum NoticeScope {
+  SCHOOL
+  CLASS
+  SECTION
+}
+
+/// DRAFT (editable, hard-deletable) → PUBLISHED (visible from publishAt; a future publishAt is "scheduled") →
+/// WITHDRAWN (gone for readers). Never edited after publish: withdraw and write a new one (P22).
+enum NoticeStatus {
+  DRAFT
+  PUBLISHED
+  WITHDRAWN
+}
+
+/// P22: an internal notice (school → families and/or staff), separate from Phase 8 public CMS notices.
+/// CHECKs in migration phase6c_notices: non-empty title/body, published/withdrawn columns complete, expiry after
+/// publish, STAFF/ALL only at SCHOOL scope.
+model Notice {
+  id                String         @id @default(cuid(2))
+  academicSessionId String         @map("academic_session_id")
+  title             String         @db.VarChar(150)
+  /// Plain text, never HTML (rendered as text with preserved line breaks).
+  body              String         @db.VarChar(4000)
+  audience          NoticeAudience
+  scope             NoticeScope
+  status            NoticeStatus   @default(DRAFT)
+  /// When readers start seeing it (set at publish; may be in the future = scheduled).
+  publishAt         DateTime?      @map("publish_at") @db.Timestamptz(3)
+  /// When readers stop seeing it (optional; CHECK > publishAt).
+  expiresAt         DateTime?      @map("expires_at") @db.Timestamptz(3)
+  /// Optional private PDF / image (upload purpose notice.attachment; owner ("Notice", id)).
+  attachmentFileId  String?        @unique @map("attachment_file_id")
+  createdById       String?        @map("created_by_id")
+  publishedById     String?        @map("published_by_id")
+  /// When the publish action happened (publishAt may be later).
+  publishedAt       DateTime?      @map("published_at") @db.Timestamptz(3)
+  withdrawnById     String?        @map("withdrawn_by_id")
+  withdrawnAt       DateTime?      @map("withdrawn_at") @db.Timestamptz(3)
+  /// Optimistic-concurrency token: every update must match and increment it.
+  version           Int            @default(1)
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  attachment      StoredFile?     @relation("NoticeAttachment", fields: [attachmentFileId], references: [id], onDelete: Restrict)
+  createdBy       User?           @relation("NoticeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  publishedBy     User?           @relation("NoticePublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+  withdrawnBy     User?           @relation("NoticeWithdrawnBy", fields: [withdrawnById], references: [id], onDelete: SetNull)
+  targets         NoticeTarget[]
+  reads           NoticeRead[]
+
+  /// Target of NoticeTarget's composite FK: a target carries its notice's session and scope.
+  @@unique([id, academicSessionId, scope], map: "notice_id_session_scope_key")
+  @@index([status, publishAt])
+  @@index([academicSessionId, status])
+  @@index([createdById])
+  @@map("notice")
+}
+
+/// A class or a section a CLASS / SECTION notice reaches (several per notice). The composite FK copies the notice's
+/// session and scope, so a target can't belong to another session's section or disagree with the notice's scope
+/// (CHECK notice_target_kind: CLASS ⇒ class only, SECTION ⇒ section only; SCHOOL notices have no targets).
+model NoticeTarget {
+  id                String      @id @default(cuid(2))
+  noticeId          String      @map("notice_id")
+  academicSessionId String      @map("academic_session_id")
+  scope             NoticeScope
+  classId           String?     @map("class_id")
+  sectionId         String?     @map("section_id")
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  notice  Notice       @relation(fields: [noticeId, academicSessionId, scope], references: [id, academicSessionId, scope], onDelete: Cascade, onUpdate: Cascade)
+  class   SchoolClass? @relation(fields: [classId], references: [id], onDelete: Restrict)
+  section Section?     @relation(fields: [sectionId, academicSessionId], references: [id, academicSessionId], onDelete: Restrict)
+
+  @@unique([noticeId, classId])
+  @@unique([noticeId, sectionId])
+  @@index([classId])
+  @@index([sectionId])
+  @@map("notice_target")
+}
+
+/// Read receipt: first time a user opened a notice ("seen by 64 % of families").
+model NoticeRead {
+  noticeId String   @map("notice_id")
+  userId   String   @map("user_id")
+  readAt   DateTime @default(now()) @map("read_at") @db.Timestamptz(3)
+
+  notice Notice @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+  user   User   @relation("NoticeReadBy", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([noticeId, userId])
+  @@index([userId])
+  @@map("notice_read")
 }

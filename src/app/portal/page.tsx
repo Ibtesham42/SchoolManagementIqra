@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { requirePortal } from "@/lib/auth/context";
 import { listPortalChildren, portalWindow } from "@/modules/students/students.portal";
 import { portalOverdueChildren } from "@/modules/fees/fees.portal";
+import { countUnreadPortalNotices } from "@/modules/notices/notices.portal";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/erp/page-header";
@@ -16,13 +17,23 @@ export default async function PortalHomePage() {
   const kids = await listPortalChildren(ctx, window);
   const isStudent = ctx.portal.kind === "STUDENT";
   // FC22 in-app (P23): a live "dues overdue" banner — no reminder emails or jobs.
-  const overdue = isStudent ? 0 : await portalOverdueChildren(ctx, window);
+  const [overdue, unread] = await Promise.all([isStudent ? 0 : portalOverdueChildren(ctx, window), countUnreadPortalNotices(ctx, window)]);
   return (
     <div className="grid gap-4">
       <PageHeader title={`Welcome, ${ctx.displayName}`} description={isStudent ? "Your school record." : "Your children at this school."} />
       {overdue > 0 && (
         <Alert variant="destructive" role="status">
           <AlertDescription>Fees are overdue for {overdue === 1 ? "one of your children" : `${overdue} of your children`}. Open the child&apos;s Fees tab to see what is due.</AlertDescription>
+        </Alert>
+      )}
+      {unread > 0 && (
+        <Alert role="status">
+          <AlertDescription>
+            {unread === 1 ? "There is one new notice from the school." : `There are ${unread} new notices from the school.`}{" "}
+            <Link href="/portal/notices" className="underline">
+              Read notices
+            </Link>
+          </AlertDescription>
         </Alert>
       )}
       {kids.length === 0 ? (

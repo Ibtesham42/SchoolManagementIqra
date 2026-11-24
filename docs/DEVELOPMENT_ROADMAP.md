@@ -104,7 +104,7 @@
 - **Tests:** concession/late-fee math, partial payments, duplicate prevention, webhook replay, reconciliation.
 - **Completion criteria:** reconciliation report matches payments on the `test` branch.
 
-## 8. Phase 6 — Parent and Student Portals · **In Progress** (PHASE_6_PLAN.md; decisions P1–P24 approved 2026-11-22; 6A-M1 started)
+## 8. Phase 6 — Parent and Student Portals · **In Progress** (PHASE_6_PLAN.md; decisions P1–P24 approved 2026-11-22; 6A and 6B built; 6B-M4 verification blocked on KI-059; 6C-M1 notices built 2026-11-24, migration B approved, not applied)
 - **Objectives:** self-service access for families without exposing other students' data.
 - **Features:** parent & student login (long sessions, mobile-first), student information, attendance, results, notices, fee status/payment, communication (messages/notifications).
 - **Dependencies:** Phases 2, 4, 5.

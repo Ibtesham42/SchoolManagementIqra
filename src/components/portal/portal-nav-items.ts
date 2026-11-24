@@ -3,7 +3,7 @@
  * ERP destination (ADR-045; static guard test). Child pages carry the child in the URL — untrusted input, every
  * page re-checks access through the service.
  */
-export type PortalNavIcon = "home" | "profile" | "account";
+export type PortalNavIcon = "home" | "profile" | "notices" | "account";
 export interface PortalNavItem {
   href: string;
   label: string;
@@ -26,6 +26,8 @@ export function childIdFromPath(pathname: string, childIds: readonly string[]): 
 export function portalNavItems(childId: string | null): PortalNavItem[] {
   const items: PortalNavItem[] = [{ href: "/portal", label: "Home", icon: "home" }];
   if (childId) items.push({ href: `/portal/c/${encodeURIComponent(childId)}/profile`, label: "Profile", icon: "profile" });
+  // Phase 6C-M1 (P8, P22): notices are for the family, not one child.
+  items.push({ href: "/portal/notices", label: "Notices", icon: "notices" });
   items.push({ href: "/portal/account", label: "Account", icon: "account" });
   return items;
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { House, IdCard, KeyRound, type LucideIcon } from "lucide-react";
+import { House, IdCard, KeyRound, Megaphone, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { childIdFromPath, portalNavItems, type PortalNavIcon } from "./portal-nav-items";
 
@@ -10,7 +10,7 @@ import { childIdFromPath, portalNavItems, type PortalNavIcon } from "./portal-na
  * Phase 6A-M2 — the portal's own navigation (ADR-045). It never imports the ERP navigation (static guard test).
  * Phones: bottom tab bar (56 px targets). ≥ lg: a row of tabs under the header.
  */
-const ICONS: Record<PortalNavIcon, LucideIcon> = { home: House, profile: IdCard, account: KeyRound };
+const ICONS: Record<PortalNavIcon, LucideIcon> = { home: House, profile: IdCard, notices: Megaphone, account: KeyRound };
 
 export function PortalNav({ childIds }: { childIds: string[] }) {
   const pathname = usePathname();

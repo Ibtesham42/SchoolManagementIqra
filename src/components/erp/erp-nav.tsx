@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { CalendarCheck, CalendarDays, ClipboardList, GraduationCap, IdCard, IndianRupee, KeyRound, LayoutDashboard, ListOrdered, Menu, Settings, ShieldCheck, UserRoundCog, Users, Wallet, type LucideIcon } from "lucide-react";
+import { CalendarCheck, CalendarDays, ClipboardList, GraduationCap, IdCard, IndianRupee, KeyRound, LayoutDashboard, ListOrdered, Megaphone, Menu, Settings, ShieldCheck, UserRoundCog, Users, Wallet, type LucideIcon } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -30,6 +30,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   staffAttendance: CalendarCheck,
   payroll: Wallet,
   fees: IndianRupee,
+  notices: Megaphone,
 };
 
 /** Desktop sidebar (≥ lg). */
