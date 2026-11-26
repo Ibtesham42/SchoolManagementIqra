@@ -4,8 +4,8 @@ import { PORTAL_SLIP_MESSAGES, portalSlipErrorCode } from "@/lib/http/portal-sli
 import { assertSameOrigin, readBodyWithLimit } from "@/lib/http/upload";
 import { pdfResponse } from "@/lib/pdf/render";
 import { enforce, RULES } from "@/lib/rate-limit";
-import { guardianSlipSchema, sectionSlipsSchema } from "@/modules/students/family-accounts.schemas";
-import { issueGuardianSlip, issueSectionSlips, renderActivationSlipsPdf } from "@/modules/students/family-accounts.service";
+import { guardianSlipSchema, sectionSlipsSchema, studentSlipSchema } from "@/modules/students/family-accounts.schemas";
+import { issueGuardianSlip, issueSectionSlips, issueStudentSlip, renderActivationSlipsPdf } from "@/modules/students/family-accounts.service";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,8 @@ const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 /**
  * POST /api/v1/portal-accounts/slips — parent portal activation slips as a PDF (Phase 6A-M3, ADR-046).
  * `target=guardian` (studentId, guardianId, mode create | reset, optional username) or `target=section` (sectionId,
- * reissuePending). Same-origin POST → session → rate limit (`portal-slips`) → ≤ 2 KB urlencoded body → Zod → service
+ * reissuePending), or since Phase 6C-M4 `target=student` (studentId, mode, optional username — the student's own
+ * account, P14; the slip goes to the parent). Same-origin POST → session → rate limit (`portal-slips`) → ≤ 2 KB urlencoded body → Zod → service
  * (`portal.account.manage` + `student.read` ALL; codes issued and audited in one transaction) → PDF rendered after
  * the commit. `private, no-store`, attachment, a non-identifying file name. Failed browser posts go back to the
  * page with a fixed code (`?slips=<code>`).
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
     const studentId = form.get("studentId") ?? "";
     const sectionId = form.get("sectionId") ?? "";
     // The page to return to is built from validated ids only (never a URL taken from the request).
-    if (target === "guardian" && ID_RE.test(studentId)) back = `/erp/students/${studentId}`;
+    if ((target === "guardian" || target === "student") && ID_RE.test(studentId)) back = `/erp/students/${studentId}`;
     if (target === "section" && ID_RE.test(sectionId)) back = `/erp/students/portal-accounts?section=${sectionId}`;
     await enforce(RULES.portalSlips, ctx.userId);
 
@@ -43,6 +44,10 @@ export async function POST(request: Request) {
       const parsed = guardianSlipSchema.safeParse({ studentId, guardianId: form.get("guardianId"), mode: form.get("mode"), username: form.get("username") ?? "" });
       if (!parsed.success) throw new ValidationError("Invalid slip request.", parsed.error.issues.some((i) => i.path[0] === "username") ? [{ path: "username", message: "Invalid username." }] : undefined);
       slips = await issueGuardianSlip(ctx, parsed.data);
+    } else if (target === "student") {
+      const parsed = studentSlipSchema.safeParse({ studentId, mode: form.get("mode"), username: form.get("username") ?? "" });
+      if (!parsed.success) throw new ValidationError("Invalid slip request.", parsed.error.issues.some((i) => i.path[0] === "username") ? [{ path: "username", message: "Invalid username." }] : undefined);
+      slips = await issueStudentSlip(ctx, parsed.data);
     } else if (target === "section") {
       const parsed = sectionSlipsSchema.safeParse({ sectionId, reissuePending: form.get("reissuePending") === "on" });
       if (!parsed.success) throw new ValidationError("Invalid slip request.");

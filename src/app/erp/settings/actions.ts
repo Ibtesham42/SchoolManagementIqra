@@ -189,12 +189,20 @@ export async function updateShowRankAction(_prev: ActionState, fd: FormData): Pr
 /** Phase 6C-M3 (P19, P17): UPI details for the parent portal and the leaver window. */
 export async function updatePortalSettingsAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const ctx = await requireAuth();
-  const parsed = portalPaymentSettingsSchema.safeParse({ payeeName: formString(fd, "payeeName"), vpa: formString(fd, "vpa"), leaverAccessDays: formString(fd, "leaverAccessDays") });
+  const parsed = portalPaymentSettingsSchema.safeParse({
+    payeeName: formString(fd, "payeeName"),
+    vpa: formString(fd, "vpa"),
+    leaverAccessDays: formString(fd, "leaverAccessDays"),
+    studentAccounts: formString(fd, "studentAccounts") === "on",
+    studentMinClassLevel: formString(fd, "studentMinClassLevel"),
+  });
   if (!parsed.success) return fromZod(parsed.error);
   try {
-    await updatePortalPaymentSettings(ctx, parsed.data);
+    const { studentAccountsSwitchedOff: off } = await updatePortalPaymentSettings(ctx, parsed.data);
     revalidatePath("/erp/settings");
-    return { ok: true, message: parsed.data.payeeName ? "Portal settings saved. Parents can report UPI payments." : "Portal settings saved. UPI payments are off." };
+    const upi = parsed.data.payeeName ? "Parents can report UPI payments." : "UPI payments are off.";
+    const students = off > 0 ? ` ${off} student account${off === 1 ? " was" : "s were"} switched off.` : "";
+    return { ok: true, message: `Portal settings saved. ${upi}${students}` };
   } catch (e) {
     return fromError(e);
   }

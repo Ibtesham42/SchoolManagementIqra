@@ -7,7 +7,7 @@ import { readStoredFile } from "@/modules/files/files.service";
 import { markMyNotificationReadByKey } from "@/modules/notifications/notifications.service";
 import { currentEnrollment } from "@/modules/students/enrollment-reads.tx";
 import { portalWindow } from "@/modules/students/students.portal";
-import { FAMILY_AUDIENCES, liveWhere } from "./notices.policy";
+import { liveWhere, portalAudiences } from "./notices.policy";
 
 /**
  * Phase 6C-M1 (P22) — notices for families. The audience is resolved from the account's visible children (blocked
@@ -47,11 +47,11 @@ async function familyAudience(ctx: AuthContext, w: PortalWindow, visible: readon
 }
 
 /** Prisma filter for the notices these children's family may read now. Null when no child is in an audience. */
-export function familyNoticeWhere(children: readonly ChildAudience[], now: Date, today: string) {
+export function familyNoticeWhere(children: readonly ChildAudience[], now: Date, today: string, kind: "GUARDIAN" | "STUDENT") {
   if (children.length === 0) return null;
   return {
     ...liveWhere(now, today),
-    audience: { in: FAMILY_AUDIENCES },
+    audience: { in: portalAudiences(kind) },
     AND: [
       {
         OR: [
@@ -76,7 +76,7 @@ export interface PortalNoticeItem {
 export async function listPortalNotices(ctx: AuthContext, window?: PortalWindow): Promise<PortalNoticeItem[]> {
   gate(ctx);
   const w = window ?? (await portalWindow());
-  const where = familyNoticeWhere(await familyAudience(ctx, w, portalVisibleChildren(ctx, w)), new Date(), w.today);
+  const where = familyNoticeWhere(await familyAudience(ctx, w, portalVisibleChildren(ctx, w)), new Date(), w.today, ctx.portal!.kind);
   if (!where) return [];
   const rows = await prisma.notice.findMany({
     where,
@@ -91,7 +91,7 @@ export async function listPortalNotices(ctx: AuthContext, window?: PortalWindow)
 export async function countUnreadPortalNotices(ctx: AuthContext, window?: PortalWindow): Promise<number> {
   gate(ctx);
   const w = window ?? (await portalWindow());
-  const where = familyNoticeWhere(await familyAudience(ctx, w, portalVisibleChildren(ctx, w)), new Date(), w.today);
+  const where = familyNoticeWhere(await familyAudience(ctx, w, portalVisibleChildren(ctx, w)), new Date(), w.today, ctx.portal!.kind);
   if (!where) return 0;
   return prisma.notice.count({ where: { ...where, reads: { none: { userId: ctx.userId } } } });
 }
@@ -100,7 +100,7 @@ export async function countUnreadPortalNotices(ctx: AuthContext, window?: Portal
 export async function openPortalNotice(ctx: AuthContext, id: string, window?: PortalWindow, opts: { recordRead: boolean } = { recordRead: true }) {
   gate(ctx);
   const w = window ?? (await portalWindow());
-  const where = familyNoticeWhere(await familyAudience(ctx, w, portalVisibleChildren(ctx, w)), new Date(), w.today);
+  const where = familyNoticeWhere(await familyAudience(ctx, w, portalVisibleChildren(ctx, w)), new Date(), w.today, ctx.portal!.kind);
   const n = where ? await prisma.notice.findFirst({ where: { ...where, id }, select: { id: true, title: true, body: true, publishAt: true, expiresAt: true, attachmentFileId: true } }) : null;
   if (!n) throw new NotFoundError(PORTAL_NOT_FOUND);
   // Review 6C-M1 L2: a page opened from another site records no receipt (the caller passes recordRead: false).
@@ -115,7 +115,7 @@ export async function openPortalNotice(ctx: AuthContext, id: string, window?: Po
 export async function visibleFamilyNoticeIds(ctx: AuthContext, ids: readonly string[], window?: PortalWindow): Promise<Set<string>> {
   gate(ctx);
   const w = window ?? (await portalWindow());
-  const where = familyNoticeWhere(await familyAudience(ctx, w, portalVisibleChildren(ctx, w)), new Date(), w.today);
+  const where = familyNoticeWhere(await familyAudience(ctx, w, portalVisibleChildren(ctx, w)), new Date(), w.today, ctx.portal!.kind);
   if (!where || ids.length === 0) return new Set();
   return new Set((await prisma.notice.findMany({ where: { ...where, id: { in: [...ids] } }, select: { id: true }, take: ids.length })).map((n) => n.id));
 }
@@ -124,7 +124,7 @@ export async function visibleFamilyNoticeIds(ctx: AuthContext, ids: readonly str
 export async function readPortalNoticeAttachment(ctx: AuthContext, id: string, window?: PortalWindow) {
   gate(ctx);
   const w = window ?? (await portalWindow());
-  const where = familyNoticeWhere(await familyAudience(ctx, w, portalVisibleChildren(ctx, w)), new Date(), w.today);
+  const where = familyNoticeWhere(await familyAudience(ctx, w, portalVisibleChildren(ctx, w)), new Date(), w.today, ctx.portal!.kind);
   const n = where ? await prisma.notice.findFirst({ where: { ...where, id }, select: { attachmentFileId: true } }) : null;
   if (!n?.attachmentFileId) throw new NotFoundError(PORTAL_NOT_FOUND);
   const file = await readStoredFile(ctx, n.attachmentFileId, { purpose: ATTACHMENT, owner: { type: OWNER_TYPE, id } }).catch((e: unknown) => {

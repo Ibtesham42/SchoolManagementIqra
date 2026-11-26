@@ -21,9 +21,11 @@ import {
   type PortalAccountRow,
 } from "@/modules/identity/portal-accounts.tx";
 import { getPortalSettings, getSchoolName, getSchoolTimezone } from "@/modules/settings/settings.public";
+import { readPortalSettingsTx } from "@/modules/settings/settings.service";
+import { deactivateOrphanedStudentAccountsTx } from "./student-accounts.tx";
 import { forgetStudentNotifications } from "@/modules/notifications/notifications.service";
 import { guardianAccountIds } from "./family-recipients.tx";
-import type { GuardianSlipInput, SectionSlipsInput } from "./family-accounts.schemas";
+import type { GuardianSlipInput, SectionSlipsInput, StudentSlipInput } from "./family-accounts.schemas";
 
 /**
  * Phase 6A-M3 (ADR-046) — parent portal accounts, issued by the school office (PHASE_6_PLAN.md §2.4, P2, P4–P6, P24).
@@ -138,6 +140,15 @@ async function lockGuardians(tx: Tx, ids: string[]) {
   if (ids.length === 0) return;
   const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM guardian WHERE id = ANY(${ids}) AND deleted_at IS NULL ORDER BY id FOR UPDATE`;
   if (rows.length !== new Set(ids).size) throw new NotFoundError("Guardian not found.");
+}
+
+/**
+ * Review 6C-M4 L1: lock the student's portal guardians (student → guardian → user, the order every path uses) so the
+ * "an activated parent" condition can't change between the eligibility read and the slip / reactivation.
+ */
+async function lockStudentGuardiansTx(tx: Tx, studentId: string) {
+  const links = await tx.studentGuardian.findMany({ where: { studentId, portalAccess: true, guardian: { deletedAt: null } }, take: 20, select: { guardianId: true } });
+  await lockGuardians(tx, links.map((l) => l.guardianId));
 }
 
 /** Names of the children this guardian's account will see (the slip says whom it is for). */
@@ -366,6 +377,8 @@ export async function setGuardianPortalAccess(ctx: AuthContext, input: { student
     if (link.portalAccess === input.portalAccess) return false;
     await tx.studentGuardian.update({ where: { studentId_guardianId: { studentId: input.studentId, guardianId: input.guardianId } }, data: { portalAccess: input.portalAccess } });
     await audit(tx, actorOf(ctx), { action: input.portalAccess ? "portal.link_allow" : "portal.link_block", entityType: "Student", entityId: input.studentId, before: { guardianId: input.guardianId, portalAccess: link.portalAccess }, after: { guardianId: input.guardianId, portalAccess: input.portalAccess } });
+    // Review 6C-M4 M1: blocking the last consenting parent ends the child's own account too.
+    if (!input.portalAccess) await deactivateOrphanedStudentAccountsTx(tx, actorOf(ctx), [input.studentId]);
     return true;
   });
   // Phase 6C-M2 (P24, plan R5): after a block, nothing about this child stays in that guardian's inbox either.
@@ -389,7 +402,14 @@ export async function setFamilyAccountActive(ctx: AuthContext, input: { studentI
     await lockGuardians(tx, [input.guardianId]);
     const account = await portalAccountOfTx(tx, { guardianId: input.guardianId });
     if (!account) throw new NotFoundError("This guardian has no portal account.");
-    return setPortalAccountActiveTx(tx, actorOf(ctx), account.id, input.active, input.reason);
+    const changed = await setPortalAccountActiveTx(tx, actorOf(ctx), account.id, input.active, input.reason);
+    if (changed && !input.active) {
+      // Review 6C-M4 M1: each child this parent consented for keeps an own account only while another parent still does.
+      // Review L-C: only children whose own account is still on (left / historical links don't use up a bound).
+      const children = await tx.studentGuardian.findMany({ where: { guardianId: input.guardianId, student: { deletedAt: null, account: { is: { isActive: true, deletedAt: null } } } }, select: { studentId: true } });
+      await deactivateOrphanedStudentAccountsTx(tx, actorOf(ctx), children.map((c) => c.studentId));
+    }
+    return changed;
   });
 }
 
@@ -416,4 +436,103 @@ export async function familyDatesOfBirthTx(tx: Tx, person: { guardianId: string 
 export async function activateFamilyAccount(input: ActivateAccountInput, meta: { ipHash: string; userAgent?: string }) {
   const settings = await getPortalSettings();
   return activatePortalAccount(input, meta, { datesOfBirth: familyDatesOfBirthTx, consentVersion: settings.privacyNoticeVersion ?? "1" });
+}
+
+// ───────────────────────────── Phase 6C-M4: student accounts (P14) ─────────────────────────────
+
+/**
+ * Why a student can't get an account now (null = eligible). P14: the school setting is on; the student is studying,
+ * in a class at or above the setting's minimum level; and at least one guardian who may see the student has an
+ * ACTIVATED account (DPDP: the parent consented first). Read inside the caller's lock when it matters.
+ */
+async function studentAccountProblemTx(tx: Tx | typeof prisma, studentId: string, settings: { studentAccounts: boolean; studentMinClassLevel: number }): Promise<string | null> {
+  if (!settings.studentAccounts) return "Student accounts are turned off in Settings → Parent portal.";
+  const s = await tx.student.findFirst({
+    where: { id: studentId, deletedAt: null },
+    select: {
+      status: true,
+      enrollments: { where: { status: "ACTIVE" }, orderBy: { academicSession: { startDate: "desc" } }, take: 1, select: { section: { select: { class: { select: { numericLevel: true, name: true } } } } } },
+      guardians: { where: { portalAccess: true, guardian: { deletedAt: null, account: { is: { isActive: true, deletedAt: null, privacyConsentAt: { not: null } } } } }, take: 1, select: { guardianId: true } },
+    },
+  });
+  if (!s) return "Student not found.";
+  if (s.status !== "ACTIVE" || s.enrollments.length === 0) return "Only studying students can have an account.";
+  const level = s.enrollments[0].section.class.numericLevel;
+  if (level < settings.studentMinClassLevel) return `Student accounts start in Class ${settings.studentMinClassLevel} (Settings → Parent portal).`;
+  if (s.guardians.length === 0) return "A parent must activate their own portal account first (they consent for their child).";
+  return null;
+}
+
+/** The student's own account on "Family access": the setting, eligibility and the account state. */
+export async function getStudentAccount(ctx: AuthContext, studentId: string) {
+  assertManager(ctx);
+  const settings = await getPortalSettings();
+  const s = await prisma.student.findFirst({ where: { id: studentId, deletedAt: null }, select: { studentCode: true } });
+  if (!s) throw new NotFoundError("Student not found.");
+  const [problem, account] = await Promise.all([studentAccountProblemTx(prisma, studentId, settings), prisma.$transaction((tx) => portalAccountOfTx(tx, { studentId }))]);
+  return {
+    enabled: settings.studentAccounts,
+    minClassLevel: settings.studentMinClassLevel,
+    problem,
+    suggestedUsername: USERNAME_PATTERN.test(s.studentCode.toLowerCase()) ? s.studentCode.toLowerCase() : null,
+    account: account ? { username: account.username, status: familyAccountStatus(account), codeExpiresAt: account.pendingCodeExpiresAt, activatedAt: account.activatedAt } : null,
+  };
+}
+
+/** Create the student's account and print its slip (given to the parent), or print a new slip (reset). */
+export async function issueStudentSlip(ctx: AuthContext, input: StudentSlipInput): Promise<ActivationSlip[]> {
+  assertManager(ctx);
+  const timeZone = await getSchoolTimezone();
+  return prisma.$transaction(async (tx) => {
+    await lockTimeout(tx);
+    await lockStudents(tx, [input.studentId]);
+    await lockStudentGuardiansTx(tx, input.studentId);
+    const settings = await readPortalSettingsTx(tx); // review 6C-M4 L3: never a stale per-instance copy
+    // Under the student lock: eligibility (setting, studying, class level, an activated parent) for new AND reset slips.
+    const problem = await studentAccountProblemTx(tx, input.studentId, settings);
+    if (problem) throw new ValidationError(problem, [{ path: "studentId", message: problem }]);
+    const student = await tx.student.findUniqueOrThrow({ where: { id: input.studentId }, select: { fullName: true, studentCode: true } });
+    const existing = await portalAccountOfTx(tx, { studentId: input.studentId });
+    const actor = actorOf(ctx);
+    const slip = (issued: { code: string; expiresAt: Date; username: string }): ActivationSlip => ({ kind: "STUDENT", guardianName: student.fullName, children: [], username: issued.username, code: formatActivationCode(issued.code), expiresOn: todayInTimeZone(timeZone, issued.expiresAt) });
+    if (input.mode === "create") {
+      if (existing) throw new ConflictError("This student already has a portal account. Use \"Print a new slip\" instead.");
+      const username = input.username ?? (USERNAME_PATTERN.test(student.studentCode.toLowerCase()) ? student.studentCode.toLowerCase() : null);
+      if (!username) throw new ValidationError("Enter a username for this account.", [{ path: "username", message: "Enter a username." }]);
+      if (await usernameTakenTx(tx, username)) throw new ValidationError("That username is already taken. Choose another one.", [{ path: "username", message: "Already taken." }]);
+      const { userId } = await createPortalAccountTx(tx, actor, { kind: "STUDENT", studentId: input.studentId, username, displayName: student.fullName });
+      return [slip(await issueActivationCodeTx(tx, actor, userId, { reset: false }))];
+    }
+    if (!existing) throw new NotFoundError("This student has no portal account yet.");
+    return [slip(await issueActivationCodeTx(tx, actor, existing.id, { reset: true }))];
+  });
+}
+
+/** Deactivate or reactivate the student's own account (reactivation only while eligible). */
+export async function setStudentAccountActive(ctx: AuthContext, input: { studentId: string; active: boolean; reason: string }) {
+  assertManager(ctx);
+  return prisma.$transaction(async (tx) => {
+    await lockTimeout(tx);
+    await lockStudents(tx, [input.studentId]);
+    if (input.active) await lockStudentGuardiansTx(tx, input.studentId);
+    const settings = await readPortalSettingsTx(tx); // review 6C-M4 L3
+    const account = await portalAccountOfTx(tx, { studentId: input.studentId });
+    if (!account) throw new NotFoundError("This student has no portal account.");
+    if (input.active) {
+      const problem = await studentAccountProblemTx(tx, input.studentId, settings);
+      if (problem) throw new ValidationError(problem);
+    }
+    return setPortalAccountActiveTx(tx, actorOf(ctx), account.id, input.active, input.reason);
+  });
+}
+
+/**
+ * P17 / plan §6 6C-M4: a student who leaves loses their OWN account in the same transaction as the leaving (status
+ * change or promotion "left"). Call under the student's row lock (student → user, the provisioning order). Parents
+ * keep their leaver window. Returns whether an account was deactivated.
+ */
+export async function deactivateStudentAccountOnLeavingTx(tx: Tx, actor: AuditActor, studentId: string): Promise<boolean> {
+  const account = await portalAccountOfTx(tx, { studentId });
+  if (!account || !account.isActive) return false;
+  return setPortalAccountActiveTx(tx, actor, account.id, false, "student_left");
 }

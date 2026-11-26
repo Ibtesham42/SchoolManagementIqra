@@ -8,7 +8,7 @@ import { formatDateOnly, formatDateTime } from "@/lib/format";
 import { hasPermission, scopeFor } from "@/lib/rbac/authorize";
 import { STUDENT_STATUS_LABEL } from "@/modules/students/students.rules";
 import { canBrowseStudents, getStudent } from "@/modules/students/students.service";
-import { canManageFamilyAccess, getFamilyAccess } from "@/modules/students/family-accounts.service";
+import { canManageFamilyAccess, getFamilyAccess, getStudentAccount } from "@/modules/students/family-accounts.service";
 import { canLinkGuardians } from "@/modules/students/guardian-links.service";
 import { getSchoolTimezone } from "@/modules/settings/settings.public";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -56,7 +56,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
   const canChangeStatus = hasPermission(ctx, "student.transfer") && s.status === "ACTIVE";
   const prev = s.previousSchool as PreviousSchool;
   // Phase 6A-M3: parent portal accounts (School Admin / Super Admin).
-  const family = canManageFamilyAccess(ctx) ? await getFamilyAccess(ctx, s.id) : null;
+  const [family, studentAccount] = canManageFamilyAccess(ctx) ? await Promise.all([getFamilyAccess(ctx, s.id), getStudentAccount(ctx, s.id)]) : [null, null];
   const timeZone = family ? await getSchoolTimezone() : undefined;
   const shownSections = SECTIONS.filter(([key]) => (key !== "documents" || s.documents !== null) && (key !== "family" || family !== null));
 
@@ -205,7 +205,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
         </CardContent>
       </Card>
 
-      {family && <FamilyAccess studentId={s.id} guardians={family} slips={typeof sp.slips === "string" ? sp.slips : undefined} timeZone={timeZone!} canLink={canLinkGuardians(ctx)} />}
+      {family && studentAccount && <FamilyAccess studentId={s.id} guardians={family} student={studentAccount} slips={typeof sp.slips === "string" ? sp.slips : undefined} timeZone={timeZone!} canLink={canLinkGuardians(ctx)} />}
 
       <Card id="history">
         <CardHeader>

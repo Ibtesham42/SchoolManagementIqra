@@ -62,7 +62,7 @@ describe.skipIf(!enabled)("payment claims (integration)", () => {
     accountant2 = await login((await user("acc2", "ACCOUNTANT")).id);
     admin = await login((await user("sa", "SCHOOL_ADMIN")).id);
     portalBefore = ((await m.prisma.schoolSetting.findUnique({ where: { id: "default" }, select: { features: true } }))?.features ?? null) as unknown;
-    await m.updatePortalPaymentSettings(admin, { payeeName: "Demo Public School", vpa: "demo.school@examplebank", leaverAccessDays: 180 });
+    await m.updatePortalPaymentSettings(admin, { payeeName: "Demo Public School", vpa: "demo.school@examplebank", leaverAccessDays: 180, studentAccounts: false, studentMinClassLevel: 9 });
     formatsBefore = await m.getFeeNumberFormats(accountant);
     await m.updateFeeNumberFormats(accountant, { feeReceipt: `R${tag}/{SEQ:5}`, feeInvoice: `I${tag}/{SEQ:5}` });
     today = m.todayInTimeZone();
@@ -206,9 +206,9 @@ describe.skipIf(!enabled)("payment claims (integration)", () => {
   });
 
   it("review L1: no claims while the school's UPI details are cleared", async () => {
-    await m.updatePortalPaymentSettings(admin, { payeeName: "", vpa: "", leaverAccessDays: 180 });
+    await m.updatePortalPaymentSettings(admin, { payeeName: "", vpa: "", leaverAccessDays: 180, studentAccounts: false, studentMinClassLevel: 9 });
     await expect(claim(parent, "10", utr())).rejects.toBeInstanceOf(m.ConflictError);
-    await m.updatePortalPaymentSettings(admin, { payeeName: "Demo Public School", vpa: "demo.school@examplebank", leaverAccessDays: 180 });
+    await m.updatePortalPaymentSettings(admin, { payeeName: "Demo Public School", vpa: "demo.school@examplebank", leaverAccessDays: 180, studentAccounts: false, studentMinClassLevel: 9 });
   });
 
   it("review M2: every seeded role without fee.collect ALL is refused the queue, confirm and reject; without settings.manage the UPI settings", async () => {
@@ -227,7 +227,7 @@ describe.skipIf(!enabled)("payment claims (integration)", () => {
         await expect(m.listPaymentClaims(ctx), role.key).resolves.toBeTruthy();
       }
       if (!grants.some((g) => g.key === "settings.manage")) {
-        await expect(m.updatePortalPaymentSettings(ctx, { payeeName: "Evil", vpa: "evil@bank", leaverAccessDays: 1 }), role.key).rejects.toBeInstanceOf(m.ForbiddenError);
+        await expect(m.updatePortalPaymentSettings(ctx, { payeeName: "Evil", vpa: "evil@bank", leaverAccessDays: 1, studentAccounts: false, studentMinClassLevel: 9 }), role.key).rejects.toBeInstanceOf(m.ForbiddenError);
       }
     }
     expect((await m.getPortalSettingsForOffice(admin)).upi?.vpa).toBe("demo.school@examplebank");

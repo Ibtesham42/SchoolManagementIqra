@@ -24,3 +24,8 @@ export type SectionSlipsInput = z.infer<typeof sectionSlipsSchema>;
 
 export const portalAccessSchema = z.object({ studentId: id, guardianId: id, portalAccess: z.boolean() }).strict();
 export const familyAccountActiveSchema = z.object({ studentId: id, guardianId: id, active: z.boolean(), reason: z.string().trim().min(3, "Give a short reason.").max(300) }).strict();
+
+/** Phase 6C-M4 (P14): a student's own portal account — the slip is handed to the parent (DPDP: parental consent). */
+export const studentSlipSchema = z.object({ studentId: id, mode: z.enum(["create", "reset"]), username: optionalUsername.default(null) }).strict();
+export type StudentSlipInput = z.infer<typeof studentSlipSchema>;
+export const studentAccountActiveSchema = z.object({ studentId: id, active: z.boolean(), reason: z.string().trim().min(3, "Give a short reason.").max(300) }).strict();

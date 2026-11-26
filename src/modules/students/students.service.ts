@@ -27,6 +27,7 @@ import {
   type StudentStatus,
 } from "./students.rules";
 import type { ChangeStatusInput, ExportStudentsInput, ListStudentsInput, UpdateGuardianInput, UpdateStudentInput } from "./students.schemas";
+import { deactivateStudentAccountOnLeavingTx } from "./family-accounts.service";
 
 /**
  * Student records after registration (design §5.1, slice S7): directory, profile, field-level edits,
@@ -369,6 +370,8 @@ export async function changeStudentStatus(ctx: AuthContext, input: ChangeStatusI
       }
       const r = await tx.student.updateMany({ where: { id: row.id, version: row.version }, data: { status: input.toStatus, version: { increment: 1 } } });
       if (r.count !== 1) stale();
+      // Phase 6C-M4 (P17): the student's OWN portal account ends with the leaving, in this transaction (student lock held).
+      await deactivateStudentAccountOnLeavingTx(tx, actorOf(ctx), row.id); // every target status is a leaving one
       const change = await tx.studentStatusChange.create({
         data: { studentId: row.id, fromStatus: row.status, toStatus: input.toStatus, reason: input.reason, effectiveDate: effective, actedById: ctx.userId },
         select: { id: true },

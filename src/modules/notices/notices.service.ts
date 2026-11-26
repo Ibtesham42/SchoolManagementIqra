@@ -55,7 +55,7 @@ export const noticeAccess = (ctx: AuthContext) => ({ read: !ctx.portal && hasPer
 /** Prisma filter: the notices an ASSIGNED manager still manages (their own, every target section theirs, session open). */
 const ownSectionNotices = (userId: string) => ({
   createdById: userId,
-  audience: "FAMILIES" as const,
+  audience: { in: ["FAMILIES" as const, "PARENTS" as const] },
   scope: "SECTION" as const,
   targets: { some: {}, every: { section: { classTeacherId: userId, academicSession: { status: { not: "CLOSED" as const } } } } },
 });
@@ -194,7 +194,7 @@ export async function deleteNotice(ctx: AuthContext, input: NoticeRefInput) {
 }
 
 /**
- * Phase 6C-M2 (P23): "new notice" for every family account in a FAMILIES / ALL notice's audience, after the publication
+ * Phase 6C-M2 (P23): "new notice" for every PARENT account in a FAMILIES / PARENTS / ALL notice's audience, after the publication
  * committed. Only when it is visible at once — a scheduled notice shows up through the portal's unread-notices line
  * instead (no job runs at its publish time). Staff get no in-app notification yet (no staff inbox: ERP header later).
  */
@@ -393,7 +393,7 @@ export async function getManagedNotice(ctx: AuthContext, id: string) {
     session: { id: n.academicSessionId, name: n.academicSession.name, closed: n.academicSession.status === "CLOSED" },
     targets: labels,
     attachment: n.attachment && !n.attachment.deletedAt ? { mimeType: n.attachment.mimeType, sizeBytes: n.attachment.sizeBytes } : null,
-    receipts: { familyReads, familyReach: reach, studentReads, staffReads, families, staff: n.audience !== "FAMILIES" },
+    receipts: { familyReads, familyReach: reach, studentReads, staffReads, families, staff: n.audience === "STAFF" || n.audience === "ALL" },
   };
 }
 

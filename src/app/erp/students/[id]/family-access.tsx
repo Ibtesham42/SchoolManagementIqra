@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
 import { isPortalSlipCode, PORTAL_SLIP_MESSAGES } from "@/lib/http/portal-slip-errors";
-import type { getFamilyAccess, FamilyAccountStatus } from "@/modules/students/family-accounts.service";
+import type { getFamilyAccess, getStudentAccount, FamilyAccountStatus } from "@/modules/students/family-accounts.service";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { TextField } from "@/components/erp/form";
-import { AccountActiveForm, InviteByEmailForm, PortalAccessToggle } from "./family-access-forms";
+import { AccountActiveForm, InviteByEmailForm, PortalAccessToggle, StudentAccountActiveForm } from "./family-access-forms";
 
 const RELATION: Record<string, string> = { FATHER: "Father", MOTHER: "Mother", GUARDIAN: "Guardian", OTHER: "Other" };
 const STATUS: Record<FamilyAccountStatus, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
@@ -23,7 +23,21 @@ const SLIP_ROUTE = "/api/v1/portal-accounts/slips";
  * Phase 6A-M3 — "Family access" on the student profile (`portal.account.manage` + `student.read` ALL). Slips are
  * plain form POSTs to the PDF route (the code exists only in the downloaded PDF).
  */
-export function FamilyAccess({ studentId, guardians, slips, timeZone, canLink }: { studentId: string; guardians: Awaited<ReturnType<typeof getFamilyAccess>>; slips?: string; timeZone: string; canLink: boolean }) {
+export function FamilyAccess({
+  studentId,
+  guardians,
+  student,
+  slips,
+  timeZone,
+  canLink,
+}: {
+  studentId: string;
+  guardians: Awaited<ReturnType<typeof getFamilyAccess>>;
+  student: Awaited<ReturnType<typeof getStudentAccount>>;
+  slips?: string;
+  timeZone: string;
+  canLink: boolean;
+}) {
   return (
     <Card id="family">
       <CardHeader>
@@ -109,7 +123,59 @@ export function FamilyAccess({ studentId, guardians, slips, timeZone, canLink }:
             );
           })}
         </ul>
+        <StudentAccount studentId={studentId} student={student} timeZone={timeZone} />
       </CardContent>
     </Card>
+  );
+}
+
+/** Phase 6C-M4 (P14) — the student's own account: only when the school turned it on; the slip goes to the parent. */
+function StudentAccount({ studentId, student, timeZone }: { studentId: string; student: Awaited<ReturnType<typeof getStudentAccount>>; timeZone: string }) {
+  if (!student.enabled && !student.account) return null;
+  const status = student.account?.status ?? "NONE";
+  return (
+    <section className="grid gap-3 rounded-lg border border-dashed p-3" aria-labelledby={`student-account-${studentId}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 id={`student-account-${studentId}`} className="font-medium">
+          Student&apos;s own account
+        </h3>
+        <Badge variant={STATUS[status].variant}>{STATUS[status].label}</Badge>
+      </div>
+      <p className="text-sm text-muted-foreground">Report cards, attendance, homework, timetable and notices for the student; never fees. Print the slip for the parent, who decides when to give it to the child.</p>
+      {student.account && (
+        <p className="text-sm text-muted-foreground">
+          Username <span className="font-mono text-foreground">{student.account.username}</span>
+          {student.account.activatedAt ? ` · activated ${formatDateTime(student.account.activatedAt, timeZone)}` : ""}
+          {status === "PENDING" && student.account.codeExpiresAt ? ` · code valid until ${formatDateTime(student.account.codeExpiresAt, timeZone)}` : ""}
+        </p>
+      )}
+      {student.problem && status !== "DEACTIVATED" ? (
+        <p className="text-sm" role="note">
+          {student.problem}
+        </p>
+      ) : !student.account ? (
+        <form method="post" action={SLIP_ROUTE} className="grid gap-2 sm:max-w-md">
+          <input type="hidden" name="target" value="student" />
+          <input type="hidden" name="mode" value="create" />
+          <input type="hidden" name="studentId" value={studentId} />
+          <TextField id={`username-student-${studentId}`} label="Username" name="username" defaultValue={student.suggestedUsername ?? ""} autoCapitalize="none" spellCheck={false} hint="The Student ID in lower case by default." />
+          <Button type="submit" className="w-full sm:w-auto">
+            Create student account and print slip
+          </Button>
+        </form>
+      ) : (
+        status !== "DEACTIVATED" && (
+          <form method="post" action={SLIP_ROUTE} className="grid gap-2 sm:max-w-md">
+            <input type="hidden" name="target" value="student" />
+            <input type="hidden" name="mode" value="reset" />
+            <input type="hidden" name="studentId" value={studentId} />
+            <Button type="submit" variant="outline" className="w-full sm:w-auto">
+              Print a new slip for the student&apos;s account
+            </Button>
+          </form>
+        )
+      )}
+      {student.account && <StudentAccountActiveForm studentId={studentId} active={status !== "DEACTIVATED"} />}
+    </section>
   );
 }

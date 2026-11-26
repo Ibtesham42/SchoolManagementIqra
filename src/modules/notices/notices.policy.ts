@@ -5,7 +5,7 @@ import type { NoticeAudience, NoticeScope } from "./notices.schemas";
  * Phase 6C-M1 (P22) — who may write a notice where, and what readers see. Pure (unit tested).
  *
  * - `notice.manage` ALL (School Admin, Principal; Super Admin): any audience, any scope.
- * - `notice.manage` ASSIGNED (Class Teacher): FAMILIES of SECTIONS they are class teacher of, and only while each of
+ * - `notice.manage` ASSIGNED (Class Teacher): FAMILIES (or PARENTS only) of SECTIONS they are class teacher of, and only while each of
  *   those sections is theirs in a session that isn't CLOSED. The same test — plus authorship (review 6C-M1 H1: never
  *   the Principal's or another teacher's notice to the same section) — decides whether they may still edit, publish,
  *   withdraw or see the receipts of a notice (a teacher moved to another section loses the old notices).
@@ -31,12 +31,15 @@ export interface NoticeShape {
 export function mayWriteNotice(scope: ManageScope | null, userId: string, n: NoticeShape): boolean {
   if (scope === "ALL") return true;
   if (scope !== "ASSIGNED") return false;
-  return n.createdById === userId && n.audience === "FAMILIES" && n.scope === "SECTION" && n.sections.length > 0 && n.sections.every((s) => s.classTeacherId === userId && !s.sessionClosed);
+  return n.createdById === userId && (n.audience === "FAMILIES" || n.audience === "PARENTS") && n.scope === "SECTION" && n.sections.length > 0 && n.sections.every((s) => s.classTeacherId === userId && !s.sessionClosed);
 }
 
-/** Staff read STAFF and ALL notices; families read FAMILIES and ALL notices. */
+/** Staff read STAFF and ALL notices. */
 export const STAFF_AUDIENCES: NoticeAudience[] = ["STAFF", "ALL"];
-export const FAMILY_AUDIENCES: NoticeAudience[] = ["FAMILIES", "ALL"];
+/** Audiences that reach families (for reach counts and notifications). */
+export const FAMILY_AUDIENCES: NoticeAudience[] = ["FAMILIES", "PARENTS", "ALL"];
+/** What a portal account reads: parents also get PARENTS notices; student accounts never (owner decision 2026-11-24). */
+export const portalAudiences = (kind: "GUARDIAN" | "STUDENT"): NoticeAudience[] => (kind === "GUARDIAN" ? ["FAMILIES", "PARENTS", "ALL"] : ["FAMILIES", "ALL"]);
 
 export type NoticeState = "DRAFT" | "SCHEDULED" | "LIVE" | "EXPIRED" | "WITHDRAWN";
 

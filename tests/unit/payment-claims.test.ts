@@ -59,15 +59,15 @@ describe("schemas", () => {
     expect(liveReceiptRefWhere("412356789012")).toEqual({ status: "SUCCESS", method: { in: ["UPI", "BANK_TRANSFER"] }, transactionRef: { endsWith: "412356789012" } });
   });
   it("review L4: no control or direction-override characters in the payee name", () => {
-    for (const bad of ["Demo\u202Ekcab", "Demo\u200BSchool", "Demo\u0007"]) expect(portalPaymentSettingsSchema.safeParse({ payeeName: bad, vpa: "demo@bank", leaverAccessDays: "1" }).success, bad).toBe(false);
+    for (const bad of ["Demo\u202Ekcab", "Demo\u200BSchool", "Demo\u0007"]) expect(portalPaymentSettingsSchema.safeParse({ payeeName: bad, vpa: "demo@bank", leaverAccessDays: "1", studentAccounts: false, studentMinClassLevel: "9" }).success, bad).toBe(false);
   });
   it("portal settings: UPI payee and ID both or neither; a real UPI ID; leaver days 0–365", () => {
-    expect(portalPaymentSettingsSchema.safeParse({ payeeName: "Demo Public School", vpa: "demo.school@bank", leaverAccessDays: "180" }).success).toBe(true);
-    expect(portalPaymentSettingsSchema.safeParse({ payeeName: "", vpa: "", leaverAccessDays: "0" }).success).toBe(true);
-    expect(portalPaymentSettingsSchema.safeParse({ payeeName: "Demo", vpa: "", leaverAccessDays: "180" }).success).toBe(false);
-    expect(portalPaymentSettingsSchema.safeParse({ payeeName: "", vpa: "demo@bank", leaverAccessDays: "180" }).success).toBe(false);
-    expect(portalPaymentSettingsSchema.safeParse({ payeeName: "Demo", vpa: "not-a-upi-id", leaverAccessDays: "180" }).success).toBe(false);
-    expect(portalPaymentSettingsSchema.safeParse({ payeeName: "Demo", vpa: "demo@bank", leaverAccessDays: "400" }).success).toBe(false);
+    expect(portalPaymentSettingsSchema.safeParse({ payeeName: "Demo Public School", vpa: "demo.school@bank", leaverAccessDays: "180", studentAccounts: false, studentMinClassLevel: "9" }).success).toBe(true);
+    expect(portalPaymentSettingsSchema.safeParse({ payeeName: "", vpa: "", leaverAccessDays: "0", studentAccounts: false, studentMinClassLevel: "9" }).success).toBe(true);
+    expect(portalPaymentSettingsSchema.safeParse({ payeeName: "Demo", vpa: "", leaverAccessDays: "180", studentAccounts: false, studentMinClassLevel: "9" }).success).toBe(false);
+    expect(portalPaymentSettingsSchema.safeParse({ payeeName: "", vpa: "demo@bank", leaverAccessDays: "180", studentAccounts: false, studentMinClassLevel: "9" }).success).toBe(false);
+    expect(portalPaymentSettingsSchema.safeParse({ payeeName: "Demo", vpa: "not-a-upi-id", leaverAccessDays: "180", studentAccounts: false, studentMinClassLevel: "9" }).success).toBe(false);
+    expect(portalPaymentSettingsSchema.safeParse({ payeeName: "Demo", vpa: "demo@bank", leaverAccessDays: "400", studentAccounts: false, studentMinClassLevel: "9" }).success).toBe(false);
   });
 });
 

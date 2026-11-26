@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { ConfirmAction } from "@/components/erp/confirm-action";
 import { FormStatus, SubmitButton, TextField } from "@/components/erp/form";
 import { initialState } from "@/lib/action-state";
-import { sendInvitationAction, setFamilyAccountActiveAction, setPortalAccessAction } from "./family-actions";
+import { sendInvitationAction, setStudentAccountActiveAction, setFamilyAccountActiveAction, setPortalAccessAction } from "./family-actions";
 
 export function PortalAccessToggle({ studentId, guardianId, portalAccess, name }: { studentId: string; guardianId: string; portalAccess: boolean; name: string }) {
   return portalAccess ? (
@@ -60,6 +60,22 @@ export function InviteByEmailForm({ studentId, guardianId, email, needsUsername,
       )}
       <SubmitButton variant="outline" className="w-full sm:w-auto">
         Email an invitation to {email}
+      </SubmitButton>
+    </form>
+  );
+}
+
+/** Phase 6C-M4 — deactivate / reactivate the student's own account (with a reason). */
+export function StudentAccountActiveForm({ studentId, active }: { studentId: string; active: boolean }) {
+  const [state, action] = useActionState(setStudentAccountActiveAction, initialState);
+  return (
+    <form action={action} className="grid gap-2 sm:max-w-md">
+      <FormStatus state={state} />
+      <input type="hidden" name="studentId" value={studentId} />
+      <input type="hidden" name="active" value={active ? "false" : "true"} />
+      <TextField id={`reason-student-${studentId}`} label={active ? "Reason for deactivating" : "Reason for reactivating"} name="reason" maxLength={300} error={state.fieldErrors?.reason} required />
+      <SubmitButton variant={active ? "destructive" : "outline"} className="w-full sm:w-auto">
+        {active ? "Deactivate student account" : "Reactivate student account"}
       </SubmitButton>
     </form>
   );

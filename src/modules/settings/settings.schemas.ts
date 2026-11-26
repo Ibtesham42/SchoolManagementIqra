@@ -139,6 +139,9 @@ export const portalPaymentSettingsSchema = z
     payeeName: z.string().trim().max(80, "Use at most 80 characters."),
     vpa: z.string().trim().toLowerCase().max(320),
     leaverAccessDays: z.coerce.number("Enter a number of days.").int("Whole days only.").min(0, "0 or more.").max(365, "At most 365."),
+    // Phase 6C-M4 (P14): optional student accounts, off by default, from a minimum class level.
+    studentAccounts: z.boolean(),
+    studentMinClassLevel: z.coerce.number("Enter a class level.").int("Whole numbers only.").min(1, "Class 1 or higher.").max(12, "At most Class 12."),
   })
   .strict()
   .superRefine((v, ctx) => {

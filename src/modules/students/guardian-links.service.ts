@@ -4,6 +4,7 @@ import { audit, type AuditActor } from "@/lib/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { authorize, hasPermission, scopeFor, type AuthContext } from "@/lib/rbac/authorize";
 import { portalAccountsOfGuardiansTx } from "@/modules/identity/portal-accounts.tx";
+import { deactivateOrphanedStudentAccountsTx } from "./student-accounts.tx";
 
 /**
  * Phase 6A-M3b (P18, closes KI-057 (3)) — the same parent recorded twice (one Guardian row per admission) means one
@@ -174,6 +175,9 @@ export async function mergeGuardians(ctx: AuthContext, input: z.infer<typeof mer
       // Review 6A-M3b L1: per student, the primary / portal flags before and after (no contact data).
       after: { removedGuardianId: remove.id, movedLinks: remove.students.length, links: changes, applications: apps.count, keptHasAccount: accounts.has(keep.id), confirmedDifferent: different },
     });
+    // Review 6C-M4 L-D: a merged link can end up blocked (portal = keep && remove) — re-check the children's own
+    // accounts. The students are locked above (student → guardian → user).
+    await deactivateOrphanedStudentAccountsTx(tx, actorOf(ctx), [...lockedStudents]);
     return { movedLinks: remove.students.length };
   });
 }

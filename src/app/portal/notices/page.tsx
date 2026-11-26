@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/erp/page-header";
 export const metadata = { title: "Notices" };
 
 const REACH = { SCHOOL: "Whole school", CLASS: "Your child's class", SECTION: "Your child's section" } as const;
+// 6C-M4: student accounts read FAMILIES / ALL notices only (never PARENTS) — decided in notices.portal.
 
 /** Phase 6C-M1 (P22) — the school's notices for this family (all children's classes and sections), newest first. */
 export default async function PortalNoticesPage() {

@@ -40,7 +40,8 @@ describe("notice schemas", () => {
     expect(createNoticeSchema.safeParse({ ...base, extra: 1 }).success).toBe(false);
     expect(createNoticeSchema.safeParse({ ...base, publishAt: "2026-11-25 07:30" }).success).toBe(false);
     expect(createNoticeSchema.safeParse({ ...base, publishAt: "2026-11-25T07:30", showUntil: "2026-11-30" }).success).toBe(true);
-    expect(createNoticeSchema.safeParse({ ...base, audience: "PARENTS" }).success).toBe(false);
+    expect(createNoticeSchema.safeParse({ ...base, audience: "TEACHERS" }).success).toBe(false);
+    expect(createNoticeSchema.safeParse({ ...base, audience: "PARENTS", scope: "SECTION", targetIds: ["s1"] }).success).toBe(true); // 6C-M4
     const { academicSessionId: _session, ...edit } = base;
     expect(_session).toBe("sess1");
     expect(updateNoticeSchema.safeParse({ ...edit, id: "n1", version: "2" }).success).toBe(true);
@@ -63,6 +64,8 @@ describe("who may write a notice (mayWriteNotice)", () => {
     expect(mayWriteNotice("ASSIGNED", "u1", { createdById: "u1", audience: "FAMILIES", scope: "SCHOOL", sections: [] })).toBe(false);
     expect(mayWriteNotice("ASSIGNED", "u1", { createdById: "u1", audience: "FAMILIES", scope: "CLASS", sections: [] })).toBe(false);
     expect(mayWriteNotice("ASSIGNED", "u1", { createdById: "u1", audience: "ALL", scope: "SECTION", sections: [sec("u1")] })).toBe(false);
+    expect(mayWriteNotice("ASSIGNED", "u1", { createdById: "u1", audience: "PARENTS", scope: "SECTION", sections: [sec("u1")] })).toBe(true); // 6C-M4
+    expect(mayWriteNotice("ASSIGNED", "u1", { createdById: "u1", audience: "STAFF", scope: "SECTION", sections: [sec("u1")] })).toBe(false);
   });
   it("ASSIGNED: never someone else's notice to the same section (review 6C-M1 H1)", () => {
     const own = { audience: "FAMILIES" as const, scope: "SECTION" as const, sections: [sec("u1")] };
@@ -113,7 +116,12 @@ describe("life cycle", () => {
 describe("family audience filter", () => {
   const now = new Date("2026-11-24T10:00:00Z");
   it("no child in an audience → nothing at all (not even whole-school notices)", () => {
-    expect(familyNoticeWhere([], now, "2026-11-24")).toBeNull();
+    expect(familyNoticeWhere([], now, "2026-11-24", "GUARDIAN")).toBeNull();
+  });
+  it("6C-M4: parents also read PARENTS notices; student accounts never do", () => {
+    const one = [{ studentId: "k1", academicSessionId: "s26", classId: "c6", sectionId: "c6a" }];
+    expect(familyNoticeWhere(one, now, "2026-11-24", "GUARDIAN")!.audience).toEqual({ in: ["FAMILIES", "PARENTS", "ALL"] });
+    expect(familyNoticeWhere(one, now, "2026-11-24", "STUDENT")!.audience).toEqual({ in: ["FAMILIES", "ALL"] });
   });
   it("whole school, or each child's own class / section in that child's session; never staff-only", () => {
     const w = familyNoticeWhere(
@@ -123,8 +131,9 @@ describe("family audience filter", () => {
       ],
       now,
       "2026-11-24",
+      "GUARDIAN",
     )!;
-    expect(w.audience).toEqual({ in: ["FAMILIES", "ALL"] });
+    expect(w.audience).toEqual({ in: ["FAMILIES", "PARENTS", "ALL"] });
     expect(w.status).toBe("PUBLISHED");
     expect(w.AND[0].OR).toEqual([
       { scope: "SCHOOL" },

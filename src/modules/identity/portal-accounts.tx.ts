@@ -1,5 +1,5 @@
 import type { prisma, Tx } from "@/lib/db";
-import { audit, type AuditActor } from "@/lib/audit";
+import { audit, auditMany, type AuditActor } from "@/lib/audit";
 import { isUniqueViolation } from "@/lib/db-errors";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { ACTIVATION_TTL_DAYS, UNUSABLE_PASSWORD_HASH, generateActivationCode, hashActivationCode } from "@/lib/auth/activation-code";
@@ -151,6 +151,30 @@ export async function issueActivationCodeTx(tx: Tx, actor: AuditActor, userId: s
   await tx.accountActivation.create({ data: { userId, codeHash: hashActivationCode(code), channel: opts.channel ?? "SLIP", expiresAt, createdById: actor.userId } });
   await audit(tx, actor, { action: opts.reset ? "portal.account_reset" : "portal.code_issued", entityType: "User", entityId: userId, after: { channel: opts.channel ?? "SLIP", expiresAt: expiresAt.toISOString() } });
   return { code, expiresAt, username: account.username };
+}
+
+/**
+ * Phase 6C-M4 (review M1): switch off many STUDENT portal accounts at once — the settings change or the last consenting
+ * parent going away. Locks the users in id order, ends their sessions, voids unused codes and audits each account.
+ * Accounts already off, staff, guardians and deleted users are skipped. Returns how many were switched off.
+ */
+export async function deactivateStudentPortalAccountsTx(tx: Tx, actor: AuditActor, userIds: string[], reason: string): Promise<number> {
+  if (userIds.length === 0) return 0;
+  const rows = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "user"
+    WHERE id = ANY(${userIds}) AND deleted_at IS NULL AND is_active AND student_id IS NOT NULL AND guardian_id IS NULL AND employee_id IS NULL
+    ORDER BY id FOR UPDATE`;
+  const ids = rows.map((r) => r.id);
+  if (ids.length === 0) return 0;
+  await tx.user.updateMany({ where: { id: { in: ids } }, data: { isActive: false, failedLoginCount: 0, lockedUntil: null } });
+  await tx.session.deleteMany({ where: { userId: { in: ids } } });
+  await tx.accountActivation.updateMany({ where: { userId: { in: ids }, usedAt: null }, data: { usedAt: new Date() } });
+  await auditMany(
+    tx,
+    actor,
+    ids.map((id) => ({ action: "portal.account_deactivate", entityType: "User", entityId: id, before: { isActive: true }, after: { isActive: false, reason } })),
+  );
+  return ids.length;
 }
 
 /** Deactivate / reactivate a portal-only account (deactivation ends sessions and voids codes). Returns whether it changed. */

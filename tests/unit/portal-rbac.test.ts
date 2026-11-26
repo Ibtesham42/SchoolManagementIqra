@@ -143,6 +143,8 @@ const ROWS: Row[] = [
   { route: "notices/[id]/attachment", method: "GET", params: () => ({ id: ID }) },
   { route: "notices/[id]/attachment", method: "POST", params: () => ({ id: ID }), body: () => "file=x" },
   { route: "portal-accounts/slips", method: "POST", params: () => ({}), body: (s) => `target=guardian&studentId=${s}&guardianId=g1&mode=reset` },
+  // Phase 6C-M4 (review L2): the student-account slip branch is refused to family sessions too.
+  { route: "portal-accounts/slips", method: "POST", params: () => ({}), body: (s) => `target=student&studentId=${s}&mode=reset` },
 ];
 
 /** Phase 6B-M2: family download routes. A family's own-child request needs the record's owner (database); staff are refused first. */
@@ -177,7 +179,7 @@ describe("HTTP-level IDOR rows: every /api/v1 route refuses portal accounts, ide
     // The one exclusion: GET files/[id] serves public media and must read the file row before it can tell public from
     // private (missing and forbidden are both 404 there — files.service canReadStoredFile; covered against a database).
     // The portal routes (6B-M2) serve families: they are tested below against staff sessions instead.
-    expect(found.filter((r) => r !== "GET files/[id]" && !r.includes(" portal/")).sort()).toEqual(ROWS.map((r) => `${r.method} ${r.route}`).sort());
+    expect(found.filter((r) => r !== "GET files/[id]" && !r.includes(" portal/")).sort()).toEqual([...new Set(ROWS.map((r) => `${r.method} ${r.route}`))].sort()); // one route may have several body rows
     expect(found.filter((r) => r.includes(" portal/")).sort()).toEqual(PORTAL_ROUTES.map((r) => `GET ${r}`).sort());
   });
 

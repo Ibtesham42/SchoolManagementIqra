@@ -9,6 +9,7 @@ import { lockSessionShared } from "@/modules/academic/academic.tx";
 import { confirmTimingProblem, decisionProblem, nextClassFor, targetSessionProblem, type ClassOption } from "@/modules/academic/promotion.rules";
 import { readAdmissionSettings } from "@/modules/settings/settings.service";
 import type { ConfirmPromotionsInput, ProposePromotionsInput } from "./promotion.schemas";
+import { deactivateStudentAccountOnLeavingTx } from "./family-accounts.service";
 
 /**
  * Phase 4C-M1 — promotion at session end (PHASE_4_PLAN.md AC16; KI-080).
@@ -273,6 +274,8 @@ export async function confirmPromotions(ctx: AuthContext, input: ConfirmPromotio
             await tx.studentEnrollment.update({ where: { id: e.id }, data: { status: "LEFT", leftOn: sessionEnd } });
             const r = await tx.student.updateMany({ where: { id: e.studentId, version: e.student.version, status: "ACTIVE" }, data: { status: d.leave_as!, version: { increment: 1 } } });
             if (r.count !== 1) throw new ConflictError(`${e.student.fullName}'s record changed meanwhile. Reload the page and try again.`);
+            // Phase 6C-M4 (P17): leaving at session end ends the student's own portal account in this transaction.
+            await deactivateStudentAccountOnLeavingTx(tx, actorOf(ctx), e.studentId);
             const change = await tx.studentStatusChange.create({
               data: { studentId: e.studentId, fromStatus: "ACTIVE", toStatus: d.leave_as!, reason: `Session-end decision: left after ${s.academicSession.name}.`, effectiveDate: sessionEnd, actedById: ctx.userId },
               select: { id: true },

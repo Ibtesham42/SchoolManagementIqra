@@ -30,7 +30,8 @@ const publishAt = z
 /** Empty = no expiry; otherwise the last school-local day it is shown. */
 const showUntil = z.union([z.literal(""), isoDateSchema]);
 
-export const NOTICE_AUDIENCES = ["FAMILIES", "STAFF", "ALL"] as const;
+/** FAMILIES = parents and student accounts; PARENTS = parent accounts only (6C-M4). */
+export const NOTICE_AUDIENCES = ["FAMILIES", "PARENTS", "STAFF", "ALL"] as const;
 export const NOTICE_SCOPES = ["SCHOOL", "CLASS", "SECTION"] as const;
 
 const fields = {
@@ -46,7 +47,7 @@ const fields = {
 type Shape = { audience: (typeof NOTICE_AUDIENCES)[number]; scope: (typeof NOTICE_SCOPES)[number]; targetIds: string[] };
 /** The combinations the database CHECKs allow, as field errors (staff notices are school-wide only). */
 function combination(v: Shape, ctx: z.RefinementCtx) {
-  if (v.audience !== "FAMILIES" && v.scope !== "SCHOOL") ctx.addIssue({ code: "custom", path: ["scope"], message: "Notices for staff go to the whole school." });
+  if ((v.audience === "STAFF" || v.audience === "ALL") && v.scope !== "SCHOOL") ctx.addIssue({ code: "custom", path: ["scope"], message: "Notices for staff go to the whole school." });
   if (v.scope === "SCHOOL" && v.targetIds.length > 0) ctx.addIssue({ code: "custom", path: ["targetIds"], message: "A whole-school notice has no classes or sections." });
   if (v.scope !== "SCHOOL" && v.targetIds.length === 0) ctx.addIssue({ code: "custom", path: ["targetIds"], message: v.scope === "CLASS" ? "Choose at least one class." : "Choose at least one section." });
   if (new Set(v.targetIds).size !== v.targetIds.length) ctx.addIssue({ code: "custom", path: ["targetIds"], message: "Each class or section once." });

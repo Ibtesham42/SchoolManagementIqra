@@ -331,7 +331,7 @@ export const ROLES: RoleDefinition[] = [
     name: "Student",
     description: "Access to own records only.",
     grants: [
-      // Phase 6 (P14, P16): own records; no fees (fee.read SELF removed); notices of the own class / section and the whole school (FAMILIES / ALL — parents-only notices are an open owner decision, KI-108).
+      // Phase 6 (P14, P16): own records; no fees (fee.read SELF removed); notices of the own class / section and the whole school (FAMILIES / ALL — never PARENTS, owner decision 2026-11-24, 6C-M4).
       ["student.read", "SELF"], ["attendance.student.read", "SELF"], ["result.read", "SELF"],
       ["timetable.read", "SELF"], ["library.read", "SELF"], ["notice.read", "SELF"], ["homework.read", "SELF"],
     ],

@@ -1,5 +1,6 @@
 import { lockPayroll } from "@/modules/payroll/payroll.tx";
 import { openSessionAttendanceDatesTx } from "@/modules/students/students.tx";
+import { deactivateIneligibleStudentAccountsTx } from "@/modules/students/student-accounts.tx";
 import { prisma, type Tx } from "@/lib/db";
 import {
   isWeeklyOff,
@@ -749,22 +750,39 @@ export async function getPortalSettingsForOffice(ctx: AuthContext) {
 /** Saves the UPI details (both or neither) and the leaver window inside `features.portal`; other keys are kept. */
 export async function updatePortalPaymentSettings(ctx: AuthContext, input: PortalPaymentSettingsInput) {
   authorize(ctx, "settings.manage");
-  await prisma.$transaction(async (tx) => {
+  const switchedOff = await prisma.$transaction(async (tx) => {
     const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM school_setting WHERE id = ${SETTINGS_ID} FOR UPDATE`;
     if (locked.length === 0) throw new ConflictError("Save the school profile before changing portal settings.");
     const row = await tx.schoolSetting.findUniqueOrThrow({ where: { id: SETTINGS_ID }, select: { features: true } });
     const features = row.features && typeof row.features === "object" && !Array.isArray(row.features) ? (row.features as Record<string, unknown>) : {};
     const before = readPortalSettings(features);
     const upi = input.payeeName === "" ? null : { payeeName: input.payeeName, vpa: input.vpa };
-    const next = portalSettingsSchema.parse({ ...before, upi, leaverAccessDays: input.leaverAccessDays });
+    const next = portalSettingsSchema.parse({ ...before, upi, leaverAccessDays: input.leaverAccessDays, studentAccounts: input.studentAccounts, studentMinClassLevel: input.studentMinClassLevel });
     await tx.schoolSetting.update({ where: { id: SETTINGS_ID }, data: { features: { ...features, portal: next } as Prisma.InputJsonValue } });
     await audit(tx, actorOf(ctx), {
       action: "settings.portal_update",
       entityType: "SchoolSetting",
       entityId: SETTINGS_ID,
-      before: { upi: before.upi, leaverAccessDays: before.leaverAccessDays },
-      after: { upi: next.upi, leaverAccessDays: next.leaverAccessDays },
+      before: { upi: before.upi, leaverAccessDays: before.leaverAccessDays, studentAccounts: before.studentAccounts, studentMinClassLevel: before.studentMinClassLevel },
+      after: { upi: next.upi, leaverAccessDays: next.leaverAccessDays, studentAccounts: next.studentAccounts, studentMinClassLevel: next.studentMinClassLevel },
     });
+    // Review 6C-M4 M1 (owner decision 2026-11-26): turning student accounts off, or raising the minimum class, switches
+    // off the accounts that no longer qualify — in this transaction, under the settings row lock.
+    const narrowed = (before.studentAccounts && !next.studentAccounts) || (next.studentAccounts && next.studentMinClassLevel > before.studentMinClassLevel);
+    return narrowed ? deactivateIneligibleStudentAccountsTx(tx, actorOf(ctx), next) : 0;
   });
   invalidateSchoolProfileCache();
+  return { studentAccountsSwitchedOff: switchedOff };
+}
+
+/**
+ * Phase 6C-M4 (review L3): the portal block read inside the caller's transaction (no per-instance cache).
+ * Review L-A: FOR SHARE, so a provisioning / reactivation waits for an in-flight settings change (whose sweep can't see
+ * this transaction's new or reactivated account) and reads the committed value; the settings save waits for us.
+ * Order: student → guardian → school_setting (share) → user — no path holds a user lock and then waits on this row.
+ */
+export async function readPortalSettingsTx(tx: Tx) {
+  await tx.$queryRaw`SELECT id FROM school_setting WHERE id = ${SETTINGS_ID} FOR SHARE`;
+  const row = await tx.schoolSetting.findUnique({ where: { id: SETTINGS_ID }, select: { features: true } });
+  return readPortalSettings(row?.features);
 }

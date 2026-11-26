@@ -281,15 +281,15 @@ export default async function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>
-            <h2>Parent portal: UPI payments and leavers</h2>
+            <h2>Parent portal: UPI payments, leavers and student accounts</h2>
           </CardTitle>
           <CardDescription>
-            {portal.upi ? `Parents see "Pay by UPI" with ${portal.upi.vpa}. Each payment they report waits for the Accountant to confirm it against the bank statement.` : "UPI payments are off: parents don't see \"Pay by UPI\"."} Families keep report cards and fees for {portal.leaverAccessDays} days after a child leaves.
+            {portal.upi ? `Parents see "Pay by UPI" with ${portal.upi.vpa}. Each payment they report waits for the Accountant to confirm it against the bank statement.` : "UPI payments are off: parents don't see \"Pay by UPI\"."} Families keep report cards and fees for {portal.leaverAccessDays} days after a child leaves. Student accounts: {portal.studentAccounts ? `on, from Class ${portal.studentMinClassLevel}` : "off"}.
           </CardDescription>
         </CardHeader>
         {canManage && (
           <CardContent>
-            <PortalSettingsForm defaults={{ payeeName: portal.upi?.payeeName ?? "", vpa: portal.upi?.vpa ?? "", leaverAccessDays: portal.leaverAccessDays }} />
+            <PortalSettingsForm defaults={{ payeeName: portal.upi?.payeeName ?? "", vpa: portal.upi?.vpa ?? "", leaverAccessDays: portal.leaverAccessDays, studentAccounts: portal.studentAccounts, studentMinClassLevel: portal.studentMinClassLevel }} />
           </CardContent>
         )}
       </Card>

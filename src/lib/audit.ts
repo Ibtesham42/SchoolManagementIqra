@@ -49,6 +49,24 @@ export interface AuditEntry {
   after?: unknown;
 }
 
+/** Several entries in one insert (bulk changes such as switching off many accounts); same transaction rule. */
+export async function auditMany(tx: Tx, actor: AuditActor, entries: AuditEntry[]): Promise<void> {
+  if (entries.length === 0) return;
+  await tx.auditLog.createMany({
+    data: entries.map((entry) => ({
+      actorId: actor.userId,
+      actorLabel: actor.label,
+      ipHash: actor.ipHash,
+      requestId: actor.requestId,
+      action: entry.action,
+      entityType: entry.entityType,
+      entityId: entry.entityId ?? null,
+      before: entry.before === undefined ? undefined : (redact(entry.before) as Prisma.InputJsonValue),
+      after: entry.after === undefined ? undefined : (redact(entry.after) as Prisma.InputJsonValue),
+    })),
+  });
+}
+
 /** Write inside the same transaction as the change being recorded. */
 export async function audit(tx: Tx, actor: AuditActor, entry: AuditEntry): Promise<void> {
   await tx.auditLog.create({

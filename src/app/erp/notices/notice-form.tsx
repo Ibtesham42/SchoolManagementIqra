@@ -5,7 +5,7 @@ import { FormStatus, SelectField, SubmitButton, TextField } from "@/components/e
 import { initialState } from "@/lib/action-state";
 import { createNoticeAction, updateNoticeAction } from "./actions";
 
-type Audience = "FAMILIES" | "STAFF" | "ALL";
+type Audience = "FAMILIES" | "PARENTS" | "STAFF" | "ALL";
 type Scope = "SCHOOL" | "CLASS" | "SECTION";
 
 export interface NoticeFormDefaults {
@@ -20,7 +20,7 @@ export interface NoticeFormDefaults {
   showUntil: string;
 }
 
-const AUDIENCE_LABEL: Record<Audience, string> = { FAMILIES: "Families (parents)", STAFF: "Staff", ALL: "Families and staff" };
+const AUDIENCE_LABEL: Record<Audience, string> = { FAMILIES: "Families (parents and students)", PARENTS: "Parents only", STAFF: "Staff", ALL: "Families and staff" };
 const SCOPE_LABEL: Record<Scope, string> = { SCHOOL: "Whole school", CLASS: "Some classes", SECTION: "Some sections" };
 
 /**
@@ -47,13 +47,13 @@ export function NoticeForm({
   // Controlled: React 19 resets uncontrolled fields after a form action, which would lose typed text on an error.
   const [title, setTitle] = useState(defaults.title);
   const [body, setBody] = useState(defaults.body);
-  const [audience, setAudience] = useState<Audience>(manage === "ASSIGNED" ? "FAMILIES" : defaults.audience);
+  const [audience, setAudience] = useState<Audience>(manage === "ASSIGNED" && defaults.audience !== "PARENTS" ? "FAMILIES" : defaults.audience);
   const [scope, setScope] = useState<Scope>(manage === "ASSIGNED" ? "SECTION" : defaults.scope);
   const [targets, setTargets] = useState<string[]>(defaults.targetIds);
   const [publishAt, setPublishAt] = useState(defaults.publishAt);
   const [showUntil, setShowUntil] = useState(defaults.showUntil);
   const id = (f: string) => `notice-${defaults.id ?? "new"}-${f}`;
-  const staffToo = audience !== "FAMILIES";
+  const staffToo = audience === "STAFF" || audience === "ALL";
   const effectiveScope: Scope = staffToo ? "SCHOOL" : scope;
   const choices = effectiveScope === "CLASS" ? classes.map((c) => ({ id: c.id, label: c.name })) : effectiveScope === "SECTION" ? sections.map((s) => ({ id: s.id, label: s.code })) : [];
   const toggle = (v: string, on: boolean) => setTargets((t) => (on ? [...t, v] : t.filter((x) => x !== v)));
@@ -101,7 +101,7 @@ export function NoticeForm({
 
       {manage === "ALL" ? (
         <div className="grid gap-4 sm:grid-cols-2">
-          <SelectField id={id("audience")} label="For" name="audience" value={audience} onChange={(e) => setAudience(e.target.value as Audience)} options={(["FAMILIES", "STAFF", "ALL"] as const).map((a) => ({ value: a, label: AUDIENCE_LABEL[a] }))} error={state.fieldErrors?.audience} />
+          <SelectField id={id("audience")} label="For" name="audience" value={audience} onChange={(e) => setAudience(e.target.value as Audience)} options={(["FAMILIES", "PARENTS", "STAFF", "ALL"] as const).map((a) => ({ value: a, label: AUDIENCE_LABEL[a] }))} error={state.fieldErrors?.audience} />
           {staffToo ? (
             <>
               <input type="hidden" name="scope" value="SCHOOL" />
@@ -113,9 +113,8 @@ export function NoticeForm({
         </div>
       ) : (
         <>
-          <input type="hidden" name="audience" value="FAMILIES" />
           <input type="hidden" name="scope" value="SECTION" />
-          <p className="text-sm text-muted-foreground">For the families of the sections you are class teacher of.</p>
+          <SelectField id={id("audience")} label="For" name="audience" value={audience} onChange={(e) => setAudience(e.target.value as Audience)} options={(["FAMILIES", "PARENTS"] as const).map((a) => ({ value: a, label: AUDIENCE_LABEL[a] }))} hint="Families of the sections you are class teacher of." error={state.fieldErrors?.audience} />
         </>
       )}
 

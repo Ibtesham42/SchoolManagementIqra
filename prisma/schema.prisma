@@ -2505,11 +2505,13 @@ model FeePaymentAllocation {
 
 // ───────────────────────────── Phase 6C notices (ADR-047) ─────────────────────────────
 
-/// Who a notice is for. STAFF and ALL notices are school-wide only (CHECK notice_staff_school_wide).
+/// Who a notice is for. FAMILIES = parents and student accounts; PARENTS = parent accounts only (6C-M4, owner
+/// decision 2026-11-24); STAFF and ALL notices are school-wide only (CHECK notice_staff_school_wide).
 enum NoticeAudience {
   FAMILIES
   STAFF
   ALL
+  PARENTS
 }
 
 /// How far a notice reaches. CLASS / SECTION notices list their targets in notice_target.
