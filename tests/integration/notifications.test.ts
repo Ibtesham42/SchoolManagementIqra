@@ -31,6 +31,7 @@ describe.skipIf(!enabled)("notifications (integration)", () => {
   let teacher: Ctx, admin: Ctx, parent: Ctx, blockedParentId: string, pendingParentId: string;
   let sessionId: string, sectionId: string, studentId: string, enrollmentId: string, guardianId: string;
   let today: string, yesterday: string, weeklyBefore: unknown;
+  const runGuardians: string[] = [];
   const d = (s: string) => new Date(`${s}T00:00:00Z`);
   const shift = (s: string, days: number) => new Date(d(s).getTime() + days * 86_400_000).toISOString().slice(0, 10);
 
@@ -43,7 +44,8 @@ describe.skipIf(!enabled)("notifications (integration)", () => {
     const g = await m.prisma.guardian.create({ data: { name: `Synthetic Guardian ${suffix}`, phone: `108${String(Date.now() % 1e6).padStart(6, "0")}${suffix.length}` } });
     await m.prisma.studentGuardian.create({ data: { studentId, guardianId: g.id, relation: "MOTHER", portalAccess: opts.portalAccess } });
     const role = await m.prisma.role.findUniqueOrThrow({ where: { key: "PARENT" } });
-    const u = await m.prisma.user.create({ data: { username: `${run}-${suffix}`, displayName: `Synthetic ${suffix}`, passwordHash: "x", guardianId: g.id, privacyConsentAt: opts.activated ? new Date() : null, roles: { create: { roleId: role.id } } } });
+    const u = await m.prisma.user.create({ data: { username: `${run}-${suffix}`, displayName: `Synthetic ${suffix}`, passwordHash: "x", guardianId: g.id, privacyConsentAt: opts.activated ? new Date() : null, privacyConsentVersion: opts.activated ? "1" : null, roles: { create: { roleId: role.id } } } });
+    runGuardians.push(g.id);
     return { guardianId: g.id, userId: u.id };
   }
   const mark = (status: "PRESENT" | "ABSENT", date: string, version: number | null) => m.markStudentDay(teacher, { sectionId, date, entries: [{ enrollmentId, status: status as "PRESENT", version }], reason: date === today ? "" : "Synthetic correction" });
@@ -80,11 +82,14 @@ describe.skipIf(!enabled)("notifications (integration)", () => {
     await prisma.notification.deleteMany({ where: { user: { username: { startsWith: run } } } });
     await prisma.studentAttendance.deleteMany({ where: { academicSessionId: sessionId } });
     await prisma.studentEnrollment.deleteMany({ where: { academicSessionId: sessionId } });
-    await prisma.user.deleteMany({ where: { username: { startsWith: run } } });
     await prisma.studentGuardian.deleteMany({ where: { studentId } });
-    await prisma.guardian.deleteMany({ where: { name: { startsWith: "Synthetic Guardian" }, students: { none: {} } } });
     await prisma.student.deleteMany({ where: { studentCode: { startsWith: tag } } });
     await prisma.section.deleteMany({ where: { academicSessionId: sessionId } });
+    // after the sections: a section names the class teacher (section_class_teacher_id_fkey)
+    await prisma.session.deleteMany({ where: { user: { username: { startsWith: run } } } });
+    await prisma.user.deleteMany({ where: { username: { startsWith: run } } });
+    // only this run's guardians, after their accounts (user_guardian_id_fkey); never other suites' leftovers
+    await prisma.guardian.deleteMany({ where: { id: { in: runGuardians } } });
     await prisma.schoolClass.deleteMany({ where: { code: { startsWith: tag } } });
     await prisma.academicSession.deleteMany({ where: { id: sessionId } });
     await prisma.schoolSetting.updateMany({ data: { studentWeeklyOff: weeklyBefore === null ? { days: [], saturdays: [] } : (weeklyBefore as object) } });

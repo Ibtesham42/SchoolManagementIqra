@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { integrationEnabled } from "../test-scope";
+import { FIXTURE_DOB, freeFixtureYear } from "./fixture-year";
 
 /**
  * PENDING until migrations 20261110000000 + 20261111000000 are applied to the Neon "test" branch and
@@ -21,13 +22,14 @@ const load = async () => ({
   ...(await import("@/modules/students/students.service")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
+const FIXTURE_YEAR = enabled ? await freeFixtureYear(m.prisma, 1) : 2000;
 
 describe.skipIf(!enabled)("student records (integration)", () => {
   const run = `sr${Date.now().toString(36)}`;
   const tag = Math.random().toString(36).slice(2, 6).toUpperCase();
   // A PAST synthetic session (2000–2019; other suites use 2200+): leaving dates may not be in the future,
   // so the status-change success path needs enrollments that started before today.
-  const year = 2000 + Math.floor(Math.random() * 20);
+  const year = FIXTURE_YEAR; // a free past year on Test (fixture-year.ts)
   const sessionName = `${year}-${String((year + 1) % 100).padStart(2, "0")}`;
   type Ctx = NonNullable<Awaited<ReturnType<typeof m.validateSessionToken>>>;
   let admin: Ctx, principal: Ctx, officer: Ctx, classTeacher: Ctx, otherTeacher: Ctx, accountant: Ctx;
@@ -47,7 +49,7 @@ describe.skipIf(!enabled)("student records (integration)", () => {
   const appVersion = async (id: string) => (await m.prisma.admissionApplication.findUniqueOrThrow({ where: { id }, select: { version: true } })).version;
   const studentVersion = async (id: string) => (await m.prisma.student.findUniqueOrThrow({ where: { id }, select: { version: true } })).version;
   async function admit(firstName: string, lastName: string, sectionId: string) {
-    const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName, dob: "1995-05-01", gender: "FEMALE" });
+    const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName, dob: FIXTURE_DOB, gender: "FEMALE" });
     await m.updateGuardiansStep(officer, { id, version: await appVersion(id), guardians: [{ relation: "MOTHER", name: "Synthetic Parent", phone: `96${Math.floor(10_000_000 + Math.random() * 89_999_999)}`, altPhone: null, email: null, occupation: null, isPrimary: true, isEmergencyContact: true }] });
     await m.updateContactStep(officer, { id, version: await appVersion(id), phone: null, email: null, address });
     await m.submitApplication(officer, id, await appVersion(id));

@@ -104,7 +104,7 @@
 - **Tests:** concession/late-fee math, partial payments, duplicate prevention, webhook replay, reconciliation.
 - **Completion criteria:** reconciliation report matches payments on the `test` branch.
 
-## 8. Phase 6 — Parent and Student Portals · **In Progress** (PHASE_6_PLAN.md; decisions P1–P24 approved 2026-11-22; 6A and 6B built; 6B-M4 verification blocked on KI-059; 6C-M1 notices built 2026-11-24, migration B approved, not applied)
+## 8. Phase 6 — Parent and Student Portals · **Built — verification pending** (PHASE_6_PLAN.md; decisions P1–P24 approved 2026-11-22; 6A, 6B and 6C-M1–M4 built and committed by 2026-11-26; migrations B–D applied to development and Test 2026-11-26; 6B-M4 / 6C-M5 verification waits for KI-059)
 - **Objectives:** self-service access for families without exposing other students' data.
 - **Features:** parent & student login (long sessions, mobile-first), student information, attendance, results, notices, fee status/payment, communication (messages/notifications).
 - **Dependencies:** Phases 2, 4, 5.
@@ -112,7 +112,7 @@
 - **Tests:** IDOR tests (parent A can't see child of parent B), e2e on phones.
 - **Completion criteria:** portal journeys pass on mobile; RBAC matrix green.
 
-## 9. Phase 7 — School Operations · **Pending**
+## 9. Phase 7 — School Operations · **Planned — decisions approved** (PHASE_7_PLAN.md; O1–O37 approved as recommended 2026-11-26; 7A transport first)
 - **Objectives:** day-to-day operations beyond academics and finance.
 - **Features:** transport (vehicles, documents & expiry alerts, routes/stops, student allocation, transport fee), library (catalogue, copies, issue/return, fines), inventory & assets (maintenance, disposal), certificates (bonafide, character, transfer), school documents, school events (internal), remaining import/export reports.
 - **Dependencies:** Phases 2, 3, 5.

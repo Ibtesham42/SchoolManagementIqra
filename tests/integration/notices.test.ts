@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { integrationEnabled } from "../test-scope";
+import { FIXTURE_DOB, freeFixtureYear } from "./fixture-year";
 
 /**
  * Phase 6C-M1 — notices against the real database (PHASE_6_PLAN.md §6 6C-M1). PENDING until KI-059 (and migration
@@ -23,11 +24,12 @@ const load = async () => ({
   ...(await import("@/modules/notices/notices.portal")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
+const FIXTURE_YEAR = enabled ? await freeFixtureYear(m.prisma, 1) : 2000;
 
 describe.skipIf(!enabled)("notices (integration)", () => {
   const run = `n6c${Date.now().toString(36)}`;
   const tag = Math.random().toString(36).slice(2, 6).toUpperCase();
-  const year = 2000 + Math.floor(Math.random() * 20);
+  const year = FIXTURE_YEAR; // a free past year on Test (fixture-year.ts)
   type Ctx = NonNullable<Awaited<ReturnType<typeof m.validateSessionToken>>>;
   let root: Ctx, principal: Ctx, officer: Ctx, teacher: Ctx, accountant: Ctx, parentA: Ctx, parentA2: Ctx, parentB: Ctx;
   let sessionId: string, classId: string, sectionA: string, sectionB: string;
@@ -46,12 +48,12 @@ describe.skipIf(!enabled)("notices (integration)", () => {
   }
   async function parentOf(suffix: string, guardianId: string) {
     const role = await m.prisma.role.findUniqueOrThrow({ where: { key: "PARENT" } });
-    const u = await m.prisma.user.create({ data: { username: `${run}-${suffix}`, displayName: `Synthetic ${suffix}`, passwordHash: "x", privacyConsentAt: new Date(), guardianId, roles: { create: { roleId: role.id } } } });
+    const u = await m.prisma.user.create({ data: { username: `${run}-${suffix}`, displayName: `Synthetic ${suffix}`, passwordHash: "x", privacyConsentAt: new Date(), privacyConsentVersion: "1", guardianId, roles: { create: { roleId: role.id } } } });
     return (await m.validateSessionToken((await m.createSession(u.id, { long: false })).token))!;
   }
   const appVersion = async (id: string) => (await m.prisma.admissionApplication.findUniqueOrThrow({ where: { id }, select: { version: true } })).version;
   async function admit(firstName: string, sectionId: string, guardians = 1) {
-    const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName: "Example", dob: "2015-05-01", gender: "FEMALE" });
+    const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName: "Example", dob: FIXTURE_DOB, gender: "FEMALE" });
     const g = (rel: "MOTHER" | "FATHER", primary: boolean) => ({ relation: rel, name: `Synthetic ${rel} ${firstName}`, phone: `107${String(Date.now() % 1e6).padStart(6, "0")}${seq++ % 10}`, altPhone: null, email: null, occupation: null, isPrimary: primary, isEmergencyContact: primary });
     await m.updateGuardiansStep(officer, { id, version: await appVersion(id), guardians: guardians === 2 ? [g("MOTHER", true), g("FATHER", false)] : [g("MOTHER", true)] });
     await m.updateContactStep(officer, { id, version: await appVersion(id), phone: null, email: null, address });
@@ -86,7 +88,7 @@ describe.skipIf(!enabled)("notices (integration)", () => {
     parentA = await parentOf("pa", a.guardianId);
     parentA2 = await parentOf("pa2", a.otherGuardianId!);
     parentB = await parentOf("pb", kid.B.guardianId);
-  }, 180_000);
+  }, 480_000); // several admissions through the full flow, one Neon round trip per step
 
   it("a section notice reaches that section's families only; a class notice every section of the class", async () => {
     await published(principal, { title: `${run} section A`, audience: "FAMILIES", scope: "SECTION", targetIds: [sectionA] });
@@ -162,7 +164,9 @@ describe.skipIf(!enabled)("notices (integration)", () => {
     const { id: noEnd } = await m.createNotice(principal, { academicSessionId: sessionId, ...text, showUntil: "", title: `${run} session ended`, audience: "FAMILIES", scope: "SCHOOL", targetIds: [] });
     await m.publishNotice(principal, { id: noEnd, version: await versionOf(noEnd) });
     expect((await m.getManagedNotice(principal, noEnd)).state).toBe("EXPIRED");
-    expect(await familyTitles(parentA)).not.toContain(`${run} session ended`);
+    // Read with the REAL today (the suite's window.today sits inside the synthetic session on purpose).
+    const { todayInTimeZone } = await import("@/lib/format");
+    expect((await m.listPortalNotices(parentA, { ...window, today: todayInTimeZone() })).map((n) => n.title)).not.toContain(`${run} session ended`);
 
     const v = await versionOf(old);
     await expect(m.updateNotice(principal, { id: old, version: v, ...text, title: "changed", audience: "FAMILIES", scope: "SCHOOL", targetIds: [] })).rejects.toBeInstanceOf(m.ConflictError);

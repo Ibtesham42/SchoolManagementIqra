@@ -10,10 +10,22 @@
 
 ## Log
 
+### 2026-11-26 — Phase 6C-M5: first integration run on Test; Phase 7 plan approved
+- **Environment (owner-approved):** KI-059 fixed. A script that never printed the strings added `TEST_DATABASE_URL`, `TEST_TARGET_*`, `SEED_TARGET_*` and `FORBIDDEN_ENDPOINT_IDS` to `.env`. `env:check` passes every identity check; `PRIVATE_STORAGE_LOCAL_DIR` is still missing (owner to add; the classifier blocked the write). Both local `.env` backups are kept on the owner's instruction.
+- **First real integration run (all phases):** 151 / 220 passed, 69 failed. Almost all failures were fixtures (KI-110).
+  - Fixture fixes: integration files run serially; `tests/integration/fixture-year.ts` (free past year, random 1990 DOB); consent pairs; cleanup scoped to the run and FK order; a fresh account per guardian; rate-limit reset; corrected expectations (a student account and permission-less staff get a uniform 403 on fee / portal reads, still identical across ids; the section **code** is shown, as in 6B).
+- **Two app defects found and fixed:**
+  1. **Notices access (security):** the ASSIGNED filter `targets: { every: { section: … } }` did not re-check the to-one section on Postgres, so a class teacher moved off a section kept managing their notice to it (6C-M1 H1 partly ineffective). It is rewritten as a `none` filter, verified on Test in four states (own / moved off / back / session closed).
+  2. **Parent fee page:** `getPortalFeeLedger` filtered on a `student` relation `FeeInvoice` doesn't have, so every parent fee page threw. The filter now goes through the enrollment.
+  - Guard test `tests/unit/phase6c-m5-fixes.test.ts`.
+- **Phase 6 suites on Test:** student-accounts 8/8, notifications 8/8, payment-claims 10/10, guardian-links 6/6, notices 7/7 (one earlier run failed its CHECK case; not reproduced), portal-shell 6/6, portal-accounts 8/8, portal-idor 7/7, portal-6b-m3 4/4. **Not run:** `portal-6b`, `portal-6b-m2`. No two consecutive free past years are left on Test (KI-110); this needs an owner-approved reset of the Test branch from development. Older phases' suites still fail for fixture reasons (KI-110, not in scope).
+- Gates: lint ✓, typecheck ✓, unit 115 files / 3,073 ✓.
+- **Phase 7:** `docs/PHASE_7_PLAN.md` drafted by the architect agent; **owner approved O1–O37 as recommended (2026-11-26)**. Build starts with 7A after Phase 6 closes.
+
 ### 2026-11-26 — Migrations B, C, D applied to development; local `.env` fixed
 - **Cause of the local login failure ("Something went wrong"):** the local `.env` `DATABASE_URL` pointed at the Neon **production** branch (empty — no tables), so the login rate-limit query failed on `rate_limit_bucket`; `DIRECT_URL` was missing. Nothing was written to production.
 - **Owner-approved fix (2026-11-26):** `.env` now points `DATABASE_URL` (pooled) and `DIRECT_URL` at the **development** branch; the previous file was kept as a gitignored local backup for the owner to delete. Connection strings were written by a script that never printed them.
-- **Development branch:** `prisma migrate deploy` applied migrations B `20261127000000_phase6c_notices`, C `20261128000000_phase6c_payment_claims` and D `20261129000000_phase6c_notice_parents` (all SQL-approved 2026-11-24); `migrate status` → up to date (18/18); `db:check` ✓ (13.8 MB). No seed (development already has its users). **Test branch not changed** — B, C, D still pending there.
+- **Development branch:** `prisma migrate deploy` applied migrations B `20261127000000_phase6c_notices`, C `20261128000000_phase6c_payment_claims` and D `20261129000000_phase6c_notice_parents` (all SQL-approved 2026-11-24); `migrate status` → up to date (18/18); `db:check` ✓ (13.8 MB). No seed (development already has its users). **Test branch (owner-approved later the same day):** B, C, D applied with `DOTENV_PATH=.env.test` (target confirmed as the test endpoint first); `migrate status` up to date, `db:check` ✓ (15.7 MB). Integration suites still skip: `.env` has no `TEST_DATABASE_URL` / `TEST_TARGET_*` / `SEED_TARGET_*` / `FORBIDDEN_ENDPOINT_IDS` (KI-059; an owner-run script that adds them is prepared).
 - Checked against the dev server on development: `/login` 200, unauthenticated `/erp` → `/login`, unknown user → "Invalid username or password.", no server errors. A real Super Admin sign-in is left to the owner.
 - Gates on the 6C-M4 working tree: lint ✓, typecheck ✓, check:deps ✓, unit 114 files / 3,064 ✓.
 

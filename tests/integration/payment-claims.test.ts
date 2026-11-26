@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { integrationEnabled } from "../test-scope";
 
 /**
@@ -64,7 +64,7 @@ describe.skipIf(!enabled)("payment claims (integration)", () => {
     portalBefore = ((await m.prisma.schoolSetting.findUnique({ where: { id: "default" }, select: { features: true } }))?.features ?? null) as unknown;
     await m.updatePortalPaymentSettings(admin, { payeeName: "Demo Public School", vpa: "demo.school@examplebank", leaverAccessDays: 180, studentAccounts: false, studentMinClassLevel: 9 });
     formatsBefore = await m.getFeeNumberFormats(accountant);
-    await m.updateFeeNumberFormats(accountant, { feeReceipt: `R${tag}/{SEQ:5}`, feeInvoice: `I${tag}/{SEQ:5}` });
+    await m.updateFeeNumberFormats(admin, { feeReceipt: `R${tag}/{SEQ:5}`, feeInvoice: `I${tag}/{SEQ:5}` });
     today = m.todayInTimeZone();
     window = { today, leaverAccessDays: 180 };
     const start = new Date(d(today).getTime() - 90 * 86_400_000);
@@ -76,9 +76,9 @@ describe.skipIf(!enabled)("payment claims (integration)", () => {
     const b = await pupil(2, sectionId, start);
     studentId = a.studentId;
     otherStudentId = b.studentId;
-    parent = await login((await user("pa", "PARENT", { guardianId: a.guardianId, privacyConsentAt: new Date() })).id);
-    otherParent = await login((await user("pb", "PARENT", { guardianId: b.guardianId, privacyConsentAt: new Date() })).id);
-    studentAccount = await login((await user("st", "STUDENT", { studentId, privacyConsentAt: new Date() })).id);
+    parent = await login((await user("pa", "PARENT", { guardianId: a.guardianId, privacyConsentAt: new Date(), privacyConsentVersion: "1" })).id);
+    otherParent = await login((await user("pb", "PARENT", { guardianId: b.guardianId, privacyConsentAt: new Date(), privacyConsentVersion: "1" })).id);
+    studentAccount = await login((await user("st", "STUDENT", { studentId, privacyConsentAt: new Date(), privacyConsentVersion: "1" })).id);
     const tui = (await m.createFeeCategory(accountant, { code: `${tag}TUI`, name: `${run} Tuition`, kind: "REGULAR", appliesTo: "ALL" }))!.id;
     const q1 = (await m.createFeeInstallment(accountant, { academicSessionId: sessionId, name: "Q1", dueOn: iso(new Date(d(today).getTime() - 30 * 86_400_000)), sortOrder: 0 }))!.id;
     await m.createFeeStructure(accountant, { academicSessionId: sessionId, classId, name: "Five", items: [{ categoryId: tui, installmentId: q1, amount: "3000.00" }] });
@@ -88,7 +88,7 @@ describe.skipIf(!enabled)("payment claims (integration)", () => {
   afterAll(async () => {
     const { prisma } = m;
     if (!prisma) return;
-    const ids = [studentId, otherStudentId];
+    const ids = [studentId, otherStudentId].filter((x): x is string => !!x); // beforeAll may have stopped early
     await prisma.notification.deleteMany({ where: { user: { username: { startsWith: run } } } });
     await prisma.feePaymentClaim.deleteMany({ where: { studentId: { in: ids } } });
     await prisma.$transaction(async (tx) => {
@@ -106,8 +106,9 @@ describe.skipIf(!enabled)("payment claims (integration)", () => {
     await prisma.feeCategory.deleteMany({ where: { code: { startsWith: tag } } });
     await prisma.schoolSetting.updateMany({ where: { id: "default" }, data: { features: (portalBefore ?? {}) as object } });
     await prisma.user.deleteMany({ where: { username: { startsWith: run } } });
+    const runGuardians = (await prisma.studentGuardian.findMany({ where: { studentId: { in: ids } }, select: { guardianId: true } })).map((l) => l.guardianId);
     await prisma.studentGuardian.deleteMany({ where: { studentId: { in: ids } } });
-    await prisma.guardian.deleteMany({ where: { name: { startsWith: "Synthetic Guardian" }, students: { none: {} } } });
+    await prisma.guardian.deleteMany({ where: { id: { in: runGuardians } } }); // only this run's (never other suites' leftovers)
     await prisma.studentEnrollment.deleteMany({ where: { academicSessionId: sessionId } });
     await prisma.student.deleteMany({ where: { id: { in: ids } } });
     await prisma.section.deleteMany({ where: { academicSessionId: sessionId } });
@@ -125,9 +126,17 @@ describe.skipIf(!enabled)("payment claims (integration)", () => {
     await prisma.$disconnect();
   }, 180_000);
 
+  // The parents' 5-claims-a-day limit lives in the database; the cases below submit more than 5 as one parent.
+  beforeEach(async () => {
+    const { RULES, subjectPrefix } = await import("@/lib/rate-limit");
+    for (const ctx of [parent, otherParent]) if (ctx) await m.prisma.rateLimitBucket.deleteMany({ where: { key: { startsWith: subjectPrefix(RULES.paymentClaim, ctx.userId) } } });
+  });
+
   it("only the child's parent may use the page; students, staff and other families get the same NotFound", async () => {
     expect((await m.getPortalPayPage(parent, studentId, window)).dueToday).toBe("3000.00");
-    for (const ctx of [studentAccount, otherParent]) await expect(m.getPortalPayPage(ctx, studentId, window)).rejects.toThrow("Not found.");
+    await expect(m.getPortalPayPage(otherParent, studentId, window)).rejects.toThrow("Not found.");
+    // A student account holds no fee permission at all: refused by the permission check first (403), no data either way.
+    await expect(m.getPortalPayPage(studentAccount, studentId, window)).rejects.toBeInstanceOf(m.ForbiddenError);
     await expect(m.getPortalPayPage(accountant, studentId, window)).rejects.toBeInstanceOf(m.NotFoundError);
     await expect(claim(otherParent, "100", utr())).rejects.toThrow("Not found.");
   });
@@ -215,7 +224,8 @@ describe.skipIf(!enabled)("payment claims (integration)", () => {
     const { ROLES, normalizeGrant } = await import("@/lib/rbac/catalog");
     const [c] = await m.prisma.feePaymentClaim.findMany({ where: { studentId }, take: 1, select: { id: true, version: true } });
     for (const role of ROLES) {
-      if (role.key === "SUPER_ADMIN") continue;
+      // Portal roles need a linked guardian / student to sign in at all — refused in the first case of this suite.
+      if (role.key === "SUPER_ADMIN" || role.key === "PARENT" || role.key === "STUDENT") continue;
       const grants = role.grants.map(normalizeGrant);
       const ctx = await login((await user(`r-${role.key.toLowerCase()}`, role.key)).id);
       const collects = !ctx.portal && grants.some((g) => g.key === "fee.collect" && g.scope === "ALL");

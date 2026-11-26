@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { integrationEnabled } from "../test-scope";
+import { FIXTURE_DOB, freeFixtureYear } from "./fixture-year";
 
 /**
  * Phase 6A-M3b — email invitations and guardian link / merge against the real database. PENDING until KI-059;
@@ -19,11 +20,12 @@ const load = async () => ({
   ...(await import("@/modules/students/guardian-links.service")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
+const FIXTURE_YEAR = enabled ? await freeFixtureYear(m.prisma, 1) : 2000;
 
 describe.skipIf(!enabled)("guardian links and invitations (integration)", () => {
   const run = `gl${Date.now().toString(36)}`;
   const tag = Math.random().toString(36).slice(2, 6).toUpperCase();
-  const year = 2000 + Math.floor(Math.random() * 20);
+  const year = FIXTURE_YEAR; // a free past year on Test (fixture-year.ts)
   type Ctx = NonNullable<Awaited<ReturnType<typeof m.validateSessionToken>>>;
   let root: Ctx, schoolAdmin: Ctx, principal: Ctx, officer: Ctx, accountant: Ctx;
   let sessionId: string, classId: string, sectionId: string;
@@ -38,7 +40,7 @@ describe.skipIf(!enabled)("guardian links and invitations (integration)", () => 
   }
   const appVersion = async (id: string) => (await m.prisma.admissionApplication.findUniqueOrThrow({ where: { id }, select: { version: true } })).version;
   async function admit(firstName: string, guardianPhone: string, email: string | null = null) {
-    const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName: "Example", dob: "2015-05-01", gender: "FEMALE" });
+    const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName: "Example", dob: FIXTURE_DOB, gender: "FEMALE" });
     await m.updateGuardiansStep(officer, { id, version: await appVersion(id), guardians: [{ relation: "MOTHER", name: `Synthetic Parent ${firstName}`, phone: guardianPhone, altPhone: null, email, occupation: null, isPrimary: true, isEmergencyContact: true }] });
     await m.updateContactStep(officer, { id, version: await appVersion(id), phone: null, email: null, address });
     await m.submitApplication(officer, id, await appVersion(id));
@@ -65,7 +67,7 @@ describe.skipIf(!enabled)("guardian links and invitations (integration)", () => 
     const acct = await m.prisma.user.findFirstOrThrow({ where: { guardianId: kid.guardianId }, select: { id: true } });
     expect(await m.prisma.accountActivation.count({ where: { userId: acct.id, channel: "EMAIL", usedAt: null } })).toBe(1);
     // Simulate a completed activation, then an office reset: "ever activated" still blocks email (review M1).
-    await m.prisma.user.update({ where: { id: acct.id }, data: { privacyConsentAt: new Date(), passwordChangedAt: new Date() } });
+    await m.prisma.user.update({ where: { id: acct.id }, data: { privacyConsentAt: new Date(), privacyConsentVersion: "1", passwordChangedAt: new Date() } });
     await expect(m.sendFamilyInvitation(schoolAdmin, { studentId: kid.studentId, guardianId: kid.guardianId, username: null })).rejects.toBeInstanceOf(m.ConflictError);
     await m.issueGuardianSlip(schoolAdmin, { studentId: kid.studentId, guardianId: kid.guardianId, mode: "reset", username: null });
     await expect(m.sendFamilyInvitation(schoolAdmin, { studentId: kid.studentId, guardianId: kid.guardianId, username: null })).rejects.toBeInstanceOf(m.ConflictError);

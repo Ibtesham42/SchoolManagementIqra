@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { integrationEnabled } from "../test-scope";
+import { FIXTURE_DOB, freeFixtureYear } from "./fixture-year";
 
 /**
  * Phase 6A-M3a — parent portal accounts against the real database (PHASE_6_PLAN.md §6 6A-M3, §11). PENDING until
@@ -23,11 +24,12 @@ const load = async () => ({
   ...(await import("@/modules/students/family-accounts.service")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
+const FIXTURE_YEAR = enabled ? await freeFixtureYear(m.prisma, 1) : 2000;
 
 describe.skipIf(!enabled)("parent portal accounts (integration)", () => {
   const run = `pa${Date.now().toString(36)}`;
   const tag = Math.random().toString(36).slice(2, 6).toUpperCase();
-  const year = 2000 + Math.floor(Math.random() * 20);
+  const year = FIXTURE_YEAR; // a free past year on Test (fixture-year.ts)
   type Ctx = NonNullable<Awaited<ReturnType<typeof m.validateSessionToken>>>;
   let root: Ctx, schoolAdmin: Ctx, principal: Ctx, officer: Ctx, teacher: Ctx;
   let sessionId: string, classId: string, sectionA: string, sectionB: string;
@@ -43,7 +45,7 @@ describe.skipIf(!enabled)("parent portal accounts (integration)", () => {
     return (await m.validateSessionToken((await m.createSession(u.id, { long: false })).token))!;
   }
   const appVersion = async (id: string) => (await m.prisma.admissionApplication.findUniqueOrThrow({ where: { id }, select: { version: true } })).version;
-  async function admit(firstName: string, sectionId: string, dob = "2015-05-01", guardianPhone = phone()) {
+  async function admit(firstName: string, sectionId: string, dob = FIXTURE_DOB, guardianPhone = phone()) {
     const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName: "Example", dob, gender: "FEMALE" });
     await m.updateGuardiansStep(officer, { id, version: await appVersion(id), guardians: [{ relation: "MOTHER", name: `Synthetic Parent ${firstName}`, phone: guardianPhone, altPhone: null, email: null, occupation: null, isPrimary: true, isEmergencyContact: true }] });
     await m.updateContactStep(officer, { id, version: await appVersion(id), phone: null, email: null, address });
@@ -68,7 +70,7 @@ describe.skipIf(!enabled)("parent portal accounts (integration)", () => {
   }, 120_000);
 
   it("a slip creates a PARENT account with no usable password; code + DOB + consent activate it", async () => {
-    const kid = await admit("Asha", sectionA, "2015-04-01");
+    const kid = await admit("Asha", sectionA, "1990-04-01");
     const [slip] = await m.issueGuardianSlip(schoolAdmin, { studentId: kid.studentId, guardianId: kid.guardianId, mode: "create", username: null });
     expect(slip).toMatchObject({ username: kid.phone, children: [expect.stringContaining("Asha")] });
     const acct = await m.prisma.user.findFirstOrThrow({ where: { guardianId: kid.guardianId }, select: { id: true, passwordHash: true, privacyConsentAt: true, roles: { select: { role: { select: { key: true } } } } } });
@@ -90,12 +92,12 @@ describe.skipIf(!enabled)("parent portal accounts (integration)", () => {
   });
 
   it("wrong code, wrong DOB, superseded and unknown username all give the same error; wrong codes don't count, 5 wrong DOBs void the code", async () => {
-    const kid = await admit("Bina", sectionA, "2015-06-02");
+    const kid = await admit("Bina", sectionA, "1990-06-02");
     const [first] = await m.issueGuardianSlip(schoolAdmin, { studentId: kid.studentId, guardianId: kid.guardianId, mode: "create", username: null });
     const [second] = await m.issueGuardianSlip(schoolAdmin, { studentId: kid.studentId, guardianId: kid.guardianId, mode: "reset", username: null });
     const errs = await Promise.all([
       activate(kid.phone, first.code, kid.dob).catch((e: Error) => e), // superseded
-      activate(kid.phone, second.code, "2015-06-03").catch((e: Error) => e), // DOB mismatch
+      activate(kid.phone, second.code, "1990-06-03").catch((e: Error) => e), // DOB mismatch
       activate(`${run}-nobody`, second.code, kid.dob).catch((e: Error) => e), // unknown username
       activate(kid.phone, "ZZZZ-ZZZZ-ZZZZ", kid.dob).catch((e: Error) => e), // wrong code
     ]);
@@ -107,7 +109,7 @@ describe.skipIf(!enabled)("parent portal accounts (integration)", () => {
     // Review M1: junk codes from someone who only knows the mobile number never void the parent's slip.
     for (let i = 0; i < 6; i++) await expect(activate(kid.phone, "ZZZZ-ZZZZ-ZZZZ", kid.dob)).rejects.toBeInstanceOf(m.ActivationFailedError);
     expect(await row()).toMatchObject({ usedAt: null, failedAttempts: 1 }); // only the DOB mismatch above counted
-    for (let i = 0; i < 4; i++) await expect(activate(kid.phone, second.code, "2015-01-01")).rejects.toBeInstanceOf(m.ActivationFailedError);
+    for (let i = 0; i < 4; i++) await expect(activate(kid.phone, second.code, "1990-01-01")).rejects.toBeInstanceOf(m.ActivationFailedError);
     const voided = await row();
     expect(voided.failedAttempts).toBe(5);
     expect(voided.usedAt).not.toBeNull();
@@ -115,7 +117,7 @@ describe.skipIf(!enabled)("parent portal accounts (integration)", () => {
   });
 
   it("two activations of the same code at once: exactly one wins", async () => {
-    const kid = await admit("Chitra", sectionA, "2015-07-03");
+    const kid = await admit("Chitra", sectionA, "1990-07-03");
     const [slip] = await m.issueGuardianSlip(schoolAdmin, { studentId: kid.studentId, guardianId: kid.guardianId, mode: "create", username: null });
     const results = await Promise.allSettled([activate(kid.phone, slip.code, kid.dob), activate(kid.phone, slip.code, kid.dob, `${password}-2`)]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
@@ -123,12 +125,12 @@ describe.skipIf(!enabled)("parent portal accounts (integration)", () => {
 
   it("a section run is idempotent: siblings share one slip; a second run prints nothing; reissue only for pending", async () => {
     const sharedPhone = phone();
-    const s1 = await admit("Devi", sectionB, "2014-01-01", sharedPhone);
-    const s2 = await admit("Esha", sectionB, "2016-01-01");
+    const s1 = await admit("Devi", sectionB, "1990-01-14", sharedPhone);
+    const s2 = await admit("Esha", sectionB, "1990-12-16");
     // Esha's primary guardian becomes Devi's guardian too → siblings.
     await m.prisma.studentGuardian.deleteMany({ where: { studentId: s2.studentId } });
     await m.prisma.studentGuardian.create({ data: { studentId: s2.studentId, guardianId: s1.guardianId, relation: "MOTHER", isPrimary: true } });
-    const s3 = await admit("Farah", sectionB, "2015-02-02");
+    const s3 = await admit("Farah", sectionB, "1990-02-02");
     const first = await m.issueSectionSlips(schoolAdmin, { sectionId: sectionB, reissuePending: false });
     expect(first.slips.map((s) => s.username).sort()).toEqual([sharedPhone, s3.phone].sort());
     expect(first.slips.find((s) => s.username === sharedPhone)?.children).toHaveLength(2);
@@ -152,7 +154,7 @@ describe.skipIf(!enabled)("parent portal accounts (integration)", () => {
   });
 
   it("office reset: the old password stops working and sessions end; deactivation blocks login; a blocked link hides the child", async () => {
-    const kid = await admit("Hema", sectionA, "2015-08-04");
+    const kid = await admit("Hema", sectionA, "1990-08-04");
     const [slip] = await m.issueGuardianSlip(schoolAdmin, { studentId: kid.studentId, guardianId: kid.guardianId, mode: "create", username: null });
     const session = await activate(kid.phone, slip.code, kid.dob);
     await m.issueGuardianSlip(schoolAdmin, { studentId: kid.studentId, guardianId: kid.guardianId, mode: "reset", username: null });

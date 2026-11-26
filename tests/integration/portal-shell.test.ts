@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { integrationEnabled } from "../test-scope";
+import { FIXTURE_DOB, freeFixtureYear } from "./fixture-year";
 
 /**
  * Phase 6A-M2 — portal context and shell rules against the real database (PHASE_6_PLAN.md §6, §7). PENDING until
@@ -27,11 +28,12 @@ const load = async () => ({
   ...(await import("@/modules/students/students.portal")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
+const FIXTURE_YEAR = enabled ? await freeFixtureYear(m.prisma, 1) : 2000;
 
 describe.skipIf(!enabled)("portal shell (integration)", () => {
   const run = `ps${Date.now().toString(36)}`;
   const tag = Math.random().toString(36).slice(2, 6).toUpperCase();
-  const year = 2000 + Math.floor(Math.random() * 20);
+  const year = FIXTURE_YEAR; // a free past year on Test (fixture-year.ts)
   const sessionName = `${year}-${String((year + 1) % 100).padStart(2, "0")}`;
   type Ctx = NonNullable<Awaited<ReturnType<typeof m.validateSessionToken>>>;
   let admin: Ctx, principal: Ctx, officer: Ctx;
@@ -47,6 +49,11 @@ describe.skipIf(!enabled)("portal shell (integration)", () => {
   }
   async function user(suffix: string, roleKey: string, data: { guardianId?: string; studentId?: string; password?: string } = {}) {
     const role = await m.prisma.role.findUniqueOrThrow({ where: { key: roleKey } });
+    // One account per guardian (user_guardian_id_key): each case starts with a fresh one, so drop this run's earlier one.
+    if (data.guardianId) {
+      await m.prisma.session.deleteMany({ where: { user: { guardianId: data.guardianId, username: { startsWith: run } } } });
+      await m.prisma.user.deleteMany({ where: { guardianId: data.guardianId, username: { startsWith: run } } });
+    }
     const u = await m.prisma.user.create({
       data: {
         username: `${run}-${suffix}`,
@@ -56,6 +63,7 @@ describe.skipIf(!enabled)("portal shell (integration)", () => {
         studentId: data.studentId,
         // Portal accounts are usable only after activation (consent recorded, review 6A-M3a M2).
         privacyConsentAt: roleKey === "PARENT" || roleKey === "STUDENT" ? new Date() : null,
+        privacyConsentVersion: roleKey === "PARENT" || roleKey === "STUDENT" ? "1" : null,
         roles: { create: { roleId: role.id } },
       },
     });
@@ -64,7 +72,7 @@ describe.skipIf(!enabled)("portal shell (integration)", () => {
   }
   const appVersion = async (id: string) => (await m.prisma.admissionApplication.findUniqueOrThrow({ where: { id }, select: { version: true } })).version;
   async function admit(firstName: string) {
-    const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName: "Example", dob: "1995-05-01", gender: "FEMALE" });
+    const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName: "Example", dob: FIXTURE_DOB, gender: "FEMALE" });
     await m.updateGuardiansStep(officer, { id, version: await appVersion(id), guardians: [{ relation: "MOTHER", name: `Synthetic Parent ${firstName}`, phone: `104${Math.floor(1_000_000 + Math.random() * 8_999_999)}`, altPhone: null, email: null, occupation: null, isPrimary: true, isEmergencyContact: true }] });
     await m.updateContactStep(officer, { id, version: await appVersion(id), phone: null, email: null, address });
     await m.submitApplication(officer, id, await appVersion(id));
@@ -104,7 +112,7 @@ describe.skipIf(!enabled)("portal shell (integration)", () => {
     const list = await m.listPortalChildren(ctx, window);
     expect(list.map((k) => k.id).sort()).toEqual([kids.Asha, kids.Bina].sort());
     const profile = await m.getPortalStudentProfile(ctx, kids.Asha, window);
-    expect(profile).toMatchObject({ id: kids.Asha, yourRelation: "Mother", className: `${run} Class P`, sectionCode: "A" });
+    expect(profile).toMatchObject({ id: kids.Asha, yourRelation: "Mother", className: `${run} Class P`, sectionCode: expect.stringMatching(/-A$/) }); // the section CODE (class code + name), as in 6B
     // Whitelist: no contact, address or guardian data leaves the service.
     expect(Object.keys(profile).sort()).toEqual(["admissionDate", "admissionNo", "className", "dob", "fullName", "gender", "id", "rollNumber", "sectionCode", "sessionName", "studentCode", "yourRelation"]);
   });

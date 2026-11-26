@@ -52,12 +52,19 @@ const requireManage = (ctx: AuthContext): ManageScope => {
 
 export const noticeAccess = (ctx: AuthContext) => ({ read: !ctx.portal && hasPermission(ctx, "notice.read"), manage: manageScopeOf(ctx) });
 
-/** Prisma filter: the notices an ASSIGNED manager still manages (their own, every target section theirs, session open). */
+/**
+ * Prisma filter: the notices an ASSIGNED manager still manages (their own, every target section theirs, session open).
+ * 6C-M5 (found on Test 2026-11-26): `targets: { every: { section: { … } } }` did NOT re-check the to-one section on
+ * Postgres — a teacher moved off the section kept managing the notice. Written as "no target that is NOT theirs".
+ */
 const ownSectionNotices = (userId: string) => ({
   createdById: userId,
   audience: { in: ["FAMILIES" as const, "PARENTS" as const] },
   scope: "SECTION" as const,
-  targets: { some: {}, every: { section: { classTeacherId: userId, academicSession: { status: { not: "CLOSED" as const } } } } },
+  targets: {
+    some: {},
+    none: { OR: [{ sectionId: null }, { section: { OR: [{ classTeacherId: null }, { classTeacherId: { not: userId } }, { academicSession: { status: "CLOSED" as const } }] } }] },
+  },
 });
 
 // ───────────────────────────── compose options ─────────────────────────────

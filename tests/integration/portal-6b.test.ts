@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { integrationEnabled } from "../test-scope";
+import { FIXTURE_DOB, freeFixtureYear } from "./fixture-year";
 
 /**
  * Phase 6B-M1 — family attendance against the real database. PENDING until KI-059. Synthetic data only.
@@ -18,11 +19,12 @@ const load = async () => ({
   ...(await import("@/modules/students/student-attendance.portal")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
+const FIXTURE_YEAR = enabled ? await freeFixtureYear(m.prisma, 2) : 2000;
 
 describe.skipIf(!enabled)("portal attendance (integration)", () => {
   const run = `p6b${Date.now().toString(36)}`;
   const tag = Math.random().toString(36).slice(2, 6).toUpperCase();
-  const year = 2000 + Math.floor(Math.random() * 20);
+  const year = FIXTURE_YEAR; // a free past year on Test (fixture-year.ts)
   type Ctx = NonNullable<Awaited<ReturnType<typeof m.validateSessionToken>>>;
   let root: Ctx, principal: Ctx, officer: Ctx, parent: Ctx;
   let sessionId: string, classId: string, sectionId: string, studentId: string, enrollmentId: string;
@@ -52,7 +54,7 @@ describe.skipIf(!enabled)("portal attendance (integration)", () => {
     enrollmentId = (await m.prisma.studentEnrollment.findFirstOrThrow({ where: { studentId, academicSessionId: sessionId }, select: { id: true } })).id;
     const { guardianId } = await m.prisma.studentGuardian.findFirstOrThrow({ where: { studentId }, select: { guardianId: true } });
     const role = await m.prisma.role.findUniqueOrThrow({ where: { key: "PARENT" } });
-    const u = await m.prisma.user.create({ data: { username: `${run}-parent`, displayName: "Synthetic parent", passwordHash: "x", privacyConsentAt: new Date(), guardianId, roles: { create: { roleId: role.id } } } });
+    const u = await m.prisma.user.create({ data: { username: `${run}-parent`, displayName: "Synthetic parent", passwordHash: "x", privacyConsentAt: new Date(), privacyConsentVersion: "1", guardianId, roles: { create: { roleId: role.id } } } });
     parent = (await m.validateSessionToken((await m.createSession(u.id, { long: false })).token))!;
   }, 120_000);
 

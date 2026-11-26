@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { integrationEnabled } from "../test-scope";
+import { FIXTURE_DOB, freeFixtureYear } from "./fixture-year";
 
 /**
  * Phase 2B security fixes — database behaviour (docs/SECURITY_AUDIT_2026-11-10_PHASE_2B.md). PENDING: written
@@ -28,11 +29,12 @@ const load = async () => ({
   ...(await import("@/modules/students/students.service")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
+const FIXTURE_YEAR = enabled ? await freeFixtureYear(m.prisma, 1) : 2000;
 
 describe.skipIf(!enabled)("Phase 2B security fixes (integration)", () => {
   const run = `sf${Date.now().toString(36)}`;
   const tag = Math.random().toString(36).slice(2, 6).toUpperCase();
-  const year = 2000 + Math.floor(Math.random() * 20);
+  const year = FIXTURE_YEAR; // a free past year on Test (fixture-year.ts)
   const sessionName = `${year}-${String((year + 1) % 100).padStart(2, "0")}`;
   type Ctx = NonNullable<Awaited<ReturnType<typeof m.validateSessionToken>>>;
   let root: Ctx, admin: Ctx, admin2: Ctx, principal: Ctx, officer: Ctx, ct: Ctx, ct2: Ctx;
@@ -54,7 +56,7 @@ describe.skipIf(!enabled)("Phase 2B security fixes (integration)", () => {
   const v = async (id: string) => (await m.prisma.admissionApplication.findUniqueOrThrow({ where: { id }, select: { version: true } })).version;
   const sv = async (id: string) => (await m.prisma.section.findUniqueOrThrow({ where: { id }, select: { version: true } })).version;
   async function ready(first: string, sectionId: string, phone: string, by: Ctx = officer) {
-    const { id } = await m.createDraft(by, { academicSessionId: sessionId, classId, firstName: first, middleName: null, lastName: "Demo", dob: "1995-05-01", gender: "FEMALE" });
+    const { id } = await m.createDraft(by, { academicSessionId: sessionId, classId, firstName: first, middleName: null, lastName: "Demo", dob: FIXTURE_DOB, gender: "FEMALE" });
     await m.updateGuardiansStep(by, { id, version: await v(id), guardians: [{ relation: "MOTHER", name: "Synthetic Parent", phone, altPhone: null, email: null, occupation: null, isPrimary: true, isEmergencyContact: true }] });
     await m.updateContactStep(by, { id, version: await v(id), phone: null, email: null, address });
     await m.submitApplication(by, id, await v(id));

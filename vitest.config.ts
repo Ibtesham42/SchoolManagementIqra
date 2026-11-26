@@ -19,5 +19,9 @@ export default defineConfig({
     globalSetup: scope === "integration" ? ["tests/integration-global-setup.ts"] : [],
     env: scope === "integration" ? { [INTEGRATION_FLAG]: "1" } : {},
     ...SCOPE_TIMEOUTS[scope], // integration only: 60 s per test, 180 s per setup hook; unit keeps the defaults
+    // Integration suites share ONE Test database (the settings row, the current session, number formats, sequence
+    // counters, synthetic session years): run the files one at a time so one suite can't change another's ground
+    // mid-run. Also keeps Neon free-tier compute to one connection pool at a time.
+    fileParallelism: scope !== "integration",
   },
 });

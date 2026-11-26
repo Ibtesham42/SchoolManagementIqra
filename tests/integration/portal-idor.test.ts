@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { integrationEnabled } from "../test-scope";
+import { FIXTURE_DOB, freeFixtureYear } from "./fixture-year";
 
 /**
  * Phase 6A-M4 — IDOR suite v1 (PHASE_6_PLAN.md §7), table-driven against the real database. PENDING until KI-059.
@@ -36,11 +37,12 @@ const load = async () => ({
   ...(await import("@/modules/fees/fees.portal")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
+const FIXTURE_YEAR = enabled ? await freeFixtureYear(m.prisma, 1) : 2000;
 
 describe.skipIf(!enabled)("portal IDOR suite v1 (integration)", () => {
   const run = `idor${Date.now().toString(36)}`;
   const tag = Math.random().toString(36).slice(2, 6).toUpperCase();
-  const year = 2000 + Math.floor(Math.random() * 20);
+  const year = FIXTURE_YEAR; // a free past year on Test (fixture-year.ts)
   type Ctx = NonNullable<Awaited<ReturnType<typeof m.validateSessionToken>>>;
   let root: Ctx, principal: Ctx, officer: Ctx;
   let sessionId: string, classId: string, sectionId: string;
@@ -62,12 +64,12 @@ describe.skipIf(!enabled)("portal IDOR suite v1 (integration)", () => {
   }
   async function portal(suffix: string, roleKey: "PARENT" | "STUDENT", link: { guardianId?: string; studentId?: string }) {
     const role = await m.prisma.role.findUniqueOrThrow({ where: { key: roleKey } });
-    const u = await m.prisma.user.create({ data: { username: `${run}-${suffix}`, displayName: `Synthetic ${suffix}`, passwordHash: "x", privacyConsentAt: new Date(), ...link, roles: { create: { roleId: role.id } } } });
+    const u = await m.prisma.user.create({ data: { username: `${run}-${suffix}`, displayName: `Synthetic ${suffix}`, passwordHash: "x", privacyConsentAt: new Date(), privacyConsentVersion: "1", ...link, roles: { create: { roleId: role.id } } } });
     return tokenCtx(u.id);
   }
   const appVersion = async (id: string) => (await m.prisma.admissionApplication.findUniqueOrThrow({ where: { id }, select: { version: true } })).version;
   async function admit(firstName: string, guardianPhone = phone()) {
-    const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName: "Example", dob: "2015-05-01", gender: "MALE" });
+    const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName: "Example", dob: FIXTURE_DOB, gender: "MALE" });
     await m.updateGuardiansStep(officer, { id, version: await appVersion(id), guardians: [{ relation: "FATHER", name: `Synthetic Parent ${firstName}`, phone: guardianPhone, altPhone: null, email: null, occupation: null, isPrimary: true, isEmergencyContact: true }] });
     await m.updateContactStep(officer, { id, version: await appVersion(id), phone: null, email: null, address });
     await m.submitApplication(officer, id, await appVersion(id));
@@ -141,8 +143,19 @@ describe.skipIf(!enabled)("portal IDOR suite v1 (integration)", () => {
     homework: (ctx, id) => m.listPortalHomework(ctx, id, window),
   };
 
+  /**
+   * 6C-M5: a denied read must be ONE identical answer for every id of that actor — the NotFound, or a 403 when the
+   * actor holds no such permission at all (refused before any record is read, so it says nothing about the id).
+   */
+  // Review 6C-M5 L2: a parent is always the exact NotFound; only actors without the portal permission (staff) may get a 403.
+  const denied = (r: string, actor: string) => r === "NotFoundError:Not found." || (!actor.startsWith("parent") && r.startsWith("ForbiddenError:"));
+  function assertUniform(seen: Map<string, Set<string>>, outcomes: string[]) {
+    for (const [key, set] of seen) if (set.size > 1) outcomes.push(`${key}: different denials across ids: ${[...set].join(" | ")}`);
+  }
+
   it("profile, attendance, timetable, calendar: allowed exactly for own children; everything else the identical NotFound", async () => {
     const outcomes: string[] = [];
+    const seen = new Map<string, Set<string>>();
     for (const [resource, read] of Object.entries(RESOURCES)) {
       for (const [actor, allowed] of Object.entries(ALLOWED)) {
         for (const k of IDS) {
@@ -150,11 +163,13 @@ describe.skipIf(!enabled)("portal IDOR suite v1 (integration)", () => {
             () => "ok",
             (e: Error) => `${e.constructor.name}:${e.message}`,
           );
-          const expected = allowed.includes(k) ? "ok" : "NotFoundError:Not found.";
-          if (r !== expected) outcomes.push(`${resource} · ${actor} × ${k}: got ${r}, expected ${expected}`);
+          const ok = allowed.includes(k);
+          if (ok ? r !== "ok" : !denied(r, actor)) outcomes.push(`${resource} · ${actor} × ${k}: got ${r}, expected ${ok ? "ok" : "the identical NotFound (or a permission 403)"}`);
+          if (!ok) seen.set(`${resource} · ${actor}`, (seen.get(`${resource} · ${actor}`) ?? new Set()).add(r));
         }
       }
     }
+    assertUniform(seen, outcomes);
     expect(outcomes).toEqual([]);
   });
 
@@ -172,13 +187,16 @@ describe.skipIf(!enabled)("portal IDOR suite v1 (integration)", () => {
   it("6B-M2 report cards: own children, and a leaver inside the window (P17); everything else the identical NotFound", async () => {
     const allowed: Record<string, string[]> = { ...ALLOWED, parentL: ["L1"] };
     const outcomes: string[] = [];
+    const seen = new Map<string, Set<string>>();
     for (const [actor, ids] of Object.entries(allowed)) {
       for (const k of IDS) {
         const r = await m.listPortalReportCards(actors[actor], idOf(k), window).then(() => "ok", (e: Error) => `${e.constructor.name}:${e.message}`);
-        const expected = ids.includes(k) ? "ok" : "NotFoundError:Not found.";
-        if (r !== expected) outcomes.push(`results · ${actor} × ${k}: got ${r}, expected ${expected}`);
+        const ok = ids.includes(k);
+        if (ok ? r !== "ok" : !denied(r, actor)) outcomes.push(`results · ${actor} × ${k}: got ${r}, expected ${ok ? "ok" : "the identical NotFound (or a permission 403)"}`);
+        if (!ok) seen.set(`results · ${actor}`, (seen.get(`results · ${actor}`) ?? new Set()).add(r));
       }
     }
+    assertUniform(seen, outcomes);
     expect(outcomes).toEqual([]);
     // By record id: a card / homework id that isn't this account's (here: missing) is the same NotFound; staff are refused.
     await expect(m.renderPortalReportCardPdf(actors.parentA, "c0000000000000000000000000", window)).rejects.toThrow("Not found.");
@@ -187,15 +205,20 @@ describe.skipIf(!enabled)("portal IDOR suite v1 (integration)", () => {
   });
 
   it("6B-M3 fees: parents' own children and a leaver in the window; a student account never (Forbidden for every id, P16)", async () => {
-    const allowed: Record<string, string[]> = { ...ALLOWED, parentL: ["L1"] };
+    const allowed: Record<string, string[]> = { ...ALLOWED, parentL: ["L1"], studentA1: [] }; // P16: never their own fees either
     const outcomes: string[] = [];
+    const seen = new Map<string, Set<string>>();
     for (const [actor, ids] of Object.entries(allowed)) {
       for (const k of IDS) {
         const r = await m.getPortalFeeLedger(actors[actor], idOf(k), window).then(() => "ok", (e: Error) => `${e.constructor.name}:${e.message}`);
-        const expected = ids.includes(k) ? "ok" : actor === "studentA1" ? "ForbiddenError:You don't have permission to do that." : "NotFoundError:Not found.";
-        if (r !== expected && !(actor === "studentA1" && r.startsWith("ForbiddenError"))) outcomes.push(`fees · ${actor} × ${k}: got ${r}, expected ${expected}`);
+        const ok = ids.includes(k);
+        // P16: a student account is refused for EVERY id (no fee permission at all) — never the NotFound of a parent.
+        const fine = ok ? r === "ok" : actor === "studentA1" ? r.startsWith("ForbiddenError:") : denied(r, actor);
+        if (!fine) outcomes.push(`fees · ${actor} × ${k}: got ${r}, expected ${ok ? "ok" : actor === "studentA1" ? "a 403" : "the identical NotFound (or a permission 403)"}`);
+        if (!ok) seen.set(`fees · ${actor}`, (seen.get(`fees · ${actor}`) ?? new Set()).add(r));
       }
     }
+    assertUniform(seen, outcomes);
     expect(outcomes).toEqual([]);
     await expect(m.renderPortalReceiptPdf(actors.parentA, "c0000000000000000000000000", window)).rejects.toThrow("Not found.");
   });

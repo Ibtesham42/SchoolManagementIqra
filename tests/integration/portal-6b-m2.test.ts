@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { integrationEnabled } from "../test-scope";
+import { FIXTURE_DOB, freeFixtureYear } from "./fixture-year";
 
 /**
  * Phase 6B-M2 — report cards and homework for families against the real database (PHASE_6_PLAN.md §6 6B-M2; review
@@ -25,11 +26,12 @@ const load = async () => ({
   ...(await import("@/modules/academic/homework.portal")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
+const FIXTURE_YEAR = enabled ? await freeFixtureYear(m.prisma, 2) : 2000;
 
 describe.skipIf(!enabled)("portal report cards and homework (integration)", () => {
   const run = `p6m2${Date.now().toString(36)}`;
   const tag = Math.random().toString(36).slice(2, 6).toUpperCase();
-  const year = 2000 + Math.floor(Math.random() * 20);
+  const year = FIXTURE_YEAR; // a free past year on Test (fixture-year.ts)
   type Ctx = NonNullable<Awaited<ReturnType<typeof m.validateSessionToken>>>;
   let root: Ctx, principal: Ctx, officer: Ctx, parentA: Ctx, parentB: Ctx;
   let sessionId: string, classId: string, sectionA: string, sectionB: string, classSubjectId: string, scaleId: string;
@@ -48,12 +50,12 @@ describe.skipIf(!enabled)("portal report cards and homework (integration)", () =
   }
   async function parentOf(suffix: string, guardianId: string) {
     const role = await m.prisma.role.findUniqueOrThrow({ where: { key: "PARENT" } });
-    const u = await m.prisma.user.create({ data: { username: `${run}-${suffix}`, displayName: `Synthetic ${suffix}`, passwordHash: "x", privacyConsentAt: new Date(), guardianId, roles: { create: { roleId: role.id } } } });
+    const u = await m.prisma.user.create({ data: { username: `${run}-${suffix}`, displayName: `Synthetic ${suffix}`, passwordHash: "x", privacyConsentAt: new Date(), privacyConsentVersion: "1", guardianId, roles: { create: { roleId: role.id } } } });
     return (await m.validateSessionToken((await m.createSession(u.id, { long: false })).token))!;
   }
   const appVersion = async (id: string) => (await m.prisma.admissionApplication.findUniqueOrThrow({ where: { id }, select: { version: true } })).version;
   async function admit(firstName: string, sectionId: string) {
-    const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName: "Example", dob: "2015-05-01", gender: "FEMALE" });
+    const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName: "Example", dob: FIXTURE_DOB, gender: "FEMALE" });
     await m.updateGuardiansStep(officer, { id, version: await appVersion(id), guardians: [{ relation: "MOTHER", name: `Synthetic Parent ${firstName}`, phone: `106${String(Date.now() % 1e6).padStart(6, "0")}${seq++ % 10}`, altPhone: null, email: null, occupation: null, isPrimary: true, isEmergencyContact: true }] });
     await m.updateContactStep(officer, { id, version: await appVersion(id), phone: null, email: null, address });
     await m.submitApplication(officer, id, await appVersion(id));

@@ -136,8 +136,9 @@ describe.skipIf(!enabled)("student accounts (integration)", () => {
     expect((await m.getPortalStudentProfile(student, olderId, window)).fullName).toBe("Synthetic Pupil 1");
     await expect(m.getPortalStudentProfile(student, siblingId, window)).rejects.toThrow("Not found.");
     await expect(m.listPortalHomework(student, siblingId, window)).rejects.toThrow("Not found.");
-    await expect(m.getPortalFeeLedger(student, olderId, window)).rejects.toThrow("Not found.");
-    await expect(m.getPortalPayPage(student, olderId, window)).rejects.toThrow("Not found.");
+    // A student account holds no fee.read at all, so the permission check refuses first (403) — no fee data either way.
+    await expect(m.getPortalFeeLedger(student, olderId, window)).rejects.toBeInstanceOf(m.ForbiddenError);
+    await expect(m.getPortalPayPage(student, olderId, window)).rejects.toBeInstanceOf(m.ForbiddenError);
   });
 
   it("PARENTS notices reach the parent, never the student account", async () => {

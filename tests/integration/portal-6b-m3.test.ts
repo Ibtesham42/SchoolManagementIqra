@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { integrationEnabled } from "../test-scope";
+import { FIXTURE_DOB, freeFixtureYear } from "./fixture-year";
 
 /**
  * Phase 6B-M3 — the fee ledger and receipts for parents against the real database (PHASE_6_PLAN.md §6 6B-M3). PENDING
@@ -23,11 +24,12 @@ const load = async () => ({
   ...(await import("@/modules/fees/fees.portal")),
 });
 const m = enabled ? await load() : (null as unknown as Awaited<ReturnType<typeof load>>);
+const FIXTURE_YEAR = enabled ? await freeFixtureYear(m.prisma, 1) : 2000;
 
 describe.skipIf(!enabled)("portal fees (integration)", () => {
   const run = `p6m3${Date.now().toString(36)}`;
   const tag = Math.random().toString(36).slice(2, 6).toUpperCase();
-  const year = 2000 + Math.floor(Math.random() * 20);
+  const year = FIXTURE_YEAR; // a free past year on Test (fixture-year.ts)
   type Ctx = NonNullable<Awaited<ReturnType<typeof m.validateSessionToken>>>;
   let root: Ctx, principal: Ctx, officer: Ctx, parentA: Ctx, parentB: Ctx, studentA: Ctx;
   let sessionId: string, classId: string, sectionId: string, categoryId: string;
@@ -43,12 +45,12 @@ describe.skipIf(!enabled)("portal fees (integration)", () => {
   async function user(suffix: string, roleKey: string, link: { guardianId?: string; studentId?: string } = {}) {
     const role = await m.prisma.role.findUniqueOrThrow({ where: { key: roleKey } });
     const portal = roleKey === "PARENT" || roleKey === "STUDENT";
-    const u = await m.prisma.user.create({ data: { username: `${run}-${suffix}`, displayName: `Synthetic ${suffix}`, passwordHash: "x", privacyConsentAt: portal ? new Date() : null, ...link, roles: { create: { roleId: role.id } } } });
+    const u = await m.prisma.user.create({ data: { username: `${run}-${suffix}`, displayName: `Synthetic ${suffix}`, passwordHash: "x", privacyConsentAt: portal ? new Date() : null, privacyConsentVersion: portal ? "1" : null, ...link, roles: { create: { roleId: role.id } } } });
     return (await m.validateSessionToken((await m.createSession(u.id, { long: false })).token))!;
   }
   const appVersion = async (id: string) => (await m.prisma.admissionApplication.findUniqueOrThrow({ where: { id }, select: { version: true } })).version;
   async function admit(firstName: string) {
-    const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName: "Example", dob: "2015-05-01", gender: "FEMALE" });
+    const { id } = await m.createDraft(officer, { academicSessionId: sessionId, classId, firstName, middleName: null, lastName: "Example", dob: FIXTURE_DOB, gender: "FEMALE" });
     await m.updateGuardiansStep(officer, { id, version: await appVersion(id), guardians: [{ relation: "MOTHER", name: `Synthetic Parent ${firstName}`, phone: `107${String(Date.now() % 1e6).padStart(6, "0")}${seq++ % 10}`, altPhone: null, email: null, occupation: null, isPrimary: true, isEmergencyContact: true }] });
     await m.updateContactStep(officer, { id, version: await appVersion(id), phone: null, email: null, address });
     await m.submitApplication(officer, id, await appVersion(id));
@@ -118,7 +120,7 @@ describe.skipIf(!enabled)("portal fees (integration)", () => {
     expect(l.overdueCount).toBe(1);
     expect(l.dueToday).toBe("1000.00");
     expect(l.receipts.map((r) => r.cancelled).sort()).toEqual([false, true]);
-    expect(JSON.stringify(l)).not.toMatch(new RegExp(`${SECRET}|${UTR}|Synthetic Collector|cancel`, "i"));
+    expect(JSON.stringify(l)).not.toMatch(new RegExp(`${SECRET}|${UTR}|Synthetic Collector|cancelReason|cancelledBy|cancelledAt|cancellationReason`, "i")); // the cancel REASON is SECRET; the `cancelled` flag itself is expected above
     expect(await m.portalOverdueChildren(parentA, window)).toBe(1);
   });
 

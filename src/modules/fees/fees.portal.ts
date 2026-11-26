@@ -75,7 +75,8 @@ export async function getPortalFeeLedger(ctx: AuthContext, studentId: string, wi
   assertPortalStudent(ctx, studentId, "fees", w);
   const [invoices, open, receipts] = await Promise.all([
     prisma.feeInvoice.findMany({
-      where: { studentId, deletedAt: null, status: { not: "CANCELLED" }, student: { deletedAt: null } },
+      // 6C-M5 (found on Test): FeeInvoice has no `student` relation — the student is reached through the enrollment.
+      where: { studentId, deletedAt: null, status: { not: "CANCELLED" }, enrollment: { student: { deletedAt: null } } },
       orderBy: [{ dueOn: "desc" }, { invoiceNo: "desc" }],
       take: 100,
       select: {
